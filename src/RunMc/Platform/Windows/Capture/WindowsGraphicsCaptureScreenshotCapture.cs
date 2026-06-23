@@ -1,6 +1,8 @@
-using Microsoft.Graphics.Canvas;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace RunMc;
 
@@ -34,17 +36,29 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
             throw new RunMcException("Minecraft Bedrock window could not be captured.");
         }
 
-        using CanvasDevice device = CanvasDevice.GetSharedDevice();
+        using Direct3DDeviceLease deviceLease = Direct3DDeviceFactory.CreateDevice();
         using Direct3D11CaptureFramePool framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
-            device,
+            deviceLease.Device,
             DirectXPixelFormat.B8G8R8A8UIntNormalized,
             1,
             item.Size);
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
         using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, cancellationToken).ConfigureAwait(false);
-        using CanvasBitmap bitmap = CanvasBitmap.CreateFromDirect3D11Surface(device, frame.Surface);
 
-        await bitmap.SaveAsync(fullOutputPath, CanvasBitmapFileFormat.Png).AsTask(cancellationToken).ConfigureAwait(false);
+        await SavePngAsync(frame, fullOutputPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SavePngAsync(Direct3D11CaptureFrame frame, string outputPath, CancellationToken cancellationToken)
+    {
+        using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(
+            outputPath,
+            FileAccessMode.ReadWrite,
+            StorageOpenOptions.None,
+            FileOpenDisposition.CreateAlways).AsTask(cancellationToken).ConfigureAwait(false);
+        using SoftwareBitmap bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface, BitmapAlphaMode.Premultiplied).AsTask(cancellationToken).ConfigureAwait(false);
+        BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream).AsTask(cancellationToken).ConfigureAwait(false);
+        encoder.SetSoftwareBitmap(bitmap);
+        await encoder.FlushAsync().AsTask(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<Direct3D11CaptureFrame> CaptureFrameAsync(
