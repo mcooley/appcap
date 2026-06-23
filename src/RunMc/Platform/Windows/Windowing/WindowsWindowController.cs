@@ -50,23 +50,29 @@ public sealed class WindowsWindowController : IWindowController
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _ = WindowsNative.ShowWindow(window.Handle, WindowsNative.SwRestore);
+        // We want the window's DWM extended frame bounds to match the requested width and height, since the DWM extended
+        // frame bounds are what is captured in screenshots.
+        WindowBounds windowBounds = GetBounds(window);
+        WindowBounds captureBounds = GetDwmExtendedFrameBounds(window);
+        int targetWindowWidth = windowBounds.Width + width - captureBounds.Width;
+        int targetWindowHeight = windowBounds.Height + height - captureBounds.Height;
+
         bool moved = WindowsNative.SetWindowPos(
             window.Handle,
             0,
             0,
             0,
-            width,
-            height,
-            WindowsNative.SwpNoMove | WindowsNative.SwpNoZOrder | WindowsNative.SwpNoActivate);
+            targetWindowWidth,
+            targetWindowHeight,
+            WindowsNative.SwpNoMove | WindowsNative.SwpNoZOrder | WindowsNative.SwpNoActivate | WindowsNative.SwpShowWindow);
 
         if (!moved)
         {
             throw new RunMcException("Requested window size is not possible.");
         }
 
-        WindowBounds bounds = GetBounds(window);
-        if (bounds.Width != width || bounds.Height != height)
+        WindowBounds finalCaptureBounds = GetDwmExtendedFrameBounds(window);
+        if (finalCaptureBounds.Width != width || finalCaptureBounds.Height != height)
         {
             throw new RunMcException("Requested window size is not possible.");
         }
@@ -77,6 +83,21 @@ public sealed class WindowsWindowController : IWindowController
     private static WindowBounds GetBounds(MinecraftWindow window)
     {
         if (!WindowsNative.GetWindowRect(window.Handle, out NativeRect rect))
+        {
+            throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
+        }
+
+        return new WindowBounds(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+    }
+
+    private static WindowBounds GetDwmExtendedFrameBounds(MinecraftWindow window)
+    {
+        int result = WindowsNative.DwmGetWindowAttribute(
+            window.Handle,
+            WindowsNative.DwmwaExtendedFrameBounds,
+            out NativeRect rect,
+            System.Runtime.InteropServices.Marshal.SizeOf<NativeRect>());
+        if (result is not 0)
         {
             throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
         }

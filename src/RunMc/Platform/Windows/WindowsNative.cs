@@ -6,6 +6,7 @@ internal static partial class WindowsNative
 {
     public const int ErrorInsufficientBuffer = 122;
     public const int AppModelErrorNoPackage = 15700;
+    public const int DwmwaExtendedFrameBounds = 9;
 
     public const uint SwRestore = 9;
     public const uint SwpNoSize = 0x0001;
@@ -80,6 +81,9 @@ internal static partial class WindowsNative
 
     [LibraryImport("user32.dll")]
     public static partial nint SendMessageW(nint windowHandle, uint message, nint wParam, nint lParam);
+
+    [LibraryImport("dwmapi.dll")]
+    public static partial int DwmGetWindowAttribute(nint windowHandle, int attribute, out NativeRect attributeValue, int attributeSize);
 }
 
 [StructLayout(LayoutKind.Sequential)]
