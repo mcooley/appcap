@@ -8,9 +8,11 @@ internal static partial class WindowsNative
     public const int AppModelErrorNoPackage = 15700;
 
     public const uint SwRestore = 9;
+    public const uint SwpNoSize = 0x0001;
     public const uint SwpNoMove = 0x0002;
     public const uint SwpNoZOrder = 0x0004;
     public const uint SwpNoActivate = 0x0010;
+    public const uint SwpShowWindow = 0x0040;
 
     public const uint ProcessQueryLimitedInformation = 0x1000;
 
@@ -26,6 +28,9 @@ internal static partial class WindowsNative
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool CloseHandle(nint handle);
 
+    [LibraryImport("kernel32.dll")]
+    public static partial uint GetCurrentThreadId();
+
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int GetPackageFamilyName(nint process, ref int packageFamilyNameLength, [Out] char[]? packageFamilyName);
 
@@ -40,6 +45,23 @@ internal static partial class WindowsNative
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(nint windowHandle);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint windowHandle, out uint processId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool attach);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool BringWindowToTop(nint windowHandle);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SetFocus(nint windowHandle);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

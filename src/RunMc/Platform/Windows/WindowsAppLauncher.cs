@@ -15,9 +15,9 @@ public sealed class WindowsAppLauncher : IWindowsAppLauncher
 
         ProcessStartInfo startInfo = new()
         {
-            FileName = "explorer.exe",
+            FileName = "shell:AppsFolder\\" + aumid,
+            UseShellExecute = true,
         };
-        startInfo.ArgumentList.Add("shell:AppsFolder\\" + aumid);
 
         try
         {

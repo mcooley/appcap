@@ -26,6 +26,8 @@ Selects which instance of Minecraft to target. If omitted, tries the options bel
 
 Implementation note: for Bedrock, always use the AUMID/package family name to identify the Minecraft process. Do not use other methods, like matching exe filenames.
 
+Future implementation note: Bedrock is a GDK app and may launch a bootstrapper process/window before the main app window is ready. Target resolution should tolerate this by waiting for the real Minecraft window, ignoring transient bootstrapper windows, and reporting a clear timeout if the main app never appears.
+
 ### --help
 Prints help for the current command.
 

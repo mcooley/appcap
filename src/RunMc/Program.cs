@@ -1,4 +1,7 @@
 ﻿using RunMc;
+using WinRT;
+
+ComWrappersSupport.InitializeComWrappers();
 
 return await CliApplication.RunAsync(
 	args,

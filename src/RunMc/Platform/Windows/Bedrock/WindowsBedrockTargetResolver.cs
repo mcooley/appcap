@@ -21,39 +21,42 @@ public sealed class WindowsBedrockTargetResolver : IMinecraftTargetResolver
         return target switch
         {
             TargetKind.Default => await ResolveDefaultAsync(cancellationToken).ConfigureAwait(false),
-            TargetKind.RunningBedrock => FindRunningBedrock(),
-            TargetKind.InstalledBedrock => await ResolveInstalledBedrockAsync(cancellationToken).ConfigureAwait(false),
+            TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview => FindRunningBedrock(target),
+            TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview => await ResolveInstalledBedrockAsync(target, cancellationToken).ConfigureAwait(false),
             _ => throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported in phase 1."),
         };
     }
 
     private async Task<MinecraftWindow> ResolveDefaultAsync(CancellationToken cancellationToken)
     {
-        MinecraftWindow? runningWindow = windowFinder.TryFindWindow(BedrockPackage.FamilyName, TargetKind.RunningBedrock);
-        return runningWindow ?? await ResolveInstalledBedrockAsync(cancellationToken).ConfigureAwait(false);
+        MinecraftWindow? runningWindow = windowFinder.TryFindWindow(BedrockPackage.RetailFamilyName, TargetKind.RunningBedrock);
+        return runningWindow ?? await ResolveInstalledBedrockAsync(TargetKind.InstalledBedrock, cancellationToken).ConfigureAwait(false);
     }
 
-    private MinecraftWindow FindRunningBedrock()
+    private MinecraftWindow FindRunningBedrock(TargetKind target)
     {
-        return windowFinder.TryFindWindow(BedrockPackage.FamilyName, TargetKind.RunningBedrock)
-            ?? throw new RunMcException("Minecraft Bedrock window was not found.");
+        string packageFamilyName = BedrockPackage.FamilyNameFor(target);
+        return windowFinder.TryFindWindow(packageFamilyName, target)
+            ?? throw new RunMcException($"Minecraft Bedrock window was not found for target '{TargetKindFormatter.Format(target)}'.");
     }
 
-    private async Task<MinecraftWindow> ResolveInstalledBedrockAsync(CancellationToken cancellationToken)
+    private async Task<MinecraftWindow> ResolveInstalledBedrockAsync(TargetKind target, CancellationToken cancellationToken)
     {
-        MinecraftWindow? runningWindow = windowFinder.TryFindWindow(BedrockPackage.FamilyName, TargetKind.RunningBedrock);
+        TargetKind runningTarget = target is TargetKind.InstalledBedrockPreview ? TargetKind.RunningBedrockPreview : TargetKind.RunningBedrock;
+        string packageFamilyName = BedrockPackage.FamilyNameFor(runningTarget);
+        MinecraftWindow? runningWindow = windowFinder.TryFindWindow(packageFamilyName, runningTarget);
         if (runningWindow is not null)
         {
             return runningWindow;
         }
 
-        appLauncher.LaunchAumid(BedrockPackage.Aumid);
+        appLauncher.LaunchAumid(BedrockPackage.AumidFor(target));
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < LaunchTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            runningWindow = windowFinder.TryFindWindow(BedrockPackage.FamilyName, TargetKind.RunningBedrock);
+            runningWindow = windowFinder.TryFindWindow(packageFamilyName, runningTarget);
             if (runningWindow is not null)
             {
                 return runningWindow;
@@ -62,6 +65,6 @@ public sealed class WindowsBedrockTargetResolver : IMinecraftTargetResolver
             await Task.Delay(PollDelay, cancellationToken).ConfigureAwait(false);
         }
 
-        throw new RunMcException("Minecraft Bedrock window was not found.");
+        throw new RunMcException($"Minecraft Bedrock window was not found for target '{TargetKindFormatter.Format(target)}'.");
     }
 }
