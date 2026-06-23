@@ -50,6 +50,23 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task ResizeParsesShortWidthAndHeightAliases()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["resize", "-w", "1024", "-h", "768"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        ResizeCommand command = Assert.IsType<ResizeCommand>(runner.Command);
+        Assert.Equal(1024, command.Width);
+        Assert.Equal(768, command.Height);
+    }
+
+    [Fact]
     public async Task ScreenshotRequiresPngOutput()
     {
         RecordingRunner runner = new();

@@ -1,3 +1,6 @@
+using System.CommandLine;
+using System.CommandLine.Parsing;
+
 namespace RunMc;
 
 public static class CommandParser
@@ -6,173 +9,228 @@ public static class CommandParser
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        TargetKind target = TargetKind.Default;
-        List<string> remainingArgs = [];
-
-        for (int index = 0; index < args.Count; index++)
+        if (args.Count is 0)
         {
-            string arg = args[index];
-            if (arg is "--target")
-            {
-                if (++index >= args.Count)
-                {
-                    return ParseResult.Failure("Missing value for --target.");
-                }
-
-                if (!TargetKindParser.TryParse(args[index], out target))
-                {
-                    return ParseResult.Failure($"Unknown target '{args[index]}'.");
-                }
-
-                continue;
-            }
-
-            remainingArgs.Add(arg);
+            return ParseResult.Valid(new FocusCommand(TargetKind.Default));
         }
 
-        if (remainingArgs.Count is 0)
+        if (TryParseHelp(args, out HelpTopic helpTopic))
+        {
+            return ParseResult.Valid(new HelpCommand(helpTopic));
+        }
+
+        CommandLineModel model = CommandLineModel.Create();
+        System.CommandLine.ParseResult result = model.RootCommand.Parse(args);
+        if (result.Errors.Count > 0)
+        {
+            return ParseResult.Failure(result.Errors[0].Message);
+        }
+
+        string? targetValue = result.GetValue(model.TargetOption);
+        TargetKind target = TargetKind.Default;
+        if (targetValue is not null && !TargetKindParser.TryParse(targetValue, out target))
+        {
+            return ParseResult.Failure($"Unknown target '{targetValue}'.");
+        }
+
+        Command command = result.CommandResult.Command;
+        if (command == model.RootCommand)
         {
             return ParseResult.Valid(new FocusCommand(target));
         }
 
-        string commandName = remainingArgs[0];
-        if (commandName is "--help" or "-h" or "help")
+        if (command == model.ClickCommand)
         {
-            return ParseResult.Valid(new HelpCommand(HelpTopic.Root));
+            return ParseResult.Valid(new ClickCommand(
+                target,
+                result.GetRequiredValue(model.ClickXOption),
+                result.GetRequiredValue(model.ClickYOption)));
         }
 
-        IReadOnlyList<string> commandArgs = remainingArgs.Skip(1).ToArray();
-        if (commandArgs.Contains("--help", StringComparer.Ordinal) || commandArgs.Contains("-h", StringComparer.Ordinal))
+        if (command == model.ResizeCommand)
         {
-            return ParseResult.Valid(new HelpCommand(ParseHelpTopic(commandName)));
+            return ParseResult.Valid(new ResizeCommand(
+                target,
+                result.GetRequiredValue(model.ResizeWidthOption),
+                result.GetRequiredValue(model.ResizeHeightOption)));
         }
 
-        return commandName switch
+        if (command == model.ScreenshotCommand)
         {
-            "click" => ParseClick(target, commandArgs),
-            "resize" => ParseResize(target, commandArgs),
-            "screenshot" => ParseScreenshot(target, commandArgs),
-            _ => ParseResult.Failure($"Unknown command '{commandName}'."),
+            return ParseResult.Valid(new ScreenshotCommand(
+                target,
+                result.GetRequiredValue(model.ScreenshotOutputOption)));
+        }
+
+        return ParseResult.Failure($"Unknown command '{command.Name}'.");
+    }
+
+    private static bool TryParseHelp(IReadOnlyList<string> args, out HelpTopic topic)
+    {
+        topic = HelpTopic.Root;
+        if (args.Count is 0)
+        {
+            return false;
+        }
+
+        if (args[0] is "--help" or "help")
+        {
+            return true;
+        }
+
+        if (!args.Contains("--help", StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        topic = args[0] switch
+        {
+            "click" => HelpTopic.Click,
+            "resize" => HelpTopic.Resize,
+            "screenshot" => HelpTopic.Screenshot,
+            _ => HelpTopic.Root,
         };
+        return true;
     }
 
-    private static ParseResult ParseClick(TargetKind target, IReadOnlyList<string> args)
+    private static Option<int> RequiredNonNegativeIntegerOption(string name, string errorName, params string[] aliases)
     {
-        OptionReader reader = new(args);
-        int? x = null;
-        int? y = null;
-
-        while (reader.TryReadOption(out string? name, out string? value))
+        Option<int> option = new(name, aliases)
         {
-            if (name is "-x")
-            {
-                if (!TryParseNonNegativeInt(value, out int parsedX))
-                {
-                    return ParseResult.Failure("Invalid value for -x.");
-                }
+            Required = true,
+        };
+        option.CustomParser = result => ParseInteger(result, errorName, value => value >= 0);
+        return option;
+    }
 
-                x = parsedX;
-            }
-            else if (name is "-y")
-            {
-                if (!TryParseNonNegativeInt(value, out int parsedY))
-                {
-                    return ParseResult.Failure("Invalid value for -y.");
-                }
+    private static Option<int> RequiredPositiveIntegerOption(string name, string errorName, params string[] aliases)
+    {
+        Option<int> option = new(name, aliases)
+        {
+            Required = true,
+        };
+        option.CustomParser = result => ParseInteger(result, errorName, value => value > 0);
+        return option;
+    }
 
-                y = parsedY;
-            }
-            else
-            {
-                return ParseResult.Failure($"Unknown option '{name}'.");
-            }
+    private static int ParseInteger(ArgumentResult result, string errorName, Func<int, bool> isValid)
+    {
+        string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
+        if (!int.TryParse(value, out int parsed) || !isValid(parsed))
+        {
+            result.AddError($"Invalid value for {errorName}.");
+            return 0;
         }
 
-        return x.HasValue && y.HasValue
-            ? ParseResult.Valid(new ClickCommand(target, x.Value, y.Value))
-            : ParseResult.Failure("click requires -x and -y.");
+        return parsed;
     }
 
-    private static ParseResult ParseResize(TargetKind target, IReadOnlyList<string> args)
+    private sealed class CommandLineModel
     {
-        OptionReader reader = new(args);
-        int? width = null;
-        int? height = null;
-
-        while (reader.TryReadOption(out string? name, out string? value))
+        private CommandLineModel(
+            RootCommand rootCommand,
+            Option<string?> targetOption,
+            Command clickCommand,
+            Option<int> clickXOption,
+            Option<int> clickYOption,
+            Command resizeCommand,
+            Option<int> resizeWidthOption,
+            Option<int> resizeHeightOption,
+            Command screenshotCommand,
+            Option<string> screenshotOutputOption)
         {
-            if (name is "--width")
-            {
-                if (!TryParsePositiveInt(value, out int parsedWidth))
-                {
-                    return ParseResult.Failure("Invalid value for --width.");
-                }
-
-                width = parsedWidth;
-            }
-            else if (name is "--height")
-            {
-                if (!TryParsePositiveInt(value, out int parsedHeight))
-                {
-                    return ParseResult.Failure("Invalid value for --height.");
-                }
-
-                height = parsedHeight;
-            }
-            else
-            {
-                return ParseResult.Failure($"Unknown option '{name}'.");
-            }
+            RootCommand = rootCommand;
+            TargetOption = targetOption;
+            ClickCommand = clickCommand;
+            ClickXOption = clickXOption;
+            ClickYOption = clickYOption;
+            ResizeCommand = resizeCommand;
+            ResizeWidthOption = resizeWidthOption;
+            ResizeHeightOption = resizeHeightOption;
+            ScreenshotCommand = screenshotCommand;
+            ScreenshotOutputOption = screenshotOutputOption;
         }
 
-        return width.HasValue && height.HasValue
-            ? ParseResult.Valid(new ResizeCommand(target, width.Value, height.Value))
-            : ParseResult.Failure("resize requires --width and --height.");
-    }
+        public RootCommand RootCommand { get; }
 
-    private static ParseResult ParseScreenshot(TargetKind target, IReadOnlyList<string> args)
-    {
-        OptionReader reader = new(args);
-        string? outputPath = null;
+        public Option<string?> TargetOption { get; }
 
-        while (reader.TryReadOption(out string? name, out string? value))
+        public Command ClickCommand { get; }
+
+        public Option<int> ClickXOption { get; }
+
+        public Option<int> ClickYOption { get; }
+
+        public Command ResizeCommand { get; }
+
+        public Option<int> ResizeWidthOption { get; }
+
+        public Option<int> ResizeHeightOption { get; }
+
+        public Command ScreenshotCommand { get; }
+
+        public Option<string> ScreenshotOutputOption { get; }
+
+        public static CommandLineModel Create()
         {
-            if (name is "--output")
+            Option<string?> targetOption = new("--target")
             {
+                Recursive = true,
+            };
+
+            Option<int> clickXOption = RequiredNonNegativeIntegerOption("-x", "-x");
+            Option<int> clickYOption = RequiredNonNegativeIntegerOption("-y", "-y");
+            Command clickCommand = new("click", "Injects a mouse click into the Minecraft window.");
+            clickCommand.Add(clickXOption);
+            clickCommand.Add(clickYOption);
+
+            Option<int> resizeWidthOption = RequiredPositiveIntegerOption("--width", "--width", "-w");
+            Option<int> resizeHeightOption = RequiredPositiveIntegerOption("--height", "--height", "-h");
+            Command resizeCommand = new("resize", "Resizes the Minecraft window.");
+            resizeCommand.Add(resizeWidthOption);
+            resizeCommand.Add(resizeHeightOption);
+
+            Option<string> screenshotOutputOption = new("--output")
+            {
+                Required = true,
+            };
+            screenshotOutputOption.CustomParser = result =>
+            {
+                string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
                 if (string.IsNullOrWhiteSpace(value))
                 {
-                    return ParseResult.Failure("Invalid value for --output.");
+                    result.AddError("Invalid value for --output.");
+                    return string.Empty;
                 }
 
-                outputPath = value;
-            }
-            else
-            {
-                return ParseResult.Failure($"Unknown option '{name}'.");
-            }
-        }
+                if (!Path.GetExtension(value).Equals(".png", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.AddError("screenshot output must be a .png file.");
+                    return string.Empty;
+                }
 
-        if (outputPath is null)
-        {
-            return ParseResult.Failure("screenshot requires --output.");
-        }
+                return value;
+            };
+            Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the Minecraft window.");
+            screenshotCommand.Add(screenshotOutputOption);
 
-        return Path.GetExtension(outputPath).Equals(".png", StringComparison.OrdinalIgnoreCase)
-            ? ParseResult.Valid(new ScreenshotCommand(target, outputPath))
-            : ParseResult.Failure("screenshot output must be a .png file.");
+            RootCommand rootCommand = new("Automates interactions with Minecraft.");
+            rootCommand.Add(targetOption);
+            rootCommand.Add(clickCommand);
+            rootCommand.Add(resizeCommand);
+            rootCommand.Add(screenshotCommand);
+
+            return new CommandLineModel(
+                rootCommand,
+                targetOption,
+                clickCommand,
+                clickXOption,
+                clickYOption,
+                resizeCommand,
+                resizeWidthOption,
+                resizeHeightOption,
+                screenshotCommand,
+                screenshotOutputOption);
+        }
     }
-
-    private static HelpTopic ParseHelpTopic(string commandName) => commandName switch
-    {
-        "click" => HelpTopic.Click,
-        "resize" => HelpTopic.Resize,
-        "screenshot" => HelpTopic.Screenshot,
-        _ => HelpTopic.Root,
-    };
-
-    private static bool TryParseNonNegativeInt(string? value, out int result) =>
-        int.TryParse(value, out result) && result >= 0;
-
-    private static bool TryParsePositiveInt(string? value, out int result) =>
-        int.TryParse(value, out result) && result > 0;
 }
