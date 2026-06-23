@@ -1,5 +1,7 @@
 namespace RunMc;
 
+using Windows.Win32.Foundation;
+
 public static class WindowsProcessPackage
 {
     public static bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
@@ -19,12 +21,12 @@ public static class WindowsProcessPackage
         {
             int length = 0;
             int result = WindowsNative.GetPackageFamilyName(processHandle, ref length, null);
-            if (result is WindowsNative.AppModelErrorNoPackage)
+            if (result == (int)WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
             {
                 return false;
             }
 
-            if (result is not WindowsNative.ErrorInsufficientBuffer || length <= 0)
+            if (result != (int)WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
             {
                 return false;
             }

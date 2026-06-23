@@ -1,107 +1,85 @@
-using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
+using Windows.Win32.System.SystemServices;
+using Windows.Win32.System.Threading;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace RunMc;
 
-internal static partial class WindowsNative
+internal static class WindowsNative
 {
-    public const int ErrorInsufficientBuffer = 122;
-    public const int AppModelErrorNoPackage = 15700;
-    public const int DwmwaExtendedFrameBounds = 9;
+    public const uint SwRestore = (uint)SHOW_WINDOW_CMD.SW_RESTORE;
+    public const uint SwpNoSize = (uint)SET_WINDOW_POS_FLAGS.SWP_NOSIZE;
+    public const uint SwpNoMove = (uint)SET_WINDOW_POS_FLAGS.SWP_NOMOVE;
+    public const uint SwpNoZOrder = (uint)SET_WINDOW_POS_FLAGS.SWP_NOZORDER;
+    public const uint SwpNoActivate = (uint)SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE;
+    public const uint SwpShowWindow = (uint)SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW;
 
-    public const uint SwRestore = 9;
-    public const uint SwpNoSize = 0x0001;
-    public const uint SwpNoMove = 0x0002;
-    public const uint SwpNoZOrder = 0x0004;
-    public const uint SwpNoActivate = 0x0010;
-    public const uint SwpShowWindow = 0x0040;
+    public const uint ProcessQueryLimitedInformation = (uint)PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION;
 
-    public const uint ProcessQueryLimitedInformation = 0x1000;
+    public const uint WmMouseMove = PInvoke.WM_MOUSEMOVE;
+    public const uint WmLButtonDown = PInvoke.WM_LBUTTONDOWN;
+    public const uint WmLButtonUp = PInvoke.WM_LBUTTONUP;
+    public const uint MkLButton = (uint)MODIFIERKEYS_FLAGS.MK_LBUTTON;
 
-    public const uint WmMouseMove = 0x0200;
-    public const uint WmLButtonDown = 0x0201;
-    public const uint WmLButtonUp = 0x0202;
-    public const uint MkLButton = 0x0001;
+    public static unsafe nint OpenProcess(uint desiredAccess, bool inheritHandle, uint processId) =>
+        (nint)PInvoke.OpenProcess((PROCESS_ACCESS_RIGHTS)desiredAccess, inheritHandle, processId).Value;
 
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    public static partial nint OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
+    public static bool CloseHandle(nint handle) => PInvoke.CloseHandle(new HANDLE(handle));
 
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool CloseHandle(nint handle);
+    public static uint GetCurrentThreadId() => PInvoke.GetCurrentThreadId();
 
-    [LibraryImport("kernel32.dll")]
-    public static partial uint GetCurrentThreadId();
-
-    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    public static partial int GetPackageFamilyName(nint process, ref int packageFamilyNameLength, [Out] char[]? packageFamilyName);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool IsWindowVisible(nint windowHandle);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ShowWindow(nint windowHandle, uint command);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool SetForegroundWindow(nint windowHandle);
-
-    [LibraryImport("user32.dll")]
-    public static partial nint GetForegroundWindow();
-
-    [LibraryImport("user32.dll")]
-    public static partial uint GetWindowThreadProcessId(nint windowHandle, out uint processId);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool attach);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool BringWindowToTop(nint windowHandle);
-
-    [LibraryImport("user32.dll")]
-    public static partial nint SetFocus(nint windowHandle);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool GetWindowRect(nint windowHandle, out NativeRect rect);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool SetWindowPos(
-        nint windowHandle,
-        nint insertAfter,
-        int x,
-        int y,
-        int cx,
-        int cy,
-        uint flags);
-
-    [LibraryImport("user32.dll")]
-    public static partial nint SendMessageW(nint windowHandle, uint message, nint wParam, nint lParam);
-
-    [LibraryImport("dwmapi.dll")]
-    public static partial int DwmGetWindowAttribute(nint windowHandle, int attribute, out NativeRect attributeValue, int attributeSize);
-}
-
-[StructLayout(LayoutKind.Sequential)]
-internal readonly struct NativeRect
-{
-    public NativeRect(int left, int top, int right, int bottom)
+    public static unsafe int GetPackageFamilyName(nint process, ref int packageFamilyNameLength, char[]? packageFamilyName)
     {
-        Left = left;
-        Top = top;
-        Right = right;
-        Bottom = bottom;
+        uint length = checked((uint)packageFamilyNameLength);
+        fixed (char* packageFamilyNamePointer = packageFamilyName)
+        {
+            WIN32_ERROR result = PInvoke.GetPackageFamilyName(new HANDLE(process), &length, new PWSTR(packageFamilyNamePointer));
+            packageFamilyNameLength = checked((int)length);
+            return checked((int)result);
+        }
     }
 
-    public int Left { get; }
+    public static bool IsWindowVisible(nint windowHandle) => PInvoke.IsWindowVisible(new HWND(windowHandle));
 
-    public int Top { get; }
+    public static bool ShowWindow(nint windowHandle, uint command) => PInvoke.ShowWindow(new HWND(windowHandle), (SHOW_WINDOW_CMD)command);
 
-    public int Right { get; }
+    public static bool SetForegroundWindow(nint windowHandle) => PInvoke.SetForegroundWindow(new HWND(windowHandle));
 
-    public int Bottom { get; }
+    public static unsafe nint GetForegroundWindow() => (nint)PInvoke.GetForegroundWindow().Value;
+
+    public static unsafe uint GetWindowThreadProcessId(nint windowHandle, out uint processId)
+    {
+        fixed (uint* processIdPointer = &processId)
+        {
+            return PInvoke.GetWindowThreadProcessId(new HWND(windowHandle), processIdPointer);
+        }
+    }
+
+    public static bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach) => PInvoke.AttachThreadInput(idAttach, idAttachTo, attach);
+
+    public static bool BringWindowToTop(nint windowHandle) => PInvoke.BringWindowToTop(new HWND(windowHandle));
+
+    public static unsafe nint SetFocus(nint windowHandle) => (nint)PInvoke.SetFocus(new HWND(windowHandle)).Value;
+
+    public static bool GetWindowRect(nint windowHandle, out RECT rect) => PInvoke.GetWindowRect(new HWND(windowHandle), out rect);
+
+    public static bool SetWindowPos(nint windowHandle, nint insertAfter, int x, int y, int cx, int cy, uint flags) =>
+        PInvoke.SetWindowPos(new HWND(windowHandle), new HWND(insertAfter), x, y, cx, cy, (SET_WINDOW_POS_FLAGS)flags);
+
+    public static nint SendMessageW(nint windowHandle, uint message, nint wParam, nint lParam) =>
+        PInvoke.SendMessage(new HWND(windowHandle), message, new WPARAM((nuint)wParam), new LPARAM(lParam)).Value;
+
+    public static unsafe int DwmGetWindowAttribute(nint windowHandle, out RECT attributeValue, int attributeSize)
+    {
+        RECT rect = default;
+        int result = PInvoke.DwmGetWindowAttribute(
+            new HWND(windowHandle),
+            DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+            &rect,
+            (uint)attributeSize).Value;
+        attributeValue = rect;
+        return result;
+    }
 }

@@ -1,3 +1,5 @@
+using Windows.Win32.Foundation;
+
 namespace RunMc;
 
 public sealed class WindowsWindowController : IWindowController
@@ -82,27 +84,26 @@ public sealed class WindowsWindowController : IWindowController
 
     private static WindowBounds GetBounds(MinecraftWindow window)
     {
-        if (!WindowsNative.GetWindowRect(window.Handle, out NativeRect rect))
+        if (!WindowsNative.GetWindowRect(window.Handle, out RECT rect))
         {
             throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
         }
 
-        return new WindowBounds(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        return new WindowBounds(rect.left, rect.top, rect.Width, rect.Height);
     }
 
     private static WindowBounds GetDwmExtendedFrameBounds(MinecraftWindow window)
     {
         int result = WindowsNative.DwmGetWindowAttribute(
             window.Handle,
-            WindowsNative.DwmwaExtendedFrameBounds,
-            out NativeRect rect,
-            System.Runtime.InteropServices.Marshal.SizeOf<NativeRect>());
+            out RECT rect,
+            System.Runtime.InteropServices.Marshal.SizeOf<RECT>());
         if (result is not 0)
         {
             throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
         }
 
-        return new WindowBounds(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        return new WindowBounds(rect.left, rect.top, rect.Width, rect.Height);
     }
 
     private static bool IsForegroundBedrockWindow(MinecraftWindow window)

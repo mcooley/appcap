@@ -1,97 +1,64 @@
-using System.Runtime.InteropServices;
 using Windows.Graphics.DirectX.Direct3D11;
+using Windows.Win32;
+using Windows.Win32.Graphics.Direct3D;
+using Windows.Win32.Graphics.Direct3D11;
+using Windows.Win32.Graphics.Dxgi;
 using WinRT;
 
 namespace RunMc;
 
 internal static partial class Direct3DDeviceFactory
 {
-    private static readonly Guid DxgiDeviceInterfaceId = Guid.Parse("54EC77FA-1377-44E6-8C32-88FD5F44C84C");
-
-    public static Direct3DDeviceLease CreateDevice()
+    public static unsafe Direct3DDeviceLease CreateDevice()
     {
-        nint d3dDevice = 0;
-        nint dxgiDevice = 0;
-        nint direct3DDevice = 0;
+        ID3D11Device* d3dDevice = null;
+        ID3D11DeviceContext* immediateContext = null;
+        IDXGIDevice* dxgiDevice = null;
+        Windows.Win32.System.WinRT.IInspectable* direct3DDevice = null;
         try
         {
-            int result = D3D11CreateDevice(
-                0,
-                D3DDriverType.Hardware,
-                0,
-                D3D11CreateDeviceFlags.BgraSupport,
-                0,
-                0,
+            PInvoke.D3D11CreateDevice(
+                null,
+                D3D_DRIVER_TYPE.D3D_DRIVER_TYPE_HARDWARE,
+                default,
+                D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                [],
                 D3D11SdkVersion,
-                out d3dDevice,
+                &d3dDevice,
                 out _,
-                out nint immediateContext);
-            if (immediateContext != 0)
-            {
-                Marshal.Release(immediateContext);
-            }
+                &immediateContext).ThrowOnFailure();
 
-            Marshal.ThrowExceptionForHR(result);
+            d3dDevice->QueryInterface(out dxgiDevice).ThrowOnFailure();
 
-            result = Marshal.QueryInterface(d3dDevice, DxgiDeviceInterfaceId, out dxgiDevice);
-            Marshal.ThrowExceptionForHR(result);
+            PInvoke.CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, &direct3DDevice).ThrowOnFailure();
 
-            result = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice, out direct3DDevice);
-            Marshal.ThrowExceptionForHR(result);
-
-            return new Direct3DDeviceLease(MarshalInterface<IDirect3DDevice>.FromAbi(direct3DDevice));
+            return new Direct3DDeviceLease(MarshalInterface<IDirect3DDevice>.FromAbi((nint)direct3DDevice));
         }
         finally
         {
-            if (direct3DDevice != 0)
+            if (direct3DDevice is not null)
             {
-                Marshal.Release(direct3DDevice);
+                direct3DDevice->Release();
             }
 
-            if (dxgiDevice != 0)
+            if (dxgiDevice is not null)
             {
-                Marshal.Release(dxgiDevice);
+                dxgiDevice->Release();
             }
 
-            if (d3dDevice != 0)
+            if (immediateContext is not null)
             {
-                Marshal.Release(d3dDevice);
+                immediateContext->Release();
+            }
+
+            if (d3dDevice is not null)
+            {
+                d3dDevice->Release();
             }
         }
     }
 
     private const uint D3D11SdkVersion = 7;
-
-    [LibraryImport("d3d11.dll")]
-    private static partial int D3D11CreateDevice(
-        nint adapter,
-        D3DDriverType driverType,
-        nint software,
-        D3D11CreateDeviceFlags flags,
-        nint featureLevels,
-        uint featureLevelsCount,
-        uint sdkVersion,
-        out nint device,
-        out D3DFeatureLevel featureLevel,
-        out nint immediateContext);
-
-    [LibraryImport("d3d11.dll")]
-    private static partial int CreateDirect3D11DeviceFromDXGIDevice(nint dxgiDevice, out nint graphicsDevice);
-
-    private enum D3DDriverType : uint
-    {
-        Hardware = 1,
-    }
-
-    [Flags]
-    private enum D3D11CreateDeviceFlags : uint
-    {
-        BgraSupport = 0x20,
-    }
-
-    private enum D3DFeatureLevel : uint
-    {
-    }
 }
 
 internal sealed class Direct3DDeviceLease : IDisposable
