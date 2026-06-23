@@ -1,49 +1,55 @@
 namespace RunMc;
 
+using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.System.Threading;
 
 public static class WindowsProcessPackage
 {
-    public static bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
+    public static unsafe bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
     {
         packageFamilyName = null;
 
-        nint processHandle = WindowsNative.OpenProcess(
-            WindowsNative.ProcessQueryLimitedInformation,
-            inheritHandle: false,
+        HANDLE processHandle = PInvoke.OpenProcess(
+            PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
             (uint)processId);
-        if (processHandle == 0)
+        if (processHandle.IsNull)
         {
             return false;
         }
 
         try
         {
-            int length = 0;
-            int result = WindowsNative.GetPackageFamilyName(processHandle, ref length, null);
-            if (result == (int)WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
+            uint length = 0;
+            WIN32_ERROR result = PInvoke.GetPackageFamilyName(processHandle, &length, default);
+            if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
             {
                 return false;
             }
 
-            if (result != (int)WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
+            if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
             {
                 return false;
             }
 
             char[] buffer = new char[length];
-            result = WindowsNative.GetPackageFamilyName(processHandle, ref length, buffer);
-            if (result is not 0)
+            fixed (char* bufferPointer = buffer)
+            {
+                result = PInvoke.GetPackageFamilyName(processHandle, &length, new PWSTR(bufferPointer));
+            }
+
+            if (result != WIN32_ERROR.NO_ERROR)
             {
                 return false;
             }
 
-            packageFamilyName = new string(buffer, 0, Math.Max(0, length - 1));
+            packageFamilyName = new string(buffer, 0, Math.Max(0, checked((int)length) - 1));
             return true;
         }
         finally
         {
-            _ = WindowsNative.CloseHandle(processHandle);
+            _ = PInvoke.CloseHandle(processHandle);
         }
     }
 }

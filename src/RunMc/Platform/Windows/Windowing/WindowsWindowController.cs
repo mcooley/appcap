@@ -1,4 +1,8 @@
+using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
+using Windows.Win32.System.Threading;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace RunMc;
 
@@ -9,26 +13,26 @@ public sealed class WindowsWindowController : IWindowController
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _ = WindowsNative.ShowWindow(window.Handle, WindowsNative.SwRestore);
+        _ = PInvoke.ShowWindow(new HWND(window.Handle), SHOW_WINDOW_CMD.SW_RESTORE);
         if (IsForegroundBedrockWindow(window))
         {
             return Task.CompletedTask;
         }
 
-        _ = WindowsNative.SetForegroundWindow(window.Handle);
+        _ = PInvoke.SetForegroundWindow(new HWND(window.Handle));
         if (IsForegroundBedrockWindow(window))
         {
             return Task.CompletedTask;
         }
 
-        _ = WindowsNative.SetWindowPos(
-            window.Handle,
+        _ = PInvoke.SetWindowPos(
+            new HWND(window.Handle),
+            HWND.Null,
             0,
             0,
             0,
             0,
-            0,
-            WindowsNative.SwpNoMove | WindowsNative.SwpNoSize | WindowsNative.SwpShowWindow);
+            SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
 
         AttachToForegroundAndActivate(window.Handle);
         if (!IsForegroundBedrockWindow(window))
@@ -59,14 +63,14 @@ public sealed class WindowsWindowController : IWindowController
         int targetWindowWidth = windowBounds.Width + width - captureBounds.Width;
         int targetWindowHeight = windowBounds.Height + height - captureBounds.Height;
 
-        bool moved = WindowsNative.SetWindowPos(
-            window.Handle,
-            0,
+        bool moved = PInvoke.SetWindowPos(
+            new HWND(window.Handle),
+            HWND.Null,
             0,
             0,
             targetWindowWidth,
             targetWindowHeight,
-            WindowsNative.SwpNoMove | WindowsNative.SwpNoZOrder | WindowsNative.SwpNoActivate | WindowsNative.SwpShowWindow);
+            SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
 
         if (!moved)
         {
@@ -84,7 +88,7 @@ public sealed class WindowsWindowController : IWindowController
 
     private static WindowBounds GetBounds(MinecraftWindow window)
     {
-        if (!WindowsNative.GetWindowRect(window.Handle, out RECT rect))
+        if (!PInvoke.GetWindowRect(new HWND(window.Handle), out RECT rect))
         {
             throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
         }
@@ -94,10 +98,7 @@ public sealed class WindowsWindowController : IWindowController
 
     private static WindowBounds GetDwmExtendedFrameBounds(MinecraftWindow window)
     {
-        int result = WindowsNative.DwmGetWindowAttribute(
-            window.Handle,
-            out RECT rect,
-            System.Runtime.InteropServices.Marshal.SizeOf<RECT>());
+        int result = GetDwmExtendedFrameBounds(new HWND(window.Handle), out RECT rect);
         if (result is not 0)
         {
             throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
@@ -108,18 +109,18 @@ public sealed class WindowsWindowController : IWindowController
 
     private static bool IsForegroundBedrockWindow(MinecraftWindow window)
     {
-        nint foregroundWindow = WindowsNative.GetForegroundWindow();
-        if (foregroundWindow == 0)
+        HWND foregroundWindow = PInvoke.GetForegroundWindow();
+        if (foregroundWindow.IsNull)
         {
             return false;
         }
 
-        if (foregroundWindow == window.Handle)
+        if (foregroundWindow == new HWND(window.Handle))
         {
             return true;
         }
 
-        _ = WindowsNative.GetWindowThreadProcessId(foregroundWindow, out uint processId);
+        _ = PInvoke.GetWindowThreadProcessId(foregroundWindow, out uint processId);
         return processId != 0 &&
             WindowsProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
             BedrockPackage.FamilyNameFor(window.Target).Equals(packageFamilyName, StringComparison.Ordinal);
@@ -127,24 +128,38 @@ public sealed class WindowsWindowController : IWindowController
 
     private static void AttachToForegroundAndActivate(nint windowHandle)
     {
-        nint foregroundWindow = WindowsNative.GetForegroundWindow();
-        uint foregroundThread = foregroundWindow == 0 ? 0 : WindowsNative.GetWindowThreadProcessId(foregroundWindow, out _);
-        uint currentThread = WindowsNative.GetCurrentThreadId();
+        HWND foregroundWindow = PInvoke.GetForegroundWindow();
+        uint foregroundThread = foregroundWindow.IsNull ? 0 : PInvoke.GetWindowThreadProcessId(foregroundWindow, out _);
+        uint currentThread = PInvoke.GetCurrentThreadId();
         bool attached = foregroundThread != 0 && foregroundThread != currentThread &&
-            WindowsNative.AttachThreadInput(currentThread, foregroundThread, attach: true);
+            PInvoke.AttachThreadInput(currentThread, foregroundThread, fAttach: true);
 
         try
         {
-            _ = WindowsNative.BringWindowToTop(windowHandle);
-            _ = WindowsNative.SetForegroundWindow(windowHandle);
-            _ = WindowsNative.SetFocus(windowHandle);
+            HWND hwnd = new(windowHandle);
+            _ = PInvoke.BringWindowToTop(hwnd);
+            _ = PInvoke.SetForegroundWindow(hwnd);
+            _ = PInvoke.SetFocus(hwnd);
         }
         finally
         {
             if (attached)
             {
-                _ = WindowsNative.AttachThreadInput(currentThread, foregroundThread, attach: false);
+                _ = PInvoke.AttachThreadInput(currentThread, foregroundThread, fAttach: false);
             }
         }
+    }
+
+    private static unsafe int GetDwmExtendedFrameBounds(HWND windowHandle, out RECT rect)
+    {
+        rect = default;
+        RECT nativeRect = default;
+        int result = PInvoke.DwmGetWindowAttribute(
+            windowHandle,
+            DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+            &nativeRect,
+            (uint)System.Runtime.InteropServices.Marshal.SizeOf<RECT>()).Value;
+        rect = nativeRect;
+        return result;
     }
 }

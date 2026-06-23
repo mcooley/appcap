@@ -3,6 +3,9 @@ using Windows.Graphics.DirectX;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace RunMc;
 
@@ -21,7 +24,7 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
             throw new RunMcException("Screenshot capture is not supported on this Windows version.");
         }
 
-        _ = WindowsNative.ShowWindow(window.Handle, WindowsNative.SwRestore);
+        _ = PInvoke.ShowWindow(new HWND(window.Handle), SHOW_WINDOW_CMD.SW_RESTORE);
 
         string fullOutputPath = Path.GetFullPath(outputPath);
         string? outputDirectory = Path.GetDirectoryName(fullOutputPath);

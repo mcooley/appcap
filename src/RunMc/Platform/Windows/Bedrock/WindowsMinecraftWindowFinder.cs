@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Windows.Win32;
+using Windows.Win32.Foundation;
 
 namespace RunMc;
 
@@ -24,7 +26,7 @@ public sealed class WindowsMinecraftWindowFinder : IWindowsMinecraftWindowFinder
                 }
 
                 nint windowHandle = process.MainWindowHandle;
-                if (windowHandle != 0 && WindowsNative.IsWindowVisible(windowHandle))
+                if (windowHandle != 0 && PInvoke.IsWindowVisible(new HWND(windowHandle)))
                 {
                     return new MinecraftWindow(target, windowHandle);
                 }

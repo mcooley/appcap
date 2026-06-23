@@ -1,3 +1,7 @@
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.System.SystemServices;
+
 namespace RunMc;
 
 public sealed class WindowMessageInputInjector : IInputInjector
@@ -8,9 +12,10 @@ public sealed class WindowMessageInputInjector : IInputInjector
         cancellationToken.ThrowIfCancellationRequested();
 
         nint coordinates = MakeLParam(x, y);
-        _ = WindowsNative.SendMessageW(window.Handle, WindowsNative.WmMouseMove, 0, coordinates);
-        _ = WindowsNative.SendMessageW(window.Handle, WindowsNative.WmLButtonDown, (nint)WindowsNative.MkLButton, coordinates);
-        _ = WindowsNative.SendMessageW(window.Handle, WindowsNative.WmLButtonUp, 0, coordinates);
+        HWND hwnd = new(window.Handle);
+        _ = PInvoke.SendMessage(hwnd, PInvoke.WM_MOUSEMOVE, 0, new LPARAM(coordinates));
+        _ = PInvoke.SendMessage(hwnd, PInvoke.WM_LBUTTONDOWN, new WPARAM((nuint)MODIFIERKEYS_FLAGS.MK_LBUTTON), new LPARAM(coordinates));
+        _ = PInvoke.SendMessage(hwnd, PInvoke.WM_LBUTTONUP, 0, new LPARAM(coordinates));
 
         return Task.CompletedTask;
     }
