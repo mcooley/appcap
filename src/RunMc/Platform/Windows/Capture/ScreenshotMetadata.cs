@@ -6,7 +6,7 @@ namespace RunMc.Windows;
 
 internal sealed record ScreenshotMetadata(string CapturedFrom)
 {
-    public static ScreenshotMetadata? TryCreate(MinecraftWindow window)
+    public static ScreenshotMetadata? TryCreate(TargetWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
 

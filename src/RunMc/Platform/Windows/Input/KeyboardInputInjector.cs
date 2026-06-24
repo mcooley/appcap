@@ -6,7 +6,7 @@ namespace RunMc.Windows;
 
 public sealed class KeyboardInputInjector : IKeyboardInputInjector
 {
-    public Task TypeAsync(MinecraftWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
+    public Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(actions);

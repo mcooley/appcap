@@ -9,7 +9,7 @@ namespace RunMc.Windows;
 
 public sealed class SyntheticPointerInputInjector : IInputInjector
 {
-    public Task ClickAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+    public Task ClickAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
@@ -95,7 +95,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         return input;
     }
 
-    private static bool IsTargetAtPoint(MinecraftWindow window, HWND targetWindow, int screenX, int screenY)
+    private static bool IsTargetAtPoint(TargetWindow window, HWND targetWindow, int screenX, int screenY)
     {
         HWND pointWindow = PInvoke.WindowFromPoint(new Point(screenX, screenY));
         if (pointWindow.IsNull)
@@ -114,11 +114,10 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
             return true;
         }
 
-        string expectedPackageFamilyName = BedrockPackage.FamilyNameFor(window.Target);
         _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
         bool samePackage = processId != 0 &&
             ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
-            expectedPackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
+            window.Application.PackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
         return samePackage;
     }
 }

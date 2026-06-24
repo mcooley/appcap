@@ -7,7 +7,7 @@ public static class CommandServices
     {
         WindowController windowController = new();
         return new CommandRunner(
-            new BedrockTargetResolver(new MinecraftWindowFinder(), new AppLauncher()),
+            new TargetResolver(new WindowFinder(), new AppLauncher()),
             windowController,
             new SyntheticPointerInputInjector(),
             new CursorMover(),

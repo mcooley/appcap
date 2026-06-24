@@ -16,7 +16,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
 {
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
 
-    public async Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
+    public async Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -39,7 +39,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         GraphicsCaptureItem item = GraphicsCaptureItemFactory.CreateForWindow(window.Handle);
         if (item.Size.Width <= 0 || item.Size.Height <= 0)
         {
-            throw new RunMcException("Minecraft Bedrock window could not be captured.");
+            throw new RunMcException("Target window could not be captured.");
         }
 
         ScreenshotMetadata? metadata = ScreenshotMetadata.TryCreate(window);
@@ -118,7 +118,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
 
         void OnClosed(GraphicsCaptureItem sender, object args)
         {
-            frameSource.TrySetException(new RunMcException("Minecraft Bedrock window was closed."));
+            frameSource.TrySetException(new RunMcException("Target window was closed."));
         }
 
         framePool.FrameArrived += OnFrameArrived;

@@ -9,7 +9,7 @@ namespace RunMc.Windows;
 
 public sealed class WindowController : IWindowController
 {
-    public Task BringToForegroundAsync(MinecraftWindow window, CancellationToken cancellationToken)
+    public Task BringToForegroundAsync(TargetWindow window, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
@@ -28,21 +28,21 @@ public sealed class WindowController : IWindowController
             0,
             SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
 
-        if (IsForegroundBedrockWindow(window))
+        if (IsForegroundTargetWindow(window))
         {
             return Task.CompletedTask;
         }
 
         AttachToForegroundAndActivate(window.Handle);
-        if (!IsForegroundBedrockWindow(window))
+        if (!IsForegroundTargetWindow(window))
         {
-            throw new RunMcException("Minecraft Bedrock window could not be focused.");
+            throw new RunMcException("Target window could not be focused.");
         }
 
         return Task.CompletedTask;
     }
 
-    public Task<WindowBounds> GetBoundsAsync(MinecraftWindow window, CancellationToken cancellationToken)
+    public Task<WindowBounds> GetBoundsAsync(TargetWindow window, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
@@ -50,7 +50,7 @@ public sealed class WindowController : IWindowController
         return Task.FromResult(GetDwmExtendedFrameBounds(window));
     }
 
-    public Task ResizeAsync(MinecraftWindow window, int width, int height, CancellationToken cancellationToken)
+    public Task ResizeAsync(TargetWindow window, int width, int height, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
@@ -85,28 +85,28 @@ public sealed class WindowController : IWindowController
         return Task.CompletedTask;
     }
 
-    private static WindowBounds GetBounds(MinecraftWindow window)
+    private static WindowBounds GetBounds(TargetWindow window)
     {
         if (!PInvoke.GetWindowRect(new HWND(window.Handle), out RECT rect))
         {
-            throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
+            throw new RunMcException("Target window bounds could not be read.");
         }
 
         return new WindowBounds(rect.left, rect.top, rect.Width, rect.Height);
     }
 
-    private static WindowBounds GetDwmExtendedFrameBounds(MinecraftWindow window)
+    private static WindowBounds GetDwmExtendedFrameBounds(TargetWindow window)
     {
         int result = GetDwmExtendedFrameBounds(new HWND(window.Handle), out RECT rect);
         if (result is not 0)
         {
-            throw new RunMcException("Minecraft Bedrock window bounds could not be read.");
+            throw new RunMcException("Target window bounds could not be read.");
         }
 
         return new WindowBounds(rect.left, rect.top, rect.Width, rect.Height);
     }
 
-    private static bool IsForegroundBedrockWindow(MinecraftWindow window)
+    private static bool IsForegroundTargetWindow(TargetWindow window)
     {
         HWND foregroundWindow = PInvoke.GetForegroundWindow();
         if (foregroundWindow.IsNull)
@@ -122,7 +122,7 @@ public sealed class WindowController : IWindowController
         _ = PInvoke.GetWindowThreadProcessId(foregroundWindow, out uint processId);
         return processId != 0 &&
             ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
-            BedrockPackage.FamilyNameFor(window.Target).Equals(packageFamilyName, StringComparison.Ordinal);
+            window.Application.PackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
     }
 
     private static void AttachToForegroundAndActivate(nint windowHandle)

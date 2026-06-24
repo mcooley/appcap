@@ -1,20 +1,20 @@
 namespace RunMc;
 
-public abstract record RunMcCommand(TargetKind Target);
+public abstract record RunMcCommand(TargetConfiguration Target);
 
-public sealed record FocusCommand(TargetKind Target) : RunMcCommand(Target);
+public sealed record FocusCommand(TargetConfiguration Target) : RunMcCommand(Target);
 
-public sealed record ClickCommand(TargetKind Target, int X, int Y) : RunMcCommand(Target);
+public sealed record ClickCommand(TargetConfiguration Target, int X, int Y) : RunMcCommand(Target);
 
-public sealed record HoverCommand(TargetKind Target, int X, int Y) : RunMcCommand(Target);
+public sealed record HoverCommand(TargetConfiguration Target, int X, int Y) : RunMcCommand(Target);
 
-public sealed record TypeCommand(TargetKind Target, IReadOnlyList<KeyboardAction> Actions) : RunMcCommand(Target);
+public sealed record TypeCommand(TargetConfiguration Target, IReadOnlyList<KeyboardAction> Actions) : RunMcCommand(Target);
 
-public sealed record ResizeCommand(TargetKind Target, int Width, int Height) : RunMcCommand(Target);
+public sealed record ResizeCommand(TargetConfiguration Target, int Width, int Height) : RunMcCommand(Target);
 
-public sealed record ScreenshotCommand(TargetKind Target, string OutputPath, bool IncludeCursor, string? Caption) : RunMcCommand(Target);
+public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool IncludeCursor, string? Caption) : RunMcCommand(Target);
 
-public sealed record HelpCommand(HelpTopic Topic) : RunMcCommand(TargetKind.Default);
+public sealed record HelpCommand(HelpTopic Topic) : RunMcCommand(TargetParser.Default);
 
 public sealed record ParseResult(bool Success, RunMcCommand Command, string? ErrorMessage)
 {
@@ -33,15 +33,3 @@ public enum HelpTopic
     Screenshot,
 }
 
-public enum TargetKind
-{
-    Default,
-    RunningBedrock,
-    RunningBedrockPreview,
-    RunningEducation,
-    RunningJava,
-    InstalledBedrock,
-    InstalledBedrockPreview,
-    InstalledEducation,
-    InstalledJava,
-}

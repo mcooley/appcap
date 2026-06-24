@@ -2,7 +2,7 @@ namespace RunMc;
 
 public sealed class CommandRunner : ICommandRunner
 {
-    private readonly IMinecraftTargetResolver targetResolver;
+    private readonly ITargetResolver targetResolver;
     private readonly IWindowController windowController;
     private readonly IInputInjector inputInjector;
     private readonly ICursorMover cursorMover;
@@ -10,7 +10,7 @@ public sealed class CommandRunner : ICommandRunner
     private readonly IScreenshotCapture screenshotCapture;
 
     public CommandRunner(
-        IMinecraftTargetResolver targetResolver,
+        ITargetResolver targetResolver,
         IWindowController windowController,
         IInputInjector inputInjector,
         ICursorMover cursorMover,
@@ -28,8 +28,6 @@ public sealed class CommandRunner : ICommandRunner
     public async Task RunAsync(RunMcCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        EnsureSupportedTarget(command.Target);
-
         switch (command)
         {
             case FocusCommand focus:
@@ -55,31 +53,21 @@ public sealed class CommandRunner : ICommandRunner
         }
     }
 
-    private static void EnsureSupportedTarget(TargetKind target)
-    {
-        if (target is TargetKind.Default or TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview or TargetKind.RunningEducation or TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview or TargetKind.InstalledEducation)
-        {
-            return;
-        }
-
-        throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported.");
-    }
-
     private async Task FocusAsync(FocusCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ClickAsync(ClickCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
 
         WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);
         if (command.X >= bounds.Width || command.Y >= bounds.Height)
         {
-            throw new RunMcException("Click coordinates are outside the Minecraft window.", ExitCodes.UsageError);
+            throw new RunMcException("Click coordinates are outside the target window.", ExitCodes.UsageError);
         }
 
         int screenX = bounds.Left + command.X;
@@ -89,13 +77,13 @@ public sealed class CommandRunner : ICommandRunner
 
     private async Task HoverAsync(HoverCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
 
         WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);
         if (command.X >= bounds.Width || command.Y >= bounds.Height)
         {
-            throw new RunMcException("Hover coordinates are outside the Minecraft window.", ExitCodes.UsageError);
+            throw new RunMcException("Hover coordinates are outside the target window.", ExitCodes.UsageError);
         }
 
         int screenX = bounds.Left + command.X;
@@ -105,20 +93,20 @@ public sealed class CommandRunner : ICommandRunner
 
     private async Task TypeAsync(TypeCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
         await keyboardInputInjector.TypeAsync(window, command.Actions, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResizeAsync(ResizeCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await windowController.ResizeAsync(window, command.Width, command.Height, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ScreenshotAsync(ScreenshotCommand command, CancellationToken cancellationToken)
     {
-        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await screenshotCapture.CapturePngAsync(window, command.OutputPath, command.IncludeCursor, command.Caption, cancellationToken).ConfigureAwait(false);
     }
 }

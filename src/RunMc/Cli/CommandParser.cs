@@ -11,7 +11,7 @@ public static class CommandParser
 
         if (args.Count is 0)
         {
-            return ParseResult.Valid(new FocusCommand(TargetKind.Default));
+            return ParseResult.Valid(new FocusCommand(TargetParser.Default));
         }
 
         if (TryParseHelp(args, out HelpTopic helpTopic))
@@ -27,8 +27,8 @@ public static class CommandParser
         }
 
         string? targetValue = result.GetValue(model.TargetOption);
-        TargetKind target = TargetKind.Default;
-        if (targetValue is not null && !TargetKindParser.TryParse(targetValue, out target))
+        TargetConfiguration target = TargetParser.Default;
+        if (targetValue is not null && !TargetParser.TryParse(targetValue, out target))
         {
             return ParseResult.Failure($"Unknown target '{targetValue}'.");
         }
@@ -233,23 +233,23 @@ public static class CommandParser
 
             Option<int> clickXOption = RequiredNonNegativeIntegerOption("-x", "-x");
             Option<int> clickYOption = RequiredNonNegativeIntegerOption("-y", "-y");
-            Command clickCommand = new("click", "Injects a mouse click into the Minecraft window.");
+            Command clickCommand = new("click", "Injects a mouse click into the target window.");
             clickCommand.Add(clickXOption);
             clickCommand.Add(clickYOption);
 
             Option<int> hoverXOption = RequiredNonNegativeIntegerOption("-x", "-x");
             Option<int> hoverYOption = RequiredNonNegativeIntegerOption("-y", "-y");
-            Command hoverCommand = new("hover", "Moves the cursor over the Minecraft window.");
+            Command hoverCommand = new("hover", "Moves the cursor over the target window.");
             hoverCommand.Add(hoverXOption);
             hoverCommand.Add(hoverYOption);
 
             Argument<string> typeTextArgument = new("text-and-keys");
-            Command typeCommand = new("type", "Injects keyboard input into the Minecraft window.");
+            Command typeCommand = new("type", "Injects keyboard input into the target window.");
             typeCommand.Add(typeTextArgument);
 
             Option<int> resizeWidthOption = RequiredPositiveIntegerOption("--width", "--width", "-w");
             Option<int> resizeHeightOption = RequiredPositiveIntegerOption("--height", "--height", "-h");
-            Command resizeCommand = new("resize", "Resizes the Minecraft window.");
+            Command resizeCommand = new("resize", "Resizes the target window.");
             resizeCommand.Add(resizeWidthOption);
             resizeCommand.Add(resizeHeightOption);
 
@@ -274,14 +274,14 @@ public static class CommandParser
 
                 return value;
             };
-            Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the Minecraft window.");
+            Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the target window.");
             Option<bool> screenshotIncludeCursorOption = new("--include-cursor");
             Option<string?> screenshotCaptionOption = new("--caption");
             screenshotCommand.Add(screenshotOutputOption);
             screenshotCommand.Add(screenshotIncludeCursorOption);
             screenshotCommand.Add(screenshotCaptionOption);
 
-            RootCommand rootCommand = new("Automates interactions with Minecraft.");
+            RootCommand rootCommand = new("Automates interactions with a configured target application.");
             rootCommand.Add(targetOption);
             rootCommand.Add(clickCommand);
             rootCommand.Add(hoverCommand);

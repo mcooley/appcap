@@ -12,7 +12,8 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
-        Assert.Equal(TargetKind.Default, command.Target);
+        Assert.Equal("default", command.Target.Name);
+        Assert.Equal(["bedrock", "bedrockpreview", "education"], command.Target.Applications.Select(application => application.Name));
     }
 
     [Fact]
@@ -22,13 +23,14 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "runningbedrock", "click", "-x", "5", "-y", "7"],
+            ["--target", "bedrock", "click", "-x", "5", "-y", "7"],
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         ClickCommand command = Assert.IsType<ClickCommand>(runner.Command);
-        Assert.Equal(TargetKind.RunningBedrock, command.Target);
+        Assert.Equal("bedrock", command.Target.Name);
+        Assert.Single(command.Target.Applications);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
     }
@@ -56,21 +58,21 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "runningbedrock", "hover", "-x", "5", "-y", "7"],
+            ["--target", "bedrock", "hover", "-x", "5", "-y", "7"],
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
-        Assert.Equal(TargetKind.RunningBedrock, command.Target);
+        Assert.Equal("bedrock", command.Target.Name);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
     }
 
     [Theory]
-    [InlineData("runningeducation", TargetKind.RunningEducation)]
-    [InlineData("installededucation", TargetKind.InstalledEducation)]
-    public async Task ParsesEducationTargets(string targetValue, TargetKind expectedTarget)
+    [InlineData("bedrockpreview")]
+    [InlineData("education")]
+    public async Task ParsesNamedTargets(string targetValue)
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
@@ -82,7 +84,8 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
-        Assert.Equal(expectedTarget, command.Target);
+        Assert.Equal(targetValue, command.Target.Name);
+        Assert.Single(command.Target.Applications);
     }
 
     [Fact]
@@ -92,13 +95,13 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "runningbedrock", "type", "hello[Enter]"],
+            ["--target", "bedrock", "type", "hello[Enter]"],
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
-        Assert.Equal(TargetKind.RunningBedrock, command.Target);
+        Assert.Equal("bedrock", command.Target.Name);
         Assert.Collection(
             command.Actions,
             action => Assert.Equal("hello", Assert.IsType<TextKeyboardAction>(action).Text),

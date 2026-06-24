@@ -2,5 +2,5 @@ namespace RunMc;
 
 public interface IKeyboardInputInjector
 {
-    Task TypeAsync(MinecraftWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken);
+    Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken);
 }

@@ -2,9 +2,9 @@ namespace RunMc;
 
 public interface IWindowController
 {
-    Task BringToForegroundAsync(MinecraftWindow window, CancellationToken cancellationToken);
+    Task BringToForegroundAsync(TargetWindow window, CancellationToken cancellationToken);
 
-    Task<WindowBounds> GetBoundsAsync(MinecraftWindow window, CancellationToken cancellationToken);
+    Task<WindowBounds> GetBoundsAsync(TargetWindow window, CancellationToken cancellationToken);
 
-    Task ResizeAsync(MinecraftWindow window, int width, int height, CancellationToken cancellationToken);
+    Task ResizeAsync(TargetWindow window, int width, int height, CancellationToken cancellationToken);
 }

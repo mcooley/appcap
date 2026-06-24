@@ -5,23 +5,24 @@ using global::Windows.Win32.Foundation;
 
 namespace RunMc.Windows;
 
-public interface IMinecraftWindowFinder
+public interface IWindowFinder
 {
-    MinecraftWindow? TryFindWindow(string packageFamilyName, TargetKind target);
+    TargetWindow? TryFindWindow(TargetConfiguration target, TargetApplication application);
 }
 
-public sealed class MinecraftWindowFinder : IMinecraftWindowFinder
+public sealed class WindowFinder : IWindowFinder
 {
-    public MinecraftWindow? TryFindWindow(string packageFamilyName, TargetKind target)
+    public TargetWindow? TryFindWindow(TargetConfiguration target, TargetApplication application)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(packageFamilyName);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(application);
 
         foreach (Process process in Process.GetProcesses())
         {
             using (process)
             {
                 if (!ProcessPackage.TryGetPackageFamilyName(process.Id, out string? processPackageFamilyName) ||
-                    !packageFamilyName.Equals(processPackageFamilyName, StringComparison.Ordinal))
+                    !application.PackageFamilyName.Equals(processPackageFamilyName, StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -29,7 +30,7 @@ public sealed class MinecraftWindowFinder : IMinecraftWindowFinder
                 nint windowHandle = process.MainWindowHandle;
                 if (windowHandle != 0 && PInvoke.IsWindowVisible(new HWND(windowHandle)))
                 {
-                    return new MinecraftWindow(target, windowHandle);
+                    return new TargetWindow(target, application, windowHandle);
                 }
             }
         }

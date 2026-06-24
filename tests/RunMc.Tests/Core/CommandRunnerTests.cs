@@ -2,15 +2,18 @@ namespace RunMc.Tests;
 
 public sealed class CommandRunnerTests
 {
+    private static readonly TargetApplication Application = new("target", "Package_family", "Package_family!App");
+    private static readonly TargetConfiguration Target = new("target", [Application]);
+
     [Fact]
     public async Task FocusResolvesTargetAndBringsWindowToForeground()
     {
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new FocusCommand(TargetKind.Default), CancellationToken.None);
+        await runner.RunAsync(new FocusCommand(Target), CancellationToken.None);
 
-        Assert.Equal(TargetKind.Default, services.TargetResolver.RequestedTarget);
+        Assert.Equal(Target, services.TargetResolver.RequestedTarget);
         Assert.Equal(services.Window, services.WindowController.ForegroundWindow);
     }
 
@@ -24,7 +27,7 @@ public sealed class CommandRunnerTests
         CommandRunner runner = services.CreateRunner();
 
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
-            runner.RunAsync(new ClickCommand(TargetKind.RunningBedrock, 100, 10), CancellationToken.None));
+            runner.RunAsync(new ClickCommand(Target, 100, 10), CancellationToken.None));
 
         Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
         Assert.Null(services.InputInjector.Click);
@@ -39,7 +42,7 @@ public sealed class CommandRunnerTests
         };
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ClickCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
+        await runner.RunAsync(new ClickCommand(Target, 99, 49), CancellationToken.None);
 
         Assert.Equal((109, 69), services.InputInjector.Click);
         Assert.Equal(["foreground", "bounds", "click"], services.Events);
@@ -54,7 +57,7 @@ public sealed class CommandRunnerTests
         };
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
+        await runner.RunAsync(new HoverCommand(Target, 99, 49), CancellationToken.None);
 
         Assert.Equal((109, 69), services.CursorMover.Move);
         Assert.Equal(["foreground", "bounds", "hover"], services.Events);
@@ -70,7 +73,7 @@ public sealed class CommandRunnerTests
         CommandRunner runner = services.CreateRunner();
 
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
-            runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 100, 10), CancellationToken.None));
+            runner.RunAsync(new HoverCommand(Target, 100, 10), CancellationToken.None));
 
         Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
         Assert.Null(services.CursorMover.Move);
@@ -83,7 +86,7 @@ public sealed class CommandRunnerTests
         CommandRunner runner = services.CreateRunner();
         KeyboardAction[] actions = [new TextKeyboardAction("hello"), new KeyPressKeyboardAction([], KeyboardKey.Enter)];
 
-        await runner.RunAsync(new TypeCommand(TargetKind.RunningBedrock, actions), CancellationToken.None);
+        await runner.RunAsync(new TypeCommand(Target, actions), CancellationToken.None);
 
         Assert.Same(actions, services.KeyboardInputInjector.Actions);
         Assert.Equal(["foreground", "type"], services.Events);
@@ -95,7 +98,7 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ResizeCommand(TargetKind.InstalledBedrock, 800, 600), CancellationToken.None);
+        await runner.RunAsync(new ResizeCommand(Target, 800, 600), CancellationToken.None);
 
         Assert.Equal((800, 600), services.WindowController.Resize);
     }
@@ -106,29 +109,16 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png", IncludeCursor: true, Caption: "Test caption"), CancellationToken.None);
+        await runner.RunAsync(new ScreenshotCommand(Target, "test.png", IncludeCursor: true, Caption: "Test caption"), CancellationToken.None);
 
         Assert.Equal("test.png", services.ScreenshotCapture.OutputPath);
         Assert.True(services.ScreenshotCapture.IncludeCursor);
         Assert.Equal("Test caption", services.ScreenshotCapture.Caption);
     }
 
-    [Fact]
-    public async Task RejectsUnsupportedTargets()
-    {
-        TestServices services = new();
-        CommandRunner runner = services.CreateRunner();
-
-        RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
-            runner.RunAsync(new FocusCommand(TargetKind.RunningJava), CancellationToken.None));
-
-        Assert.Contains("runningjava", exception.Message, StringComparison.Ordinal);
-        Assert.Null(services.TargetResolver.RequestedTarget);
-    }
-
     private sealed class TestServices
     {
-        public MinecraftWindow Window { get; } = new(TargetKind.RunningBedrock, 123);
+        public TargetWindow Window { get; } = new(Target, Application, 123);
 
         public WindowBounds Bounds { get; init; } = new(0, 0, 640, 480);
 
@@ -165,18 +155,18 @@ public sealed class CommandRunnerTests
         }
     }
 
-    private sealed class TestTargetResolver : IMinecraftTargetResolver
+    private sealed class TestTargetResolver : ITargetResolver
     {
-        private readonly MinecraftWindow window;
+        private readonly TargetWindow window;
 
-        public TestTargetResolver(MinecraftWindow window)
+        public TestTargetResolver(TargetWindow window)
         {
             this.window = window;
         }
 
-        public TargetKind? RequestedTarget { get; private set; }
+        public TargetConfiguration? RequestedTarget { get; private set; }
 
-        public Task<MinecraftWindow> ResolveAsync(TargetKind target, CancellationToken cancellationToken)
+        public Task<TargetWindow> ResolveAsync(TargetConfiguration target, CancellationToken cancellationToken)
         {
             RequestedTarget = target;
             return Task.FromResult(window);
@@ -194,24 +184,24 @@ public sealed class CommandRunnerTests
             this.events = events;
         }
 
-        public MinecraftWindow? ForegroundWindow { get; private set; }
+        public TargetWindow? ForegroundWindow { get; private set; }
 
         public (int Width, int Height)? Resize { get; private set; }
 
-        public Task BringToForegroundAsync(MinecraftWindow window, CancellationToken cancellationToken)
+        public Task BringToForegroundAsync(TargetWindow window, CancellationToken cancellationToken)
         {
             ForegroundWindow = window;
             events.Add("foreground");
             return Task.CompletedTask;
         }
 
-        public Task<WindowBounds> GetBoundsAsync(MinecraftWindow window, CancellationToken cancellationToken)
+        public Task<WindowBounds> GetBoundsAsync(TargetWindow window, CancellationToken cancellationToken)
         {
             events.Add("bounds");
             return Task.FromResult(bounds);
         }
 
-        public Task ResizeAsync(MinecraftWindow window, int width, int height, CancellationToken cancellationToken)
+        public Task ResizeAsync(TargetWindow window, int width, int height, CancellationToken cancellationToken)
         {
             Resize = (width, height);
             return Task.CompletedTask;
@@ -229,7 +219,7 @@ public sealed class CommandRunnerTests
 
         public (int X, int Y)? Click { get; private set; }
 
-        public Task ClickAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+        public Task ClickAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
         {
             events.Add("click");
             Click = (screenX, screenY);
@@ -248,7 +238,7 @@ public sealed class CommandRunnerTests
 
         public IReadOnlyList<KeyboardAction>? Actions { get; private set; }
 
-        public Task TypeAsync(MinecraftWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
+        public Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
         {
             events.Add("type");
             Actions = actions;
@@ -267,7 +257,7 @@ public sealed class CommandRunnerTests
 
         public (int X, int Y)? Move { get; private set; }
 
-        public Task MoveToAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+        public Task MoveToAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
         {
             events.Add("hover");
             Move = (screenX, screenY);
@@ -283,7 +273,7 @@ public sealed class CommandRunnerTests
 
         public string? Caption { get; private set; }
 
-        public Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
+        public Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
         {
             OutputPath = outputPath;
             IncludeCursor = includeCursor;

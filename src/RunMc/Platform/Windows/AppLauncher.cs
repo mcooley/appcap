@@ -26,11 +26,11 @@ public sealed class AppLauncher : IAppLauncher
         }
         catch (InvalidOperationException exception)
         {
-            throw new RunMcException("Minecraft Bedrock could not be launched.", exception);
+            throw new RunMcException("Target application could not be launched.", exception);
         }
         catch (System.ComponentModel.Win32Exception exception)
         {
-            throw new RunMcException("Minecraft Bedrock could not be launched.", exception);
+            throw new RunMcException("Target application could not be launched.", exception);
         }
     }
 }
