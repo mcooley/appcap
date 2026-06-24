@@ -18,6 +18,8 @@ public sealed record RecordStartCommand(TargetConfiguration Target, string Outpu
 
 public sealed record RecordStopCommand(TargetConfiguration Target) : RunMcCommand(Target);
 
+public sealed record RecordCancelCommand(TargetConfiguration Target) : RunMcCommand(Target);
+
 public sealed record HelpCommand(HelpTopic Topic) : RunMcCommand(TargetParser.Default);
 
 public sealed record ParseResult(bool Success, RunMcCommand Command, string? ErrorMessage)

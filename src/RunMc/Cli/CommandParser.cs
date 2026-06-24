@@ -95,6 +95,11 @@ public static class CommandParser
             return ParseResult.Valid(new RecordStopCommand(target));
         }
 
+        if (command == model.RecordCancelCommand)
+        {
+            return ParseResult.Valid(new RecordCancelCommand(target));
+        }
+
         return ParseResult.Failure($"Unknown command '{command.Name}'.");
     }
 
@@ -186,6 +191,7 @@ public static class CommandParser
             Command recordCommand,
             Command recordStartCommand,
             Command recordStopCommand,
+            Command recordCancelCommand,
             Option<string> recordOutputOption)
         {
             RootCommand = rootCommand;
@@ -208,6 +214,7 @@ public static class CommandParser
             RecordCommand = recordCommand;
             RecordStartCommand = recordStartCommand;
             RecordStopCommand = recordStopCommand;
+            RecordCancelCommand = recordCancelCommand;
             RecordOutputOption = recordOutputOption;
         }
 
@@ -250,6 +257,8 @@ public static class CommandParser
         public Command RecordStartCommand { get; }
 
         public Command RecordStopCommand { get; }
+
+        public Command RecordCancelCommand { get; }
 
         public Option<string> RecordOutputOption { get; }
 
@@ -334,9 +343,11 @@ public static class CommandParser
             Command recordStartCommand = new("start", "Starts recording the target window.");
             recordStartCommand.Add(recordOutputOption);
             Command recordStopCommand = new("stop", "Stops recording the target window.");
-            Command recordCommand = new("record", "Starts or stops recording the target window.");
+            Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
+            Command recordCommand = new("record", "Starts, stops, or cancels recording the target window.");
             recordCommand.Add(recordStartCommand);
             recordCommand.Add(recordStopCommand);
+            recordCommand.Add(recordCancelCommand);
 
             RootCommand rootCommand = new("Automates interactions with a configured target application.");
             rootCommand.SetAction(_ => { });
@@ -369,6 +380,7 @@ public static class CommandParser
                 recordCommand,
                 recordStartCommand,
                 recordStopCommand,
+                recordCancelCommand,
                 recordOutputOption);
         }
     }

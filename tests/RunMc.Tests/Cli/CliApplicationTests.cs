@@ -249,6 +249,19 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task RecordCancelParsesTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "cancel"], runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordCancelCommand command = Assert.IsType<RecordCancelCommand>(runner.Command);
+        Assert.Equal("testapp", command.Target.Name);
+    }
+
+    [Fact]
     public async Task HelpDoesNotRunCommand()
     {
         RecordingRunner runner = new();

@@ -60,37 +60,18 @@ internal static class RecordingIpc
         }
     }
 
-    // Sends a stop command to the worker recording the target. Returns true if a
-    // recording was stopped, false if no recording is running. Throws when the
-    // worker reports a failure while stopping.
-    public static async Task<bool> SendStopAsync(string targetName, CancellationToken cancellationToken)
-    {
-        string response;
-        try
-        {
-            response = await SendCommandAsync(GetPipeName(targetName), StopCommand, TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
-        }
-        catch (TimeoutException)
-        {
-            return false;
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return false;
-        }
+    // Sends a stop command to the worker recording the target, asking it to finish
+    // and save the recording. Returns true if a recording was stopped, false if no
+    // recording is running. Throws when the worker reports a failure while stopping.
+    public static Task<bool> SendStopAsync(string targetName, CancellationToken cancellationToken) =>
+        SendTerminationAsync(targetName, StopCommand, cancellationToken);
 
-        if (string.Equals(response, OkResponse, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(response))
-        {
-            return false;
-        }
-
-        throw new RunMcException(response);
-    }
+    // Sends a cancel command to the worker recording the target, asking it to stop
+    // and discard the partial recording without saving an output file. Returns true
+    // if a recording was cancelled, false if no recording is running. Throws when the
+    // worker reports a failure while cancelling.
+    public static Task<bool> SendCancelAsync(string targetName, CancellationToken cancellationToken) =>
+        SendTerminationAsync(targetName, CancelCommand, cancellationToken);
 
     internal static async Task<RecordingStartLock?> TryAcquireStartLockAsync(string targetName, TimeSpan timeout, CancellationToken cancellationToken)
     {
@@ -143,6 +124,7 @@ internal static class RecordingIpc
     private const string OkResponse = "ok";
     private const string StatusCommand = "status";
     private const string StopCommand = "stop";
+    private const string CancelCommand = "cancel";
     private const string UnknownCommandResponse = "unknown-command";
 
     private static string GetPipeName(string targetName) => "runmc-record-" + HashTargetName(targetName);
@@ -163,6 +145,35 @@ internal static class RecordingIpc
         PipeSecurity security = new();
         security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.FullControl, AccessControlType.Allow));
         return security;
+    }
+
+    private static async Task<bool> SendTerminationAsync(string targetName, string command, CancellationToken cancellationToken)
+    {
+        string response;
+        try
+        {
+            response = await SendCommandAsync(GetPipeName(targetName), command, TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (string.Equals(response, OkResponse, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return false;
+        }
+
+        throw new RunMcException(response);
     }
 
     private static async Task<string> SendCommandAsync(string pipeName, string command, TimeSpan timeout, CancellationToken cancellationToken)
@@ -212,7 +223,13 @@ internal static class RecordingIpc
                     if (string.Equals(command, StopCommand, StringComparison.Ordinal))
                     {
                         transferred = true;
-                        return new RecordingStopRequest(pipe);
+                        return new RecordingStopRequest(pipe, RecordingStopMode.Save);
+                    }
+
+                    if (string.Equals(command, CancelCommand, StringComparison.Ordinal))
+                    {
+                        transferred = true;
+                        return new RecordingStopRequest(pipe, RecordingStopMode.Discard);
                     }
 
                     string response = string.Equals(command, StatusCommand, StringComparison.Ordinal)
@@ -231,6 +248,13 @@ internal static class RecordingIpc
         }
     }
 
+    // Identifies how a recording should end: save the captured output, or discard it.
+    internal enum RecordingStopMode
+    {
+        Save,
+        Discard,
+    }
+
     // A pending stop request from a client. Exactly one of AcknowledgeAsync or
     // FailAsync sends the response; Dispose closes the underlying connection.
     internal sealed class RecordingStopRequest : IDisposable
@@ -238,7 +262,13 @@ internal static class RecordingIpc
         private readonly NamedPipeServerStream pipe;
         private bool responded;
 
-        internal RecordingStopRequest(NamedPipeServerStream pipe) => this.pipe = pipe;
+        internal RecordingStopRequest(NamedPipeServerStream pipe, RecordingStopMode mode)
+        {
+            this.pipe = pipe;
+            Mode = mode;
+        }
+
+        public RecordingStopMode Mode { get; }
 
         public Task AcknowledgeAsync(CancellationToken cancellationToken) => RespondAsync(OkResponse, cancellationToken);
 

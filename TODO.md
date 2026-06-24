@@ -25,7 +25,6 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 - Gracefully handle resize while recording is running
 - Limit recordings to 30 minutes (and have the recording background process gracefully save and exit), but add an "extend" flag which can be used if a longer recording is needed
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
-- Encode recordings as MP4 using built-in Windows media APIs.
 - Reuse screenshot caption rendering infrastructure for video captions.
 - Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation
@@ -35,7 +34,6 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 High priority (correctness / data loss):
 
 - Don't swallow encode failures after `stop` is acknowledged: if `EncodeAsync` throws after `OK` was written to the stop client, the worker currently exits `Success` and skips `EnsureOutputFileExists`, so the user is told a recording succeeded that is missing/corrupt. Validate the output before acknowledging, or report the failure back. (`RecordingWorker.RunAsync`)
-- Kill the worker process on startup failure: if `WaitForWorkerAsync` throws (or the user cancels), the spawned worker is orphaned because the `Process` handle is disposed immediately and no PID is retained. Track the process and terminate it on any start failure. (`RecordingController.StartAsync`)
 
 Error reporting:
 
@@ -46,7 +44,6 @@ Cleanup / resource leaks:
 
 - Cancel and dispose the abandoned `waitForStop` task and its `NamedPipeServerStream` when `EncodeAsync` completes first (e.g. window closed); today the task is left unobserved and the pipe is leaked. (`RecordingWorker.RunAsync`)
 - Delete partial/zero-length output files on the error path; `CreateOutputStreamAsync` uses `ReplaceExisting` and leaves corrupt files behind on failure. (`RecordingWorker`)
-- Add parent-process death detection (e.g. a job object) so the worker stops recording if the parent `runmc` process dies.
 
 Concurrency:
 

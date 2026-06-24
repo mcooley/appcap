@@ -34,16 +34,29 @@ public sealed class RecordingController : IRecordingController
         };
         AddWorkerArguments(startInfo, window, fullOutputPath);
 
+        Process process;
         try
         {
-            using Process process = Process.Start(startInfo) ?? throw new RunMcException("Recording worker could not be launched.");
+            process = Process.Start(startInfo) ?? throw new RunMcException("Recording worker could not be launched.");
         }
         catch (System.ComponentModel.Win32Exception exception)
         {
             throw new RunMcException("Recording worker could not be launched.", exception);
         }
 
-        await WaitForWorkerAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await WaitForWorkerAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await TerminateWorkerAsync(window.Target.Name, process).ConfigureAwait(false);
+            throw;
+        }
+        finally
+        {
+            process.Dispose();
+        }
     }
 
     public async Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
@@ -52,6 +65,17 @@ public sealed class RecordingController : IRecordingController
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!await RecordingIpc.SendStopAsync(target.Name, cancellationToken).ConfigureAwait(false))
+        {
+            throw new RunMcException($"No recording is running for target '{TargetFormatter.Format(target)}'.");
+        }
+    }
+
+    public async Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!await RecordingIpc.SendCancelAsync(target.Name, cancellationToken).ConfigureAwait(false))
         {
             throw new RunMcException($"No recording is running for target '{TargetFormatter.Format(target)}'.");
         }
@@ -89,5 +113,48 @@ public sealed class RecordingController : IRecordingController
         }
 
         throw new RunMcException("Recording worker did not start.");
+    }
+
+    // Cleans up a worker that failed to confirm it started. If the worker has not
+    // already exited, it is asked to cancel (discarding any partial output) and then
+    // forcibly killed if it does not exit promptly, so no orphaned worker is left
+    // recording in the background.
+    private static async Task TerminateWorkerAsync(string targetName, Process process)
+    {
+        if (process.HasExited)
+        {
+            return;
+        }
+
+        try
+        {
+            await RecordingIpc.SendCancelAsync(targetName, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (RunMcException)
+        {
+        }
+
+        try
+        {
+            using CancellationTokenSource exitTimeout = new(TimeSpan.FromSeconds(2));
+            await process.WaitForExitAsync(exitTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
     }
 }

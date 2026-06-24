@@ -76,9 +76,43 @@ public sealed class RecordingIpcTests
         // A stop for the same target is delivered to that listener and acknowledged.
         Task<bool> stopClient = RecordingIpc.SendStopAsync(target, cts.Token);
         using RecordingIpc.RecordingStopRequest stopRequest = await waitForStop;
+        Assert.Equal(RecordingIpc.RecordingStopMode.Save, stopRequest.Mode);
         await stopRequest.AcknowledgeAsync(cts.Token);
 
         Assert.True(await stopClient);
+    }
+
+    [Fact]
+    public async Task CancelReachesListenerAsDiscardRequest()
+    {
+        string target = Guid.NewGuid().ToString();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
+
+        // A cancel for the same target is delivered to that listener as a discard request.
+        Task<bool> cancelClient = RecordingIpc.SendCancelAsync(target, cts.Token);
+        using RecordingIpc.RecordingStopRequest cancelRequest = await waitForStop;
+        Assert.Equal(RecordingIpc.RecordingStopMode.Discard, cancelRequest.Mode);
+        await cancelRequest.AcknowledgeAsync(cts.Token);
+
+        Assert.True(await cancelClient);
+    }
+
+    [Fact]
+    public async Task ListenerReportsCancelFailureToClient()
+    {
+        string target = Guid.NewGuid().ToString();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
+
+        Task<bool> cancelClient = RecordingIpc.SendCancelAsync(target, cts.Token);
+        using RecordingIpc.RecordingStopRequest cancelRequest = await waitForStop;
+        await cancelRequest.FailAsync("cancel failed", cts.Token);
+
+        RunMcException exception = await Assert.ThrowsAsync<RunMcException>(async () => await cancelClient);
+        Assert.Equal("cancel failed", exception.Message);
     }
 
     [Fact]

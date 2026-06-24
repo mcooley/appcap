@@ -141,6 +141,18 @@ public sealed class CommandRunnerTests
         Assert.Equal(Target, services.RecordingController.StopTarget);
     }
 
+    [Fact]
+    public async Task RecordCancelCancelsTargetRecordingWithoutResolvingWindow()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new RecordCancelCommand(Target), CancellationToken.None);
+
+        Assert.Null(services.TargetResolver.RequestedTarget);
+        Assert.Equal(Target, services.RecordingController.CancelTarget);
+    }
+
     private sealed class TestServices
     {
         public TargetWindow Window { get; } = new(Target, Application, 123);
@@ -319,6 +331,8 @@ public sealed class CommandRunnerTests
 
         public TargetConfiguration? StopTarget { get; private set; }
 
+        public TargetConfiguration? CancelTarget { get; private set; }
+
         public Task StartAsync(TargetWindow window, string outputPath, CancellationToken cancellationToken)
         {
             StartWindow = window;
@@ -329,6 +343,12 @@ public sealed class CommandRunnerTests
         public Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
         {
             StopTarget = target;
+            return Task.CompletedTask;
+        }
+
+        public Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
+        {
+            CancelTarget = target;
             return Task.CompletedTask;
         }
     }

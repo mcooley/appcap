@@ -12,6 +12,29 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public void RecordCancelBeforeStartFails()
+    {
+        CommandResult result = Context.Run("record", "cancel");
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("No recording is running", result.StandardError, StringComparison.Ordinal);
+    }
+
+    [E2EFact]
+    public async Task RecordCancelDiscardsOutputFile()
+    {
+        string path = Context.NewOutputPath("cancelled.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", path).AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("record", "cancel").AssertSuccess();
+        await Task.Delay(500);
+
+        Assert.False(File.Exists(path), $"Expected no output file at '{path}' after cancelling the recording.");
+    }
+
+    [E2EFact]
     public async Task RecordStartFailsWhenRecordingIsAlreadyRunning()
     {
         string path = Context.NewOutputPath("already-running.mp4");

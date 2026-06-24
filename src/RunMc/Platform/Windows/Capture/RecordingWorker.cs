@@ -67,6 +67,17 @@ internal sealed class RecordingWorker : IDisposable
             if (completed == waitForStop)
             {
                 stopRequest = await waitForStop.ConfigureAwait(false);
+                if (stopRequest.Mode == RecordingIpc.RecordingStopMode.Discard)
+                {
+                    await captureCancellation.CancelAsync().ConfigureAwait(false);
+                    frames.CompleteAdding();
+                    await DrainEncodeAsync(encode).ConfigureAwait(false);
+                    DeleteOutputFile();
+                    await stopRequest.AcknowledgeAsync(cancellationToken).ConfigureAwait(false);
+                    stopAcknowledged = true;
+                    return;
+                }
+
                 frames.CompleteAdding();
                 await stopRequest.AcknowledgeAsync(cancellationToken).ConfigureAwait(false);
                 stopAcknowledged = true;
@@ -222,6 +233,33 @@ internal sealed class RecordingWorker : IDisposable
         if (!file.Exists || file.Length == 0)
         {
             throw new RunMcException($"Recording did not produce an output file at '{fullOutputPath}'.");
+        }
+    }
+
+    // Awaits the encode task while a recording is being discarded; the recording is
+    // thrown away, so any failure from the cancelled encode is irrelevant.
+    private static async Task DrainEncodeAsync(Task encode)
+    {
+        try
+        {
+            await encode.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private void DeleteOutputFile()
+    {
+        try
+        {
+            File.Delete(Path.GetFullPath(outputPath));
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
