@@ -1,5 +1,7 @@
 using System.IO.Pipes;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 
 namespace RunMc.Windows;
@@ -124,6 +126,20 @@ internal static class RecordingIpc
         }
     }
 
+    // Creates the server end of the recording pipe, restricted so that only the
+    // current user can connect. FirstPipeInstance ensures we fail rather than bind
+    // to a pipe another local process has already squatted on the well-known name.
+    internal static NamedPipeServerStream CreateServerStream(string pipeName) =>
+        NamedPipeServerStreamAcl.Create(
+            pipeName,
+            PipeDirection.InOut,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance,
+            inBufferSize: 0,
+            outBufferSize: 0,
+            CreateCurrentUserPipeSecurity());
+
     private const string OkResponse = "ok";
     private const string StatusCommand = "status";
     private const string StopCommand = "stop";
@@ -137,6 +153,16 @@ internal static class RecordingIpc
     {
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(targetName));
         return Convert.ToHexString(hash, 0, 12).ToLowerInvariant();
+    }
+
+    private static PipeSecurity CreateCurrentUserPipeSecurity()
+    {
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        SecurityIdentifier user = identity.User ?? throw new RunMcException("Could not determine the current user to secure the recording pipe.");
+
+        PipeSecurity security = new();
+        security.AddAccessRule(new PipeAccessRule(user, PipeAccessRights.FullControl, AccessControlType.Allow));
+        return security;
     }
 
     private static async Task<string> SendCommandAsync(string pipeName, string command, TimeSpan timeout, CancellationToken cancellationToken)
@@ -176,7 +202,7 @@ internal static class RecordingIpc
         {
             while (true)
             {
-                NamedPipeServerStream pipe = new(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                NamedPipeServerStream pipe = CreateServerStream(pipeName);
                 bool transferred = false;
                 try
                 {

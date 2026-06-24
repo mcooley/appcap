@@ -1,10 +1,30 @@
 using RunMc.Windows;
+using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 namespace RunMc.Tests;
 
 public sealed class RecordingIpcTests
 {
     private static readonly TimeSpan ShortLockTimeout = TimeSpan.FromMilliseconds(200);
+
+    [Fact]
+    public void ServerPipeIsRestrictedToCurrentUser()
+    {
+        string pipeName = "runmc-test-" + Guid.NewGuid().ToString("N");
+
+        using NamedPipeServerStream pipe = RecordingIpc.CreateServerStream(pipeName);
+
+        PipeSecurity security = pipe.GetAccessControl();
+        AuthorizationRuleCollection rules = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier));
+        PipeAccessRule rule = Assert.IsType<PipeAccessRule>(Assert.Single(rules));
+
+        using WindowsIdentity currentUser = WindowsIdentity.GetCurrent();
+        Assert.Equal(currentUser.User, rule.IdentityReference);
+        Assert.Equal(PipeAccessRights.FullControl, rule.PipeAccessRights);
+        Assert.Equal(AccessControlType.Allow, rule.AccessControlType);
+    }
 
     [Fact]
     public async Task StartLockIsExclusiveUntilReleased()

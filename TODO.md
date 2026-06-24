@@ -53,10 +53,6 @@ Concurrency:
 - Synchronize `firstSampleTime`/`lastSampleTime`, which are written in `OnMediaStreamSourceStarting` and read/written in `OnMediaStreamSourceSampleRequested` on potentially different threads.
 - Replace the blocking `Thread.Sleep(33)` in `OnMediaStreamSourceSampleRequested`, which stalls the MediaStreamSource encoder thread.
 
-Security:
-
-- Restrict the recording named pipe with an explicit `PipeSecurity` ACL (current user only). The pipe name is a non-secret hash of the target name and the server uses default security, so a local process could squat the name or spoof `status`/`stop` responses. (`RecordingIpc`, `RecordingWorker.WaitForStopAsync`)
-
 ## Platform Support
 
 - Investigate whether CsWin32's "friendly overloads" can be used to simplify code while preserving NativeAOT compatibility
