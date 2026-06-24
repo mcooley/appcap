@@ -2,5 +2,5 @@ namespace RunMc;
 
 public interface IInputInjector
 {
-    Task ClickAsync(MinecraftWindow window, int x, int y, CancellationToken cancellationToken);
+    Task ClickAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken);
 }

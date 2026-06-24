@@ -41,7 +41,8 @@ public sealed class PhaseOneCommandRunnerTests
 
         await runner.RunAsync(new ClickCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
 
-        Assert.Equal((99, 49), services.InputInjector.Click);
+        Assert.Equal((109, 69), services.InputInjector.Click);
+        Assert.Equal(["foreground", "bounds", "click"], services.Events);
     }
 
     [Fact]
@@ -85,6 +86,8 @@ public sealed class PhaseOneCommandRunnerTests
 
         public WindowBounds Bounds { get; init; } = new(0, 0, 640, 480);
 
+        public List<string> Events { get; } = [];
+
         public TestTargetResolver TargetResolver { get; private set; } = null!;
 
         public TestWindowController WindowController { get; private set; } = null!;
@@ -96,8 +99,8 @@ public sealed class PhaseOneCommandRunnerTests
         public PhaseOneCommandRunner CreateRunner()
         {
             TargetResolver = new TestTargetResolver(Window);
-            WindowController = new TestWindowController(Bounds);
-            InputInjector = new TestInputInjector();
+            WindowController = new TestWindowController(Bounds, Events);
+            InputInjector = new TestInputInjector(Events);
             ScreenshotCapture = new TestScreenshotCapture();
 
             return new PhaseOneCommandRunner(
@@ -129,10 +132,12 @@ public sealed class PhaseOneCommandRunnerTests
     private sealed class TestWindowController : IWindowController
     {
         private readonly WindowBounds bounds;
+        private readonly List<string> events;
 
-        public TestWindowController(WindowBounds bounds)
+        public TestWindowController(WindowBounds bounds, List<string> events)
         {
             this.bounds = bounds;
+            this.events = events;
         }
 
         public MinecraftWindow? ForegroundWindow { get; private set; }
@@ -142,10 +147,15 @@ public sealed class PhaseOneCommandRunnerTests
         public Task BringToForegroundAsync(MinecraftWindow window, CancellationToken cancellationToken)
         {
             ForegroundWindow = window;
+            events.Add("foreground");
             return Task.CompletedTask;
         }
 
-        public Task<WindowBounds> GetBoundsAsync(MinecraftWindow window, CancellationToken cancellationToken) => Task.FromResult(bounds);
+        public Task<WindowBounds> GetBoundsAsync(MinecraftWindow window, CancellationToken cancellationToken)
+        {
+            events.Add("bounds");
+            return Task.FromResult(bounds);
+        }
 
         public Task ResizeAsync(MinecraftWindow window, int width, int height, CancellationToken cancellationToken)
         {
@@ -156,11 +166,19 @@ public sealed class PhaseOneCommandRunnerTests
 
     private sealed class TestInputInjector : IInputInjector
     {
+        private readonly List<string> events;
+
+        public TestInputInjector(List<string> events)
+        {
+            this.events = events;
+        }
+
         public (int X, int Y)? Click { get; private set; }
 
-        public Task ClickAsync(MinecraftWindow window, int x, int y, CancellationToken cancellationToken)
+        public Task ClickAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
         {
-            Click = (x, y);
+            events.Add("click");
+            Click = (screenX, screenY);
             return Task.CompletedTask;
         }
     }

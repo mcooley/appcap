@@ -8,7 +8,7 @@ public static class WindowsCommandServices
         return new PhaseOneCommandRunner(
             new WindowsBedrockTargetResolver(new WindowsMinecraftWindowFinder(), new WindowsAppLauncher()),
             windowController,
-            new WindowMessageInputInjector(),
+            new SyntheticPointerInputInjector(),
             new WindowsGraphicsCaptureScreenshotCapture());
     }
 }

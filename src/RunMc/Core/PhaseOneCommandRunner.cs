@@ -62,13 +62,15 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
     private async Task ClickAsync(ClickCommand command, CancellationToken cancellationToken)
     {
         MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
+
         WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);
         if (command.X >= bounds.Width || command.Y >= bounds.Height)
         {
             throw new RunMcException("Click coordinates are outside the Minecraft window.", ExitCodes.UsageError);
         }
 
-        await inputInjector.ClickAsync(window, command.X, command.Y, cancellationToken).ConfigureAwait(false);
+        await inputInjector.ClickAsync(window, bounds.Left + command.X, bounds.Top + command.Y, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResizeAsync(ResizeCommand command, CancellationToken cancellationToken)

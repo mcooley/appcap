@@ -48,7 +48,7 @@ public sealed class WindowsWindowController : IWindowController
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.FromResult(GetBounds(window));
+        return Task.FromResult(GetDwmExtendedFrameBounds(window));
     }
 
     public Task ResizeAsync(MinecraftWindow window, int width, int height, CancellationToken cancellationToken)
