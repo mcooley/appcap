@@ -190,6 +190,7 @@ internal sealed class RecordingWorker : IDisposable
         {
             session.IsCursorCaptureEnabled = false;
             session.StartCapture();
+            await WaitForFirstFrameAsync(cancellationToken).ConfigureAwait(false);
             await EncodeCaptureFramesAsync(item.Size.Width, item.Size.Height, cancellationToken).ConfigureAwait(false);
         }
         finally
