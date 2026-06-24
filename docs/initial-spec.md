@@ -56,10 +56,10 @@ Resizes the Minecraft window.
 
 Implementation notes: prints an error if the desired window size is not possible. Should include visible non-client elements like the title bar. Restores (un-maximizes) the window if necessary.
 
-### runmc screenshot --include-cursor --output path/to/foo.png
+### runmc screenshot --include-cursor --caption "Test" --output path/to/foo.png
 Takes a screenshot of the Minecraft window.
 
-Implementation notes: always encode output as PNG. Include only the Minecraft window and no other windows, even if the window is occluded. Users will expect the image dimensions to match "resize", so design "resize" accordingly.
+Implementation notes: always encode output as PNG. Include only the Minecraft window and no other windows, even if the window is occluded. Users will expect the image dimensions to match "resize", so design "resize" accordingly. `--caption` is optional and renders centered text at the bottom of the image.
 
 ### runmc record --start --output path/to/foo.mp4, runmc record --stop
 Starts recording the Minecraft window.
@@ -68,9 +68,9 @@ Implementaton notes: spawn a separate process for recording, so user's current t
 
 ### runmc screenshot --caption "Test"
 ### runmc record --caption "Test"
-Adds the text overlay to the current screenshot or video recording. Fades out after 3 seconds.
+Adds a text overlay to the current screenshot or video recording. Screenshot captions are rendered into the output image; video captions fade out after 3 seconds.
 
-Implementation notes: text is centered at the bottom of the image or video. White with a drop shadow, Segoe UI font. If text is too long, wrap it so it fits on two lines. If it's too long for two lines, truncate it and use an ellipsis to indicate that it was truncated.
+Implementation notes: text is centered at the bottom of the image or video. White with a drop shadow, Trebuchet MS font. If text is too long, truncate it with an ellipsis.
 
 ## Project sequencing
 Phase 1: click, resize, screenshot for Minecraft Bedrock

@@ -1,6 +1,7 @@
 using RunMc;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
+using global::Windows.Graphics.DirectX.Direct3D11;
 using global::Windows.Graphics.Imaging;
 using global::Windows.Storage;
 using global::Windows.Storage.Streams;
@@ -14,7 +15,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
 {
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
 
-    public async Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, CancellationToken cancellationToken)
+    public async Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -49,17 +50,33 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
         using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, includeCursor, cancellationToken).ConfigureAwait(false);
 
-        await SavePngAsync(frame, fullOutputPath, cancellationToken).ConfigureAwait(false);
+        IDirect3DSurface surface = frame.Surface;
+        IDisposable? captionedSurfaceLease = null;
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            using CaptionRenderer captionRenderer = new((uint)frame.ContentSize.Width, (uint)frame.ContentSize.Height, caption);
+            surface = captionRenderer.Render(frame.Surface);
+            captionedSurfaceLease = surface as IDisposable;
+        }
+
+        try
+        {
+            await SavePngAsync(surface, fullOutputPath, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            captionedSurfaceLease?.Dispose();
+        }
     }
 
-    private static async Task SavePngAsync(Direct3D11CaptureFrame frame, string outputPath, CancellationToken cancellationToken)
+    private static async Task SavePngAsync(IDirect3DSurface surface, string outputPath, CancellationToken cancellationToken)
     {
         using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(
             outputPath,
             FileAccessMode.ReadWrite,
             StorageOpenOptions.None,
             FileOpenDisposition.CreateAlways).AsTask(cancellationToken).ConfigureAwait(false);
-        using SoftwareBitmap bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(frame.Surface, BitmapAlphaMode.Premultiplied).AsTask(cancellationToken).ConfigureAwait(false);
+        using SoftwareBitmap bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask(cancellationToken).ConfigureAwait(false);
         BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream).AsTask(cancellationToken).ConfigureAwait(false);
         encoder.SetSoftwareBitmap(bitmap);
         await encoder.FlushAsync().AsTask(cancellationToken).ConfigureAwait(false);

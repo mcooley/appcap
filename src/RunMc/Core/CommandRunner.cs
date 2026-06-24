@@ -119,6 +119,6 @@ public sealed class CommandRunner : ICommandRunner
     private async Task ScreenshotAsync(ScreenshotCommand command, CancellationToken cancellationToken)
     {
         MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await screenshotCapture.CapturePngAsync(window, command.OutputPath, command.IncludeCursor, cancellationToken).ConfigureAwait(false);
+        await screenshotCapture.CapturePngAsync(window, command.OutputPath, command.IncludeCursor, command.Caption, cancellationToken).ConfigureAwait(false);
     }
 }

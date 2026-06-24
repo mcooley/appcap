@@ -169,6 +169,22 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task ScreenshotParsesCaption()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["screenshot", "--caption", "Test caption", "--output", "shot.png"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        ScreenshotCommand command = Assert.IsType<ScreenshotCommand>(runner.Command);
+        Assert.Equal("Test caption", command.Caption);
+    }
+
+    [Fact]
     public async Task HelpDoesNotRunCommand()
     {
         RecordingRunner runner = new();

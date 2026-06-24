@@ -106,10 +106,11 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png", IncludeCursor: true), CancellationToken.None);
+        await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png", IncludeCursor: true, Caption: "Test caption"), CancellationToken.None);
 
         Assert.Equal("test.png", services.ScreenshotCapture.OutputPath);
         Assert.True(services.ScreenshotCapture.IncludeCursor);
+        Assert.Equal("Test caption", services.ScreenshotCapture.Caption);
     }
 
     [Fact]
@@ -280,10 +281,13 @@ public sealed class CommandRunnerTests
 
         public bool? IncludeCursor { get; private set; }
 
-        public Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, CancellationToken cancellationToken)
+        public string? Caption { get; private set; }
+
+        public Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
         {
             OutputPath = outputPath;
             IncludeCursor = includeCursor;
+            Caption = caption;
             return Task.CompletedTask;
         }
     }

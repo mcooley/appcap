@@ -12,7 +12,7 @@ public sealed record TypeCommand(TargetKind Target, IReadOnlyList<KeyboardAction
 
 public sealed record ResizeCommand(TargetKind Target, int Width, int Height) : RunMcCommand(Target);
 
-public sealed record ScreenshotCommand(TargetKind Target, string OutputPath, bool IncludeCursor) : RunMcCommand(Target);
+public sealed record ScreenshotCommand(TargetKind Target, string OutputPath, bool IncludeCursor, string? Caption) : RunMcCommand(Target);
 
 public sealed record HelpCommand(HelpTopic Topic) : RunMcCommand(TargetKind.Default);
 

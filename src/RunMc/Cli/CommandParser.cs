@@ -79,7 +79,8 @@ public static class CommandParser
             return ParseResult.Valid(new ScreenshotCommand(
                 target,
                 result.GetRequiredValue(model.ScreenshotOutputOption),
-                result.GetValue(model.ScreenshotIncludeCursorOption)));
+                result.GetValue(model.ScreenshotIncludeCursorOption),
+                NormalizeOptionalText(result.GetValue(model.ScreenshotCaptionOption))));
         }
 
         return ParseResult.Failure($"Unknown command '{command.Name}'.");
@@ -147,6 +148,8 @@ public static class CommandParser
         return parsed;
     }
 
+    private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
     private sealed class CommandLineModel
     {
         private CommandLineModel(
@@ -165,7 +168,8 @@ public static class CommandParser
             Option<int> resizeHeightOption,
             Command screenshotCommand,
             Option<string> screenshotOutputOption,
-            Option<bool> screenshotIncludeCursorOption)
+            Option<bool> screenshotIncludeCursorOption,
+            Option<string?> screenshotCaptionOption)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
@@ -183,6 +187,7 @@ public static class CommandParser
             ScreenshotCommand = screenshotCommand;
             ScreenshotOutputOption = screenshotOutputOption;
             ScreenshotIncludeCursorOption = screenshotIncludeCursorOption;
+            ScreenshotCaptionOption = screenshotCaptionOption;
         }
 
         public RootCommand RootCommand { get; }
@@ -216,6 +221,8 @@ public static class CommandParser
         public Option<string> ScreenshotOutputOption { get; }
 
         public Option<bool> ScreenshotIncludeCursorOption { get; }
+
+        public Option<string?> ScreenshotCaptionOption { get; }
 
         public static CommandLineModel Create()
         {
@@ -269,8 +276,10 @@ public static class CommandParser
             };
             Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the Minecraft window.");
             Option<bool> screenshotIncludeCursorOption = new("--include-cursor");
+            Option<string?> screenshotCaptionOption = new("--caption");
             screenshotCommand.Add(screenshotOutputOption);
             screenshotCommand.Add(screenshotIncludeCursorOption);
+            screenshotCommand.Add(screenshotCaptionOption);
 
             RootCommand rootCommand = new("Automates interactions with Minecraft.");
             rootCommand.Add(targetOption);
@@ -296,7 +305,8 @@ public static class CommandParser
                 resizeHeightOption,
                 screenshotCommand,
                 screenshotOutputOption,
-                screenshotIncludeCursorOption);
+                screenshotIncludeCursorOption,
+                screenshotCaptionOption);
         }
     }
 }

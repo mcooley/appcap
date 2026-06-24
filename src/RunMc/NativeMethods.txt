@@ -22,7 +22,17 @@ INPUT
 DwmGetWindowAttribute
 D3D11CreateDevice
 CreateDirect3D11DeviceFromDXGIDevice
+CreateDirect3D11SurfaceFromDXGISurface
+IDirect3DDxgiInterfaceAccess
 IGraphicsCaptureItemInterop
+D2D1CreateFactory
+DWriteCreateFactory
+ID2D1Factory
+ID2D1RenderTarget
+ID2D1SolidColorBrush
+IDWriteFactory
+IDWriteTextFormat
+IDWriteTextLayout
 CreateSyntheticPointerDevice
 InjectSyntheticPointerInput
 DestroySyntheticPointerDevice
