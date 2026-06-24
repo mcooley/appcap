@@ -98,3 +98,14 @@ runmc --target education screenshot --caption "Before opening inventory" --outpu
 ```
 
 Screenshots include `Captured from <window title> <version>` as a comment in file metadata.
+
+### Record
+
+Starts or stops a recording session for the target.
+
+```powershell
+runmc --target bedrock record start --output recording.mp4
+runmc --target bedrock record stop
+```
+
+Recording start/stop currently tracks recording lifecycle state for the target. MP4 encoding is planned separately.

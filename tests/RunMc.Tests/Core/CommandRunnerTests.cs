@@ -116,6 +116,31 @@ public sealed class CommandRunnerTests
         Assert.Equal("Test caption", services.ScreenshotCapture.Caption);
     }
 
+    [Fact]
+    public async Task RecordStartResolvesTargetAndStartsRecording()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4"), CancellationToken.None);
+
+        Assert.Equal(Target, services.TargetResolver.RequestedTarget);
+        Assert.Equal(services.Window, services.RecordingController.StartWindow);
+        Assert.Equal("recording.mp4", services.RecordingController.OutputPath);
+    }
+
+    [Fact]
+    public async Task RecordStopStopsTargetRecordingWithoutResolvingWindow()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new RecordStopCommand(Target), CancellationToken.None);
+
+        Assert.Null(services.TargetResolver.RequestedTarget);
+        Assert.Equal(Target, services.RecordingController.StopTarget);
+    }
+
     private sealed class TestServices
     {
         public TargetWindow Window { get; } = new(Target, Application, 123);
@@ -136,6 +161,8 @@ public sealed class CommandRunnerTests
 
         public TestScreenshotCapture ScreenshotCapture { get; private set; } = null!;
 
+        public TestRecordingController RecordingController { get; private set; } = null!;
+
         public CommandRunner CreateRunner()
         {
             TargetResolver = new TestTargetResolver(Window);
@@ -144,6 +171,7 @@ public sealed class CommandRunnerTests
             CursorMover = new TestCursorMover(Events);
             KeyboardInputInjector = new TestKeyboardInputInjector(Events);
             ScreenshotCapture = new TestScreenshotCapture();
+            RecordingController = new TestRecordingController();
 
             return new CommandRunner(
                 TargetResolver,
@@ -151,7 +179,8 @@ public sealed class CommandRunnerTests
                 InputInjector,
                 CursorMover,
                 KeyboardInputInjector,
-                ScreenshotCapture);
+                ScreenshotCapture,
+                RecordingController);
         }
     }
 
@@ -278,6 +307,28 @@ public sealed class CommandRunnerTests
             OutputPath = outputPath;
             IncludeCursor = includeCursor;
             Caption = caption;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestRecordingController : IRecordingController
+    {
+        public TargetWindow? StartWindow { get; private set; }
+
+        public string? OutputPath { get; private set; }
+
+        public TargetConfiguration? StopTarget { get; private set; }
+
+        public Task StartAsync(TargetWindow window, string outputPath, CancellationToken cancellationToken)
+        {
+            StartWindow = window;
+            OutputPath = outputPath;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
+        {
+            StopTarget = target;
             return Task.CompletedTask;
         }
     }

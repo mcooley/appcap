@@ -8,6 +8,7 @@ public sealed class CommandRunner : ICommandRunner
     private readonly ICursorMover cursorMover;
     private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly IScreenshotCapture screenshotCapture;
+    private readonly IRecordingController recordingController;
 
     public CommandRunner(
         ITargetResolver targetResolver,
@@ -15,7 +16,8 @@ public sealed class CommandRunner : ICommandRunner
         IInputInjector inputInjector,
         ICursorMover cursorMover,
         IKeyboardInputInjector keyboardInputInjector,
-        IScreenshotCapture screenshotCapture)
+        IScreenshotCapture screenshotCapture,
+        IRecordingController recordingController)
     {
         this.targetResolver = targetResolver;
         this.windowController = windowController;
@@ -23,6 +25,7 @@ public sealed class CommandRunner : ICommandRunner
         this.cursorMover = cursorMover;
         this.keyboardInputInjector = keyboardInputInjector;
         this.screenshotCapture = screenshotCapture;
+        this.recordingController = recordingController;
     }
 
     public async Task RunAsync(RunMcCommand command, CancellationToken cancellationToken)
@@ -47,6 +50,12 @@ public sealed class CommandRunner : ICommandRunner
                 break;
             case ScreenshotCommand screenshot:
                 await ScreenshotAsync(screenshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case RecordStartCommand recordStart:
+                await RecordStartAsync(recordStart, cancellationToken).ConfigureAwait(false);
+                break;
+            case RecordStopCommand recordStop:
+                await RecordStopAsync(recordStop, cancellationToken).ConfigureAwait(false);
                 break;
             default:
                 throw new RunMcException("Unsupported command.", ExitCodes.UsageError);
@@ -109,4 +118,13 @@ public sealed class CommandRunner : ICommandRunner
         TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await screenshotCapture.CapturePngAsync(window, command.OutputPath, command.IncludeCursor, command.Caption, cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task RecordStartAsync(RecordStartCommand command, CancellationToken cancellationToken)
+    {
+        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        await recordingController.StartAsync(window, command.OutputPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task RecordStopAsync(RecordStopCommand command, CancellationToken cancellationToken) =>
+        recordingController.StopAsync(command.Target, cancellationToken);
 }

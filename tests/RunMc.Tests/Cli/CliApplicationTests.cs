@@ -203,6 +203,52 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task RecordStartParsesOutputPathAndTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "testapp", "record", "start", "--output", "recording.mp4"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
+        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("recording.mp4", command.OutputPath);
+    }
+
+    [Fact]
+    public async Task RecordStartRequiresMp4Output()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.avi"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("recording output must be a .mp4 file.", console.ErrorText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RecordStopParsesTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "stop"], runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStopCommand command = Assert.IsType<RecordStopCommand>(runner.Command);
+        Assert.Equal("testapp", command.Target.Name);
+    }
+
+    [Fact]
     public async Task HelpDoesNotRunCommand()
     {
         RecordingRunner runner = new();

@@ -14,6 +14,10 @@ public sealed record ResizeCommand(TargetConfiguration Target, int Width, int He
 
 public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool IncludeCursor, string? Caption) : RunMcCommand(Target);
 
+public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath) : RunMcCommand(Target);
+
+public sealed record RecordStopCommand(TargetConfiguration Target) : RunMcCommand(Target);
+
 public sealed record HelpCommand(HelpTopic Topic) : RunMcCommand(TargetParser.Default);
 
 public sealed record ParseResult(bool Success, RunMcCommand Command, string? ErrorMessage)
@@ -31,5 +35,6 @@ public enum HelpTopic
     Type,
     Resize,
     Screenshot,
+    Record,
 }
 

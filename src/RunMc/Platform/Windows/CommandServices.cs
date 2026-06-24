@@ -12,6 +12,7 @@ public static class CommandServices
             new SyntheticPointerInputInjector(),
             new CursorMover(),
             new KeyboardInputInjector(),
-            new GraphicsCaptureScreenshotCapture());
+            new GraphicsCaptureScreenshotCapture(),
+            new RecordingController());
     }
 }

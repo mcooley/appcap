@@ -4,6 +4,7 @@ namespace RunMc.E2ETests;
 
 public sealed class E2EContext
 {
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(8);
     private static readonly Lazy<E2EContext> CurrentContext = new(E2EHelpers.CreateContext);
 
     internal E2EContext(string target, string executablePath, string outputDirectory)
@@ -31,25 +32,47 @@ public sealed class E2EContext
     {
         List<string> fullArguments = ["--target", Target];
         fullArguments.AddRange(arguments);
+        string standardOutputPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".stdout.txt");
+        string standardErrorPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".stderr.txt");
+        string scriptPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".cmd");
+        string commandLine = QuoteForCmd(ExecutablePath) + " " + string.Join(" ", fullArguments.Select(QuoteForCmd)) +
+            " 1>" + QuoteForCmd(standardOutputPath) + " 2>" + QuoteForCmd(standardErrorPath);
+        File.WriteAllText(scriptPath, "@echo off" + Environment.NewLine + commandLine + Environment.NewLine + "exit /b %ERRORLEVEL%" + Environment.NewLine);
 
         ProcessStartInfo startInfo = new()
         {
-            FileName = ExecutablePath,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
+            FileName = "cmd.exe",
             UseShellExecute = false,
         };
-
-        foreach (string argument in fullArguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        startInfo.ArgumentList.Add("/d");
+        startInfo.ArgumentList.Add("/c");
+        startInfo.ArgumentList.Add(scriptPath);
 
         using Process process = Process.Start(startInfo) ?? throw new InvalidOperationException("runmc process could not be started.");
-        string standardOutput = process.StandardOutput.ReadToEnd();
-        string standardError = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+        if (!process.WaitForExit((int)CommandTimeout.TotalMilliseconds))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"runmc command timed out after {CommandTimeout.TotalSeconds} seconds: {string.Join(' ', fullArguments)}");
+        }
+
+        string standardOutput = ReadTextIfExists(standardOutputPath);
+        string standardError = ReadTextIfExists(standardErrorPath);
         return new CommandResult(process.ExitCode, standardOutput, standardError);
+    }
+
+    private static string QuoteForCmd(string value) =>
+        "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+
+    private static string ReadTextIfExists(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return string.Empty;
+        }
+
+        using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using StreamReader reader = new(stream);
+        return reader.ReadToEnd();
     }
 }
 

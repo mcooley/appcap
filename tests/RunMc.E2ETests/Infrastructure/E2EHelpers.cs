@@ -101,6 +101,17 @@ internal static class E2EHelpers
         }
     }
 
+    public static void CloseRunMcProcesses()
+    {
+        foreach (Process process in Process.GetProcessesByName("RunMc"))
+        {
+            using (process)
+            {
+                CloseTestAppProcess(process);
+            }
+        }
+    }
+
     private static void CloseTestAppProcess(Process process)
     {
         try

@@ -4,6 +4,7 @@ public abstract class E2ETestBase : IDisposable
 {
     protected E2ETestBase()
     {
+        E2EHelpers.CloseRunMcProcesses();
         E2EHelpers.CloseTestAppProcesses();
         Context = E2EContext.Current;
     }
@@ -12,6 +13,7 @@ public abstract class E2ETestBase : IDisposable
 
     public void Dispose()
     {
+        E2EHelpers.CloseRunMcProcesses();
         E2EHelpers.CloseTestAppProcesses();
         GC.SuppressFinalize(this);
     }

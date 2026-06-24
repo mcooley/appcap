@@ -83,6 +83,18 @@ public static class CommandParser
                 NormalizeOptionalText(result.GetValue(model.ScreenshotCaptionOption))));
         }
 
+        if (command == model.RecordStartCommand)
+        {
+            return ParseResult.Valid(new RecordStartCommand(
+                target,
+                result.GetRequiredValue(model.RecordOutputOption)));
+        }
+
+        if (command == model.RecordStopCommand)
+        {
+            return ParseResult.Valid(new RecordStopCommand(target));
+        }
+
         return ParseResult.Failure($"Unknown command '{command.Name}'.");
     }
 
@@ -111,6 +123,7 @@ public static class CommandParser
             "type" => HelpTopic.Type,
             "resize" => HelpTopic.Resize,
             "screenshot" => HelpTopic.Screenshot,
+            "record" => HelpTopic.Record,
             _ => HelpTopic.Root,
         };
         return true;
@@ -169,7 +182,11 @@ public static class CommandParser
             Command screenshotCommand,
             Option<string> screenshotOutputOption,
             Option<bool> screenshotIncludeCursorOption,
-            Option<string?> screenshotCaptionOption)
+            Option<string?> screenshotCaptionOption,
+            Command recordCommand,
+            Command recordStartCommand,
+            Command recordStopCommand,
+            Option<string> recordOutputOption)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
@@ -188,6 +205,10 @@ public static class CommandParser
             ScreenshotOutputOption = screenshotOutputOption;
             ScreenshotIncludeCursorOption = screenshotIncludeCursorOption;
             ScreenshotCaptionOption = screenshotCaptionOption;
+            RecordCommand = recordCommand;
+            RecordStartCommand = recordStartCommand;
+            RecordStopCommand = recordStopCommand;
+            RecordOutputOption = recordOutputOption;
         }
 
         public RootCommand RootCommand { get; }
@@ -223,6 +244,14 @@ public static class CommandParser
         public Option<bool> ScreenshotIncludeCursorOption { get; }
 
         public Option<string?> ScreenshotCaptionOption { get; }
+
+        public Command RecordCommand { get; }
+
+        public Command RecordStartCommand { get; }
+
+        public Command RecordStopCommand { get; }
+
+        public Option<string> RecordOutputOption { get; }
 
         public static CommandLineModel Create()
         {
@@ -281,6 +310,34 @@ public static class CommandParser
             screenshotCommand.Add(screenshotIncludeCursorOption);
             screenshotCommand.Add(screenshotCaptionOption);
 
+            Option<string> recordOutputOption = new("--output")
+            {
+                Required = true,
+            };
+            recordOutputOption.CustomParser = result =>
+            {
+                string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    result.AddError("Invalid value for --output.");
+                    return string.Empty;
+                }
+
+                if (!Path.GetExtension(value).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.AddError("recording output must be a .mp4 file.");
+                    return string.Empty;
+                }
+
+                return value;
+            };
+            Command recordStartCommand = new("start", "Starts recording the target window.");
+            recordStartCommand.Add(recordOutputOption);
+            Command recordStopCommand = new("stop", "Stops recording the target window.");
+            Command recordCommand = new("record", "Starts or stops recording the target window.");
+            recordCommand.Add(recordStartCommand);
+            recordCommand.Add(recordStopCommand);
+
             RootCommand rootCommand = new("Automates interactions with a configured target application.");
             rootCommand.SetAction(_ => { });
             rootCommand.Add(targetOption);
@@ -289,6 +346,7 @@ public static class CommandParser
             rootCommand.Add(typeCommand);
             rootCommand.Add(resizeCommand);
             rootCommand.Add(screenshotCommand);
+            rootCommand.Add(recordCommand);
 
             return new CommandLineModel(
                 rootCommand,
@@ -307,7 +365,11 @@ public static class CommandParser
                 screenshotCommand,
                 screenshotOutputOption,
                 screenshotIncludeCursorOption,
-                screenshotCaptionOption);
+                screenshotCaptionOption,
+                recordCommand,
+                recordStartCommand,
+                recordStopCommand,
+                recordOutputOption);
         }
     }
 }
