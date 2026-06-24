@@ -13,7 +13,7 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
 {
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
 
-    public async Task CapturePngAsync(MinecraftWindow window, string outputPath, CancellationToken cancellationToken)
+    public async Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -46,7 +46,7 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
             1,
             item.Size);
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
-        using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, cancellationToken).ConfigureAwait(false);
+        using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, includeCursor, cancellationToken).ConfigureAwait(false);
 
         await SavePngAsync(frame, fullOutputPath, cancellationToken).ConfigureAwait(false);
     }
@@ -68,6 +68,7 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
         GraphicsCaptureItem item,
         Direct3D11CaptureFramePool framePool,
         GraphicsCaptureSession session,
+        bool includeCursor,
         CancellationToken cancellationToken)
     {
         TaskCompletionSource<Direct3D11CaptureFrame> frameSource = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,7 +105,7 @@ public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
 
         try
         {
-            session.IsCursorCaptureEnabled = false;
+            session.IsCursorCaptureEnabled = includeCursor;
             session.StartCapture();
             return await frameSource.Task.ConfigureAwait(false);
         }

@@ -47,6 +47,14 @@ public static class CommandParser
                 result.GetRequiredValue(model.ClickYOption)));
         }
 
+        if (command == model.HoverCommand)
+        {
+            return ParseResult.Valid(new HoverCommand(
+                target,
+                result.GetRequiredValue(model.HoverXOption),
+                result.GetRequiredValue(model.HoverYOption)));
+        }
+
         if (command == model.TypeCommand)
         {
             string sequence = result.GetRequiredValue(model.TypeTextArgument);
@@ -70,7 +78,8 @@ public static class CommandParser
         {
             return ParseResult.Valid(new ScreenshotCommand(
                 target,
-                result.GetRequiredValue(model.ScreenshotOutputOption)));
+                result.GetRequiredValue(model.ScreenshotOutputOption),
+                result.GetValue(model.ScreenshotIncludeCursorOption)));
         }
 
         return ParseResult.Failure($"Unknown command '{command.Name}'.");
@@ -97,6 +106,7 @@ public static class CommandParser
         topic = args[0] switch
         {
             "click" => HelpTopic.Click,
+            "hover" => HelpTopic.Hover,
             "type" => HelpTopic.Type,
             "resize" => HelpTopic.Resize,
             "screenshot" => HelpTopic.Screenshot,
@@ -145,19 +155,26 @@ public static class CommandParser
             Command clickCommand,
             Option<int> clickXOption,
             Option<int> clickYOption,
+            Command hoverCommand,
+            Option<int> hoverXOption,
+            Option<int> hoverYOption,
             Command typeCommand,
             Argument<string> typeTextArgument,
             Command resizeCommand,
             Option<int> resizeWidthOption,
             Option<int> resizeHeightOption,
             Command screenshotCommand,
-            Option<string> screenshotOutputOption)
+            Option<string> screenshotOutputOption,
+            Option<bool> screenshotIncludeCursorOption)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
             ClickCommand = clickCommand;
             ClickXOption = clickXOption;
             ClickYOption = clickYOption;
+            HoverCommand = hoverCommand;
+            HoverXOption = hoverXOption;
+            HoverYOption = hoverYOption;
             TypeCommand = typeCommand;
             TypeTextArgument = typeTextArgument;
             ResizeCommand = resizeCommand;
@@ -165,6 +182,7 @@ public static class CommandParser
             ResizeHeightOption = resizeHeightOption;
             ScreenshotCommand = screenshotCommand;
             ScreenshotOutputOption = screenshotOutputOption;
+            ScreenshotIncludeCursorOption = screenshotIncludeCursorOption;
         }
 
         public RootCommand RootCommand { get; }
@@ -176,6 +194,12 @@ public static class CommandParser
         public Option<int> ClickXOption { get; }
 
         public Option<int> ClickYOption { get; }
+
+        public Command HoverCommand { get; }
+
+        public Option<int> HoverXOption { get; }
+
+        public Option<int> HoverYOption { get; }
 
         public Command TypeCommand { get; }
 
@@ -191,6 +215,8 @@ public static class CommandParser
 
         public Option<string> ScreenshotOutputOption { get; }
 
+        public Option<bool> ScreenshotIncludeCursorOption { get; }
+
         public static CommandLineModel Create()
         {
             Option<string?> targetOption = new("--target")
@@ -203,6 +229,12 @@ public static class CommandParser
             Command clickCommand = new("click", "Injects a mouse click into the Minecraft window.");
             clickCommand.Add(clickXOption);
             clickCommand.Add(clickYOption);
+
+            Option<int> hoverXOption = RequiredNonNegativeIntegerOption("-x", "-x");
+            Option<int> hoverYOption = RequiredNonNegativeIntegerOption("-y", "-y");
+            Command hoverCommand = new("hover", "Moves the cursor over the Minecraft window.");
+            hoverCommand.Add(hoverXOption);
+            hoverCommand.Add(hoverYOption);
 
             Argument<string> typeTextArgument = new("text-and-keys");
             Command typeCommand = new("type", "Injects keyboard input into the Minecraft window.");
@@ -236,11 +268,14 @@ public static class CommandParser
                 return value;
             };
             Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the Minecraft window.");
+            Option<bool> screenshotIncludeCursorOption = new("--include-cursor");
             screenshotCommand.Add(screenshotOutputOption);
+            screenshotCommand.Add(screenshotIncludeCursorOption);
 
             RootCommand rootCommand = new("Automates interactions with Minecraft.");
             rootCommand.Add(targetOption);
             rootCommand.Add(clickCommand);
+            rootCommand.Add(hoverCommand);
             rootCommand.Add(typeCommand);
             rootCommand.Add(resizeCommand);
             rootCommand.Add(screenshotCommand);
@@ -251,13 +286,17 @@ public static class CommandParser
                 clickCommand,
                 clickXOption,
                 clickYOption,
+                hoverCommand,
+                hoverXOption,
+                hoverYOption,
                 typeCommand,
                 typeTextArgument,
                 resizeCommand,
                 resizeWidthOption,
                 resizeHeightOption,
                 screenshotCommand,
-                screenshotOutputOption);
+                screenshotOutputOption,
+                screenshotIncludeCursorOption);
         }
     }
 }

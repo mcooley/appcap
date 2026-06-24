@@ -46,6 +46,37 @@ public sealed class PhaseOneCommandRunnerTests
     }
 
     [Fact]
+    public async Task HoverInsideWindowMovesCursor()
+    {
+        TestServices services = new()
+        {
+            Bounds = new WindowBounds(10, 20, 100, 50),
+        };
+        PhaseOneCommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
+
+        Assert.Equal((109, 69), services.CursorMover.Move);
+        Assert.Equal(["foreground", "bounds", "hover"], services.Events);
+    }
+
+    [Fact]
+    public async Task HoverRejectsCoordinatesOutsideWindow()
+    {
+        TestServices services = new()
+        {
+            Bounds = new WindowBounds(10, 20, 100, 50),
+        };
+        PhaseOneCommandRunner runner = services.CreateRunner();
+
+        RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
+            runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 100, 10), CancellationToken.None));
+
+        Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+        Assert.Null(services.CursorMover.Move);
+    }
+
+    [Fact]
     public async Task TypeBringsWindowToForegroundAndInjectsKeyboardInput()
     {
         TestServices services = new();
@@ -75,9 +106,10 @@ public sealed class PhaseOneCommandRunnerTests
         TestServices services = new();
         PhaseOneCommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png"), CancellationToken.None);
+        await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png", IncludeCursor: true), CancellationToken.None);
 
         Assert.Equal("test.png", services.ScreenshotCapture.OutputPath);
+        Assert.True(services.ScreenshotCapture.IncludeCursor);
     }
 
     [Fact]
@@ -107,6 +139,8 @@ public sealed class PhaseOneCommandRunnerTests
 
         public TestInputInjector InputInjector { get; private set; } = null!;
 
+        public TestCursorMover CursorMover { get; private set; } = null!;
+
         public TestKeyboardInputInjector KeyboardInputInjector { get; private set; } = null!;
 
         public TestScreenshotCapture ScreenshotCapture { get; private set; } = null!;
@@ -116,6 +150,7 @@ public sealed class PhaseOneCommandRunnerTests
             TargetResolver = new TestTargetResolver(Window);
             WindowController = new TestWindowController(Bounds, Events);
             InputInjector = new TestInputInjector(Events);
+            CursorMover = new TestCursorMover(Events);
             KeyboardInputInjector = new TestKeyboardInputInjector(Events);
             ScreenshotCapture = new TestScreenshotCapture();
 
@@ -123,6 +158,7 @@ public sealed class PhaseOneCommandRunnerTests
                 TargetResolver,
                 WindowController,
                 InputInjector,
+                CursorMover,
                 KeyboardInputInjector,
                 ScreenshotCapture);
         }
@@ -219,13 +255,35 @@ public sealed class PhaseOneCommandRunnerTests
         }
     }
 
+    private sealed class TestCursorMover : ICursorMover
+    {
+        private readonly List<string> events;
+
+        public TestCursorMover(List<string> events)
+        {
+            this.events = events;
+        }
+
+        public (int X, int Y)? Move { get; private set; }
+
+        public Task MoveToAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+        {
+            events.Add("hover");
+            Move = (screenX, screenY);
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class TestScreenshotCapture : IScreenshotCapture
     {
         public string? OutputPath { get; private set; }
 
-        public Task CapturePngAsync(MinecraftWindow window, string outputPath, CancellationToken cancellationToken)
+        public bool? IncludeCursor { get; private set; }
+
+        public Task CapturePngAsync(MinecraftWindow window, string outputPath, bool includeCursor, CancellationToken cancellationToken)
         {
             OutputPath = outputPath;
+            IncludeCursor = includeCursor;
             return Task.CompletedTask;
         }
     }

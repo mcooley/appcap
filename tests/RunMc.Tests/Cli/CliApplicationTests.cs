@@ -50,6 +50,24 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task HoverParsesCoordinatesAndTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "runningbedrock", "hover", "-x", "5", "-y", "7"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
+        Assert.Equal(TargetKind.RunningBedrock, command.Target);
+        Assert.Equal(5, command.X);
+        Assert.Equal(7, command.Y);
+    }
+
+    [Fact]
     public async Task TypeParsesTextAndKeys()
     {
         RecordingRunner runner = new();
@@ -113,6 +131,23 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Null(runner.Command);
         Assert.Contains("screenshot output must be a .png file.", console.ErrorText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ScreenshotParsesIncludeCursor()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["screenshot", "--include-cursor", "--output", "shot.png"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        ScreenshotCommand command = Assert.IsType<ScreenshotCommand>(runner.Command);
+        Assert.True(command.IncludeCursor);
+        Assert.Equal("shot.png", command.OutputPath);
     }
 
     [Fact]

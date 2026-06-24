@@ -16,6 +16,7 @@ SetFocus
 GetWindowRect
 SetWindowPos
 WindowFromPoint
+SetCursorPos
 SendInput
 INPUT
 DwmGetWindowAttribute
