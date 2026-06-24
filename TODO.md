@@ -34,7 +34,6 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 
 High priority (correctness / data loss):
 
-- Fix use-after-dispose of in-flight capture frames: `StoreLastFrame` disposes the previous frame while a `MediaStreamSample` built from its `Surface` may still be in flight in the transcoder. Gate disposal on the sample's `Processed` event instead of disposing on the next sample request. (`RecordingWorker.OnMediaStreamSourceSampleRequested`/`StoreLastFrame`)
 - Don't swallow encode failures after `stop` is acknowledged: if `EncodeAsync` throws after `OK` was written to the stop client, the worker currently exits `Success` and skips `EnsureOutputFileExists`, so the user is told a recording succeeded that is missing/corrupt. Validate the output before acknowledging, or report the failure back. (`RecordingWorker.RunAsync`)
 - Kill the worker process on startup failure: if `WaitForWorkerAsync` throws (or the user cancels), the spawned worker is orphaned because the `Process` handle is disposed immediately and no PID is retained. Track the process and terminate it on any start failure. (`RecordingController.StartAsync`)
 

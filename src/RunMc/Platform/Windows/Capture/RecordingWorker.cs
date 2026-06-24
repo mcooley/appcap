@@ -25,7 +25,7 @@ internal sealed class RecordingWorker : IDisposable
     private readonly Lock pendingFrameLock = new();
     private readonly Lock lastFrameLock = new();
     private Direct3D11CaptureFrame? pendingFrame;
-    private Direct3D11CaptureFrame? lastFrame;
+    private FrameLease? lastFrameLease;
     private TimeSpan? firstSampleTime;
     private TimeSpan lastSampleTime;
     private bool disposed;
@@ -90,7 +90,7 @@ internal sealed class RecordingWorker : IDisposable
         finally
         {
             stopPipe?.Dispose();
-            DisposePendingFrame();
+            ClearPendingFrame();
             DisposeQueuedFrames();
         }
     }
@@ -103,7 +103,7 @@ internal sealed class RecordingWorker : IDisposable
         }
 
         disposed = true;
-        DisposePendingFrame();
+        ClearPendingFrame();
         DisposeLastFrame();
         DisposeQueuedFrames();
         frames.Dispose();
@@ -275,18 +275,24 @@ internal sealed class RecordingWorker : IDisposable
 
     private void OnMediaStreamSourceSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
     {
-        Direct3D11CaptureFrame? frame = TakePendingFrame() ?? TakeFrame();
-        if (frame is not null)
+        Direct3D11CaptureFrame? newFrame = TakePendingFrame() ?? TakeFrame();
+        if (newFrame is not null)
         {
-            StoreLastFrame(frame);
+            StoreLastFrame(newFrame);
         }
-        else if (!frames.IsCompleted)
+        else if (frames.IsCompleted)
+        {
+            args.Request.Sample = null;
+            return;
+        }
+        else
         {
             Thread.Sleep(33);
-            frame = GetLastFrame();
         }
 
-        if (frame is null)
+        FrameLease? lease = GetLastFrameLease();
+        Direct3D11CaptureFrame? frame = lease?.AcquireForSample();
+        if (lease is null || frame is null)
         {
             args.Request.Sample = null;
             return;
@@ -294,6 +300,7 @@ internal sealed class RecordingWorker : IDisposable
 
         MediaStreamSample sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, GetSampleTimestamp(frame));
         sample.Duration = TimeSpan.FromMilliseconds(33);
+        sample.Processed += (_, _) => lease.Release();
         args.Request.Sample = sample;
     }
 
@@ -346,34 +353,98 @@ internal sealed class RecordingWorker : IDisposable
         await writer.WriteLineAsync(response.AsMemory(), cancellationToken).ConfigureAwait(false);
     }
 
-    private void DisposePendingFrame() => TakePendingFrame()?.Dispose();
+    private void ClearPendingFrame() => TakePendingFrame();
 
     private void StoreLastFrame(Direct3D11CaptureFrame frame)
     {
+        FrameLease? previous;
         lock (lastFrameLock)
         {
-            if (!ReferenceEquals(lastFrame, frame))
+            if (lastFrameLease is not null && lastFrameLease.IsFrame(frame))
             {
-                lastFrame?.Dispose();
-                lastFrame = frame;
+                return;
             }
+
+            previous = lastFrameLease;
+            lastFrameLease = new FrameLease(frame);
         }
+
+        previous?.Release();
     }
 
-    private Direct3D11CaptureFrame? GetLastFrame()
+    private FrameLease? GetLastFrameLease()
     {
         lock (lastFrameLock)
         {
-            return lastFrame;
+            return lastFrameLease;
         }
     }
 
     private void DisposeLastFrame()
     {
+        FrameLease? lease;
         lock (lastFrameLock)
         {
-            lastFrame?.Dispose();
-            lastFrame = null;
+            lease = lastFrameLease;
+            lastFrameLease = null;
+        }
+
+        lease?.Release();
+    }
+
+    // Reference-counts a capture frame so its surface is not disposed while a
+    // MediaStreamSample built from it is still in flight in the transcoder. The
+    // lease starts with a single reference for the "last frame" slot; each sample
+    // adds a reference that is released from the sample's Processed event.
+    private sealed class FrameLease
+    {
+        private readonly Lock gate = new();
+        private Direct3D11CaptureFrame? frame;
+        private int references = 1;
+
+        public FrameLease(Direct3D11CaptureFrame frame) => this.frame = frame;
+
+        public bool IsFrame(Direct3D11CaptureFrame candidate)
+        {
+            lock (gate)
+            {
+                return ReferenceEquals(frame, candidate);
+            }
+        }
+
+        public Direct3D11CaptureFrame? AcquireForSample()
+        {
+            lock (gate)
+            {
+                if (frame is null)
+                {
+                    return null;
+                }
+
+                references++;
+                return frame;
+            }
+        }
+
+        public void Release()
+        {
+            Direct3D11CaptureFrame? toDispose = null;
+            lock (gate)
+            {
+                if (frame is null)
+                {
+                    return;
+                }
+
+                references--;
+                if (references == 0)
+                {
+                    toDispose = frame;
+                    frame = null;
+                }
+            }
+
+            toDispose?.Dispose();
         }
     }
 
