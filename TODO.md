@@ -38,8 +38,3 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 ## Testing
 
 - Expand the purpose-built E2E test app with multiple package identities, so targeting behavior can be tested across multiple installed apps
-- Expand end-to-end test coverage:
-  - Targeting behavior: prefer running app, fall back to installed app
-  - Verify that pointer input coordinates match screenshot coordinates
-  - Screenshots: writes metadata to the PNG file with the window name and app version
-  - Screenshots: adds caption as requested

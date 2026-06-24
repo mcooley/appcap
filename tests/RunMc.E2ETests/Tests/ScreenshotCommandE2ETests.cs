@@ -5,7 +5,7 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
     private static readonly PixelColor BackgroundColor = new(10, 90, 140);
 
     [E2EFact]
-    public void ScreenshotWritesCapturedFromMetadataToCommentsOnly()
+    public void ScreenshotWritesCapturedFromComment()
     {
         string path = Context.NewOutputPath("metadata.png");
 
@@ -14,7 +14,7 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
 
         ShellProperties properties = E2EHelpers.ReadShellProperties(path);
         Assert.True(string.IsNullOrEmpty(properties.Title));
-        Assert.StartsWith("Captured from ", properties.Comments, StringComparison.Ordinal);
+        Assert.Equal("Captured from RunMc E2E Test App 1.0.0.0", properties.Comments);
     }
 
     [E2EFact]
@@ -36,5 +36,25 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
 
         PixelAssertions.AssertColorNear(BackgroundColor, pixelWithoutCursor);
         PixelAssertions.AssertColorNotNear(BackgroundColor, pixelWithCursor);
+    }
+
+    [E2EFact]
+    public async Task CaptionControlsWhetherCaptionAppearsInScreenshot()
+    {
+        const int captionX = 266;
+        const int captionY = 435;
+        E2EContext context = Context;
+        string withoutCaptionPath = context.NewOutputPath("without-caption.png");
+        string withCaptionPath = context.NewOutputPath("with-caption.png");
+
+        context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        context.Run("screenshot", "--output", withoutCaptionPath).AssertSuccess();
+        context.Run("screenshot", "--caption", "E2E caption", "--output", withCaptionPath).AssertSuccess();
+
+        PixelColor pixelWithoutCaption = await E2EHelpers.ReadPixelAsync(withoutCaptionPath, captionX, captionY);
+        PixelColor pixelWithCaption = await E2EHelpers.ReadPixelAsync(withCaptionPath, captionX, captionY);
+
+        PixelAssertions.AssertColorNear(BackgroundColor, pixelWithoutCaption);
+        PixelAssertions.AssertColorNotNear(BackgroundColor, pixelWithCaption);
     }
 }
