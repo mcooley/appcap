@@ -1,4 +1,5 @@
 using RunMc;
+using global::Windows.Foundation;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
 using global::Windows.Graphics.DirectX.Direct3D11;
@@ -41,6 +42,8 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
             throw new RunMcException("Minecraft Bedrock window could not be captured.");
         }
 
+        ScreenshotMetadata? metadata = ScreenshotMetadata.TryCreate(window);
+
         using Direct3DDeviceLease deviceLease = Direct3DDeviceFactory.CreateDevice();
         using Direct3D11CaptureFramePool framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             deviceLease.Device,
@@ -61,7 +64,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
 
         try
         {
-            await SavePngAsync(surface, fullOutputPath, cancellationToken).ConfigureAwait(false);
+            await SavePngAsync(surface, fullOutputPath, metadata, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -69,7 +72,7 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         }
     }
 
-    private static async Task SavePngAsync(IDirect3DSurface surface, string outputPath, CancellationToken cancellationToken)
+    private static async Task SavePngAsync(IDirect3DSurface surface, string outputPath, ScreenshotMetadata? metadata, CancellationToken cancellationToken)
     {
         using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(
             outputPath,
@@ -79,7 +82,20 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         using SoftwareBitmap bitmap = await SoftwareBitmap.CreateCopyFromSurfaceAsync(surface, BitmapAlphaMode.Premultiplied).AsTask(cancellationToken).ConfigureAwait(false);
         BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream).AsTask(cancellationToken).ConfigureAwait(false);
         encoder.SetSoftwareBitmap(bitmap);
+        if (metadata is not null)
+        {
+            await SetMetadataAsync(encoder, metadata, cancellationToken).ConfigureAwait(false);
+        }
         await encoder.FlushAsync().AsTask(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SetMetadataAsync(BitmapEncoder encoder, ScreenshotMetadata metadata, CancellationToken cancellationToken)
+    {
+        BitmapPropertySet properties = new()
+        {
+            ["System.Comment"] = new BitmapTypedValue(metadata.CapturedFrom, PropertyType.String),
+        };
+        await encoder.BitmapProperties.SetPropertiesAsync(properties).AsTask(cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<Direct3D11CaptureFrame> CaptureFrameAsync(

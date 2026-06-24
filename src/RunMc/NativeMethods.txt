@@ -2,7 +2,11 @@ OpenProcess
 CloseHandle
 GetCurrentThreadId
 GetPackageFamilyName
+GetPackageId
+PACKAGE_ID
 IsWindowVisible
+GetWindowText
+GetWindowTextLength
 ShowWindow
 SetForegroundWindow
 GetForegroundWindow
