@@ -282,6 +282,7 @@ public static class CommandParser
             screenshotCommand.Add(screenshotCaptionOption);
 
             RootCommand rootCommand = new("Automates interactions with a configured target application.");
+            rootCommand.SetAction(_ => { });
             rootCommand.Add(targetOption);
             rootCommand.Add(clickCommand);
             rootCommand.Add(hoverCommand);

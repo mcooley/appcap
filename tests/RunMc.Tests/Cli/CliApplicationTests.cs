@@ -36,6 +36,20 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task TargetOnlyArgsRunFocusCommandWithSelectedTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--target", "education"], runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
+        Assert.Equal("education", command.Target.Name);
+        Assert.Single(command.Target.Applications);
+    }
+
+    [Fact]
     public async Task ResizeRequiresPositiveDimensions()
     {
         RecordingRunner runner = new();
