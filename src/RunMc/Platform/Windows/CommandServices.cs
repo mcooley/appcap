@@ -3,10 +3,10 @@ namespace RunMc.Windows;
 
 public static class CommandServices
 {
-    public static IPhaseOneCommandRunner CreatePhaseOneRunner()
+    public static ICommandRunner CreateRunner()
     {
         WindowController windowController = new();
-        return new PhaseOneCommandRunner(
+        return new CommandRunner(
             new BedrockTargetResolver(new MinecraftWindowFinder(), new AppLauncher()),
             windowController,
             new SyntheticPointerInputInjector(),

@@ -181,7 +181,7 @@ public sealed class CliApplicationTests
         Assert.Contains("runmc screenshot", console.OutputText, StringComparison.Ordinal);
     }
 
-    private sealed class RecordingRunner : IPhaseOneCommandRunner
+    private sealed class RecordingRunner : ICommandRunner
     {
         public RunMcCommand? Command { get; private set; }
 

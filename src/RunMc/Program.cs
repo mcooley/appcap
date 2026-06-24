@@ -9,5 +9,5 @@ ComWrappersSupport.InitializeComWrappers();
 
 return await CliApplication.RunAsync(
 	args,
-	CommandServices.CreatePhaseOneRunner(),
+	CommandServices.CreateRunner(),
 	new SystemConsole()).ConfigureAwait(false);

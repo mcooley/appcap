@@ -1,6 +1,6 @@
 namespace RunMc;
 
-public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
+public sealed class CommandRunner : ICommandRunner
 {
     private readonly IMinecraftTargetResolver targetResolver;
     private readonly IWindowController windowController;
@@ -9,7 +9,7 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
     private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly IScreenshotCapture screenshotCapture;
 
-    public PhaseOneCommandRunner(
+    public CommandRunner(
         IMinecraftTargetResolver targetResolver,
         IWindowController windowController,
         IInputInjector inputInjector,
@@ -28,7 +28,7 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
     public async Task RunAsync(RunMcCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        EnsurePhaseOneTarget(command.Target);
+        EnsureSupportedTarget(command.Target);
 
         switch (command)
         {
@@ -55,14 +55,14 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
         }
     }
 
-    private static void EnsurePhaseOneTarget(TargetKind target)
+    private static void EnsureSupportedTarget(TargetKind target)
     {
         if (target is TargetKind.Default or TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview or TargetKind.RunningEducation or TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview or TargetKind.InstalledEducation)
         {
             return;
         }
 
-        throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported in phase 1.");
+        throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported.");
     }
 
     private async Task FocusAsync(FocusCommand command, CancellationToken cancellationToken)

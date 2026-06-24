@@ -24,7 +24,7 @@ public sealed class BedrockTargetResolver : IMinecraftTargetResolver
             TargetKind.Default => await ResolveDefaultAsync(cancellationToken).ConfigureAwait(false),
             TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview or TargetKind.RunningEducation => FindRunningMinecraft(target),
             TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview or TargetKind.InstalledEducation => await ResolveInstalledMinecraftAsync(target, cancellationToken).ConfigureAwait(false),
-            _ => throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported in phase 1."),
+            _ => throw new RunMcException($"Target '{TargetKindFormatter.Format(target)}' is not supported."),
         };
     }
 

@@ -4,7 +4,7 @@ public static class CliApplication
 {
     public static async Task<int> RunAsync(
         string[] args,
-        IPhaseOneCommandRunner runner,
+        ICommandRunner runner,
         ICommandConsole console,
         CancellationToken cancellationToken = default)
     {

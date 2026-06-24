@@ -1,6 +1,6 @@
 namespace RunMc;
 
-public interface IPhaseOneCommandRunner
+public interface ICommandRunner
 {
     Task RunAsync(RunMcCommand command, CancellationToken cancellationToken);
 }

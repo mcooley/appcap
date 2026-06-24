@@ -1,12 +1,12 @@
 namespace RunMc.Tests;
 
-public sealed class PhaseOneCommandRunnerTests
+public sealed class CommandRunnerTests
 {
     [Fact]
     public async Task FocusResolvesTargetAndBringsWindowToForeground()
     {
         TestServices services = new();
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         await runner.RunAsync(new FocusCommand(TargetKind.Default), CancellationToken.None);
 
@@ -21,7 +21,7 @@ public sealed class PhaseOneCommandRunnerTests
         {
             Bounds = new WindowBounds(10, 20, 100, 50),
         };
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
             runner.RunAsync(new ClickCommand(TargetKind.RunningBedrock, 100, 10), CancellationToken.None));
@@ -37,7 +37,7 @@ public sealed class PhaseOneCommandRunnerTests
         {
             Bounds = new WindowBounds(10, 20, 100, 50),
         };
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         await runner.RunAsync(new ClickCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
 
@@ -52,7 +52,7 @@ public sealed class PhaseOneCommandRunnerTests
         {
             Bounds = new WindowBounds(10, 20, 100, 50),
         };
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         await runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 99, 49), CancellationToken.None);
 
@@ -67,7 +67,7 @@ public sealed class PhaseOneCommandRunnerTests
         {
             Bounds = new WindowBounds(10, 20, 100, 50),
         };
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
             runner.RunAsync(new HoverCommand(TargetKind.RunningBedrock, 100, 10), CancellationToken.None));
@@ -80,7 +80,7 @@ public sealed class PhaseOneCommandRunnerTests
     public async Task TypeBringsWindowToForegroundAndInjectsKeyboardInput()
     {
         TestServices services = new();
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
         KeyboardAction[] actions = [new TextKeyboardAction("hello"), new KeyPressKeyboardAction([], KeyboardKey.Enter)];
 
         await runner.RunAsync(new TypeCommand(TargetKind.RunningBedrock, actions), CancellationToken.None);
@@ -93,7 +93,7 @@ public sealed class PhaseOneCommandRunnerTests
     public async Task ResizeDelegatesRequestedOuterSize()
     {
         TestServices services = new();
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         await runner.RunAsync(new ResizeCommand(TargetKind.InstalledBedrock, 800, 600), CancellationToken.None);
 
@@ -104,7 +104,7 @@ public sealed class PhaseOneCommandRunnerTests
     public async Task ScreenshotDelegatesOutputPath()
     {
         TestServices services = new();
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         await runner.RunAsync(new ScreenshotCommand(TargetKind.Default, "test.png", IncludeCursor: true), CancellationToken.None);
 
@@ -113,10 +113,10 @@ public sealed class PhaseOneCommandRunnerTests
     }
 
     [Fact]
-    public async Task RejectsNonPhaseOneTargets()
+    public async Task RejectsUnsupportedTargets()
     {
         TestServices services = new();
-        PhaseOneCommandRunner runner = services.CreateRunner();
+        CommandRunner runner = services.CreateRunner();
 
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(() =>
             runner.RunAsync(new FocusCommand(TargetKind.RunningJava), CancellationToken.None));
@@ -145,7 +145,7 @@ public sealed class PhaseOneCommandRunnerTests
 
         public TestScreenshotCapture ScreenshotCapture { get; private set; } = null!;
 
-        public PhaseOneCommandRunner CreateRunner()
+        public CommandRunner CreateRunner()
         {
             TargetResolver = new TestTargetResolver(Window);
             WindowController = new TestWindowController(Bounds, Events);
@@ -154,7 +154,7 @@ public sealed class PhaseOneCommandRunnerTests
             KeyboardInputInjector = new TestKeyboardInputInjector(Events);
             ScreenshotCapture = new TestScreenshotCapture();
 
-            return new PhaseOneCommandRunner(
+            return new CommandRunner(
                 TargetResolver,
                 WindowController,
                 InputInjector,
