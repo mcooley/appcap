@@ -19,11 +19,9 @@ public sealed class RecordingController : IRecordingController
             Directory.CreateDirectory(outputDirectory);
         }
 
-        string pipeName = RecordingIpc.GetPipeName(window.Target.Name);
-        if (await RecordingIpc.IsRecordingAsync(pipeName, cancellationToken).ConfigureAwait(false))
-        {
-            throw new RunMcException($"A recording is already running for target '{TargetFormatter.Format(window.Target)}'.");
-        }
+        // Hold the start lock until the worker is confirmed running so two
+        // concurrent starts for the same target cannot both spawn competing workers.
+        using RecordingStartLock startLock = await RecordingIpc.BeginStartAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
 
         string executablePath = Environment.ProcessPath ?? throw new RunMcException("Recording worker could not be launched.");
         ProcessStartInfo startInfo = new()
@@ -34,7 +32,7 @@ public sealed class RecordingController : IRecordingController
             RedirectStandardError = true,
             RedirectStandardOutput = true,
         };
-        AddWorkerArguments(startInfo, window, fullOutputPath, pipeName);
+        AddWorkerArguments(startInfo, window, fullOutputPath);
 
         try
         {
@@ -45,7 +43,7 @@ public sealed class RecordingController : IRecordingController
             throw new RunMcException("Recording worker could not be launched.", exception);
         }
 
-        await WaitForWorkerAsync(pipeName, cancellationToken).ConfigureAwait(false);
+        await WaitForWorkerAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
@@ -53,16 +51,15 @@ public sealed class RecordingController : IRecordingController
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
 
-        string response = await RecordingIpc.SendStopAsync(RecordingIpc.GetPipeName(target.Name), cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(response, RecordingIpc.OkResponse, StringComparison.Ordinal))
+        if (!await RecordingIpc.SendStopAsync(target.Name, cancellationToken).ConfigureAwait(false))
         {
-            throw new RunMcException(string.IsNullOrWhiteSpace(response) ? $"No recording is running for target '{TargetFormatter.Format(target)}'." : response);
+            throw new RunMcException($"No recording is running for target '{TargetFormatter.Format(target)}'.");
         }
     }
 
-    private static void AddWorkerArguments(ProcessStartInfo startInfo, TargetWindow window, string outputPath, string pipeName)
+    private static void AddWorkerArguments(ProcessStartInfo startInfo, TargetWindow window, string outputPath)
     {
-        startInfo.ArgumentList.Add(RecordingIpc.WorkerCommand);
+        startInfo.ArgumentList.Add(RecordingWorker.WorkerCommand);
         startInfo.ArgumentList.Add("--target-name");
         startInfo.ArgumentList.Add(window.Target.Name);
         startInfo.ArgumentList.Add("--application-name");
@@ -75,17 +72,15 @@ public sealed class RecordingController : IRecordingController
         startInfo.ArgumentList.Add(window.Handle.ToString(CultureInfo.InvariantCulture));
         startInfo.ArgumentList.Add("--output");
         startInfo.ArgumentList.Add(outputPath);
-        startInfo.ArgumentList.Add("--pipe");
-        startInfo.ArgumentList.Add(pipeName);
     }
 
-    private static async Task WaitForWorkerAsync(string pipeName, CancellationToken cancellationToken)
+    private static async Task WaitForWorkerAsync(string targetName, CancellationToken cancellationToken)
     {
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(TimeSpan.FromSeconds(5));
         while (!timeoutSource.IsCancellationRequested)
         {
-            if (await RecordingIpc.IsRecordingAsync(pipeName, timeoutSource.Token).ConfigureAwait(false))
+            if (await RecordingIpc.IsRecordingAsync(targetName, timeoutSource.Token).ConfigureAwait(false))
             {
                 return;
             }

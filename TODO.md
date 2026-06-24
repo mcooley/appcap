@@ -50,7 +50,6 @@ Cleanup / resource leaks:
 
 Concurrency:
 
-- Close the TOCTOU race in `StartAsync`: the "already recording" check and worker launch are not atomic, so two concurrent starts for the same target can both pass and spawn competing workers on the same pipe.
 - Synchronize `firstSampleTime`/`lastSampleTime`, which are written in `OnMediaStreamSourceStarting` and read/written in `OnMediaStreamSourceSampleRequested` on potentially different threads.
 - Replace the blocking `Thread.Sleep(33)` in `OnMediaStreamSourceSampleRequested`, which stalls the MediaStreamSource encoder thread.
 

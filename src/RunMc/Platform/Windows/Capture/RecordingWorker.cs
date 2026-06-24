@@ -1,8 +1,6 @@
 using RunMc;
 using System.Collections.Concurrent;
 using System.Globalization;
-using System.IO.Pipes;
-using System.Text;
 using global::Windows.Foundation;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
@@ -17,9 +15,10 @@ namespace RunMc.Windows;
 
 internal sealed class RecordingWorker : IDisposable
 {
+    public const string WorkerCommand = "--runmc-record-worker";
+
     private readonly TargetWindow window;
     private readonly string outputPath;
-    private readonly string pipeName;
     private readonly BlockingCollection<Direct3D11CaptureFrame> frames = new(new ConcurrentQueue<Direct3D11CaptureFrame>());
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Lock pendingFrameLock = new();
@@ -30,14 +29,13 @@ internal sealed class RecordingWorker : IDisposable
     private TimeSpan lastSampleTime;
     private bool disposed;
 
-    private RecordingWorker(TargetWindow window, string outputPath, string pipeName)
+    private RecordingWorker(TargetWindow window, string outputPath)
     {
         this.window = window;
         this.outputPath = outputPath;
-        this.pipeName = pipeName;
     }
 
-    public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == RecordingIpc.WorkerCommand;
+    public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == WorkerCommand;
 
     public static async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
     {
@@ -56,23 +54,22 @@ internal sealed class RecordingWorker : IDisposable
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
-        NamedPipeServerStream? stopPipe = null;
+        RecordingIpc.RecordingStopRequest? stopRequest = null;
         bool stopAcknowledged = false;
         using CancellationTokenSource captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Target.Name);
         try
         {
-            Task<NamedPipeServerStream> waitForStop = WaitForStopAsync(cancellationToken);
+            Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cancellationToken);
             Task encode = EncodeAsync(captureCancellation.Token);
 
             Task completed = await Task.WhenAny(waitForStop, encode).ConfigureAwait(false);
             if (completed == waitForStop)
             {
-                stopPipe = await waitForStop.ConfigureAwait(false);
+                stopRequest = await waitForStop.ConfigureAwait(false);
                 frames.CompleteAdding();
-                await WriteResponseAsync(stopPipe, RecordingIpc.OkResponse, cancellationToken).ConfigureAwait(false);
+                await stopRequest.AcknowledgeAsync(cancellationToken).ConfigureAwait(false);
                 stopAcknowledged = true;
-                await stopPipe.DisposeAsync().ConfigureAwait(false);
-                stopPipe = null;
             }
 
             await encode.ConfigureAwait(false);
@@ -82,14 +79,14 @@ internal sealed class RecordingWorker : IDisposable
         {
             await captureCancellation.CancelAsync().ConfigureAwait(false);
             frames.CompleteAdding();
-            if (stopPipe is not null && !stopAcknowledged)
+            if (stopRequest is not null && !stopAcknowledged)
             {
-                await WriteResponseAsync(stopPipe, exception.Message, CancellationToken.None).ConfigureAwait(false);
+                await stopRequest.FailAsync(exception.Message, CancellationToken.None).ConfigureAwait(false);
             }
         }
         finally
         {
-            stopPipe?.Dispose();
+            stopRequest?.Dispose();
             ClearPendingFrame();
             DisposeQueuedFrames();
         }
@@ -107,32 +104,6 @@ internal sealed class RecordingWorker : IDisposable
         DisposeLastFrame();
         DisposeQueuedFrames();
         frames.Dispose();
-    }
-
-    private async Task<NamedPipeServerStream> WaitForStopAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            NamedPipeServerStream pipe = new(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-            await pipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
-            using StreamReader reader = new(pipe, Encoding.UTF8, leaveOpen: true);
-            string? command = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-
-            if (string.Equals(command, "status", StringComparison.Ordinal))
-            {
-                await WriteResponseAsync(pipe, RecordingIpc.OkResponse, cancellationToken).ConfigureAwait(false);
-                pipe.Dispose();
-                continue;
-            }
-
-            if (string.Equals(command, "stop", StringComparison.Ordinal))
-            {
-                return pipe;
-            }
-
-            await WriteResponseAsync(pipe, "Unknown recording command.", cancellationToken).ConfigureAwait(false);
-            pipe.Dispose();
-        }
     }
 
     private async Task EncodeAsync(CancellationToken cancellationToken)
@@ -347,12 +318,6 @@ internal sealed class RecordingWorker : IDisposable
         }
     }
 
-    private static async Task WriteResponseAsync(Stream stream, string response, CancellationToken cancellationToken)
-    {
-        await using StreamWriter writer = new(stream, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
-        await writer.WriteLineAsync(response.AsMemory(), cancellationToken).ConfigureAwait(false);
-    }
-
     private void ClearPendingFrame() => TakePendingFrame();
 
     private void StoreLastFrame(Direct3D11CaptureFrame frame)
@@ -462,7 +427,7 @@ internal sealed class RecordingWorker : IDisposable
         TargetApplication application = new(options["application-name"], options["package-family-name"], options["aumid"]);
         TargetConfiguration target = new(options["target-name"], [application]);
         TargetWindow window = new(target, application, nint.Parse(options["window-handle"], CultureInfo.InvariantCulture));
-        return new RecordingWorker(window, options["output"], options["pipe"]);
+        return new RecordingWorker(window, options["output"]);
     }
 
     private static Dictionary<string, string> ParseOptions(IEnumerable<string> args)
@@ -480,7 +445,7 @@ internal sealed class RecordingWorker : IDisposable
             options[key[2..]] = enumerator.Current;
         }
 
-        foreach (string required in new[] { "target-name", "application-name", "package-family-name", "aumid", "window-handle", "output", "pipe" })
+        foreach (string required in new[] { "target-name", "application-name", "package-family-name", "aumid", "window-handle", "output" })
         {
             if (!options.ContainsKey(required))
             {
