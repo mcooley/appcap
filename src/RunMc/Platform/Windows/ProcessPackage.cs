@@ -1,10 +1,11 @@
-namespace RunMc;
+using RunMc;
+namespace RunMc.Windows;
 
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.System.Threading;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
+using global::Windows.Win32.System.Threading;
 
-public static class WindowsProcessPackage
+public static class ProcessPackage
 {
     public static unsafe bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
     {

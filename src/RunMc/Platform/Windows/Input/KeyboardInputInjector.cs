@@ -1,9 +1,10 @@
-using Windows.Win32;
-using Windows.Win32.UI.Input.KeyboardAndMouse;
+using RunMc;
+using global::Windows.Win32;
+using global::Windows.Win32.UI.Input.KeyboardAndMouse;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public sealed class WindowsKeyboardInputInjector : IKeyboardInputInjector
+public sealed class KeyboardInputInjector : IKeyboardInputInjector
 {
     public Task TypeAsync(MinecraftWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
     {

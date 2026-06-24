@@ -1,6 +1,7 @@
+using RunMc.Windows;
 namespace RunMc.Tests;
 
-public sealed class WindowsBedrockTargetResolverTests
+public sealed class BedrockTargetResolverTests
 {
     [Fact]
     public async Task DefaultUsesRunningBedrockWhenAvailable()
@@ -8,7 +9,7 @@ public sealed class WindowsBedrockTargetResolverTests
         TestWindowFinder windowFinder = new();
         windowFinder.Set(BedrockPackage.RetailFamilyName, new MinecraftWindow(TargetKind.RunningBedrock, 10));
         TestAppLauncher appLauncher = new();
-        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+        BedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
         MinecraftWindow window = await resolver.ResolveAsync(TargetKind.Default, CancellationToken.None);
 
@@ -23,7 +24,7 @@ public sealed class WindowsBedrockTargetResolverTests
         windowFinder.Set(BedrockPackage.PreviewFamilyName, new MinecraftWindow(TargetKind.RunningBedrockPreview, 20));
         windowFinder.Set(BedrockPackage.EducationFamilyName, new MinecraftWindow(TargetKind.RunningEducation, 30));
         TestAppLauncher appLauncher = new();
-        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+        BedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
         MinecraftWindow window = await resolver.ResolveAsync(TargetKind.Default, CancellationToken.None);
 
@@ -39,7 +40,7 @@ public sealed class WindowsBedrockTargetResolverTests
         TestWindowFinder windowFinder = new();
         windowFinder.Set(BedrockPackage.RetailFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrock, 20));
         TestAppLauncher appLauncher = new();
-        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+        BedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
         MinecraftWindow window = await resolver.ResolveAsync(TargetKind.InstalledBedrock, CancellationToken.None);
 
@@ -54,7 +55,7 @@ public sealed class WindowsBedrockTargetResolverTests
         TestWindowFinder windowFinder = new();
         windowFinder.Set(BedrockPackage.PreviewFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrockPreview, 30));
         TestAppLauncher appLauncher = new();
-        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+        BedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
         MinecraftWindow window = await resolver.ResolveAsync(TargetKind.InstalledBedrockPreview, CancellationToken.None);
 
@@ -69,7 +70,7 @@ public sealed class WindowsBedrockTargetResolverTests
         TestWindowFinder windowFinder = new();
         windowFinder.Set(BedrockPackage.EducationFamilyName, null, new MinecraftWindow(TargetKind.RunningEducation, 40));
         TestAppLauncher appLauncher = new();
-        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+        BedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
         MinecraftWindow window = await resolver.ResolveAsync(TargetKind.InstalledEducation, CancellationToken.None);
 
@@ -78,7 +79,7 @@ public sealed class WindowsBedrockTargetResolverTests
         Assert.Equal(BedrockPackage.EducationAumid, appLauncher.Aumid);
     }
 
-    private sealed class TestWindowFinder : IWindowsMinecraftWindowFinder
+    private sealed class TestWindowFinder : IMinecraftWindowFinder
     {
         private readonly Dictionary<string, Queue<MinecraftWindow?>> windowsByPackageFamilyName = [];
 
@@ -101,7 +102,7 @@ public sealed class WindowsBedrockTargetResolverTests
         }
     }
 
-    private sealed class TestAppLauncher : IWindowsAppLauncher
+    private sealed class TestAppLauncher : IAppLauncher
     {
         public bool Launched { get; private set; }
 

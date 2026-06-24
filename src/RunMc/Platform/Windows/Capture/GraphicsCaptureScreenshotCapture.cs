@@ -1,15 +1,16 @@
-using Windows.Graphics.Capture;
-using Windows.Graphics.DirectX;
-using Windows.Graphics.Imaging;
-using Windows.Storage;
-using Windows.Storage.Streams;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.UI.WindowsAndMessaging;
+using RunMc;
+using global::Windows.Graphics.Capture;
+using global::Windows.Graphics.DirectX;
+using global::Windows.Graphics.Imaging;
+using global::Windows.Storage;
+using global::Windows.Storage.Streams;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
+using global::Windows.Win32.UI.WindowsAndMessaging;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public sealed class WindowsGraphicsCaptureScreenshotCapture : IScreenshotCapture
+public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
 {
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
 

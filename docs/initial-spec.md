@@ -8,7 +8,7 @@ runmc is a command-line tool to automate interactions with Minecraft for bug rep
 - .NET 10 command-line app
 - NativeAOT single executable
 - End-to-end tests for all major functionality (automated where possible, semi-automated may be OK), unit tests for code that doesn't have side-effects if it reduces the number of end-to-end tests that are needed 
-- Prefer "modern" Windows APIs where possible, such as Windows.Graphics.Capture for screen capture, windows input injection (preview) APIs for input injection, etc.
+- Prefer "modern" Windows APIs where possible, such as Windows.Graphics.Capture for screen capture
 - Where win32 APIs are needed, try using cswinrt before writing raw p/invokes
 - No ambiguities for coding style: enforce a style through analyzers
 - Report terse, human-readable errors to stderr
@@ -79,3 +79,4 @@ Phase 2: recording start and stop
 Phase 3: recording captions
 Phase 4: other input injection scenarios like gamepad, mouse scroll, etc.
 Phase 5: Java support
+Phase 6: support child windows (like sign in pop ups), bootstrapper window, etc. gracefully

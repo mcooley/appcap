@@ -1,8 +1,9 @@
-using Windows.Win32;
+using RunMc;
+using global::Windows.Win32;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public sealed class WindowsCursorMover : ICursorMover
+public sealed class CursorMover : ICursorMover
 {
     public Task MoveToAsync(MinecraftWindow window, int screenX, int screenY, CancellationToken cancellationToken)
     {

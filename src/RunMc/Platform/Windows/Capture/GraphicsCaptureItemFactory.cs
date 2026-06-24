@@ -1,11 +1,12 @@
+using RunMc;
 using System.Runtime.InteropServices;
 using WinRT.Interop;
-using Windows.Win32.Foundation;
-using Windows.Win32.System.WinRT.Graphics.Capture;
-using Windows.Graphics.Capture;
+using global::Windows.Win32.Foundation;
+using global::Windows.Win32.System.WinRT.Graphics.Capture;
+using global::Windows.Graphics.Capture;
 using WinRT;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
 internal static class GraphicsCaptureItemFactory
 {

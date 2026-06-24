@@ -1,3 +1,4 @@
+using RunMc.Windows;
 namespace RunMc.Tests;
 
 public sealed class BedrockPackageTests

@@ -1,15 +1,16 @@
+using RunMc;
 using System.Diagnostics;
-using Windows.Win32;
-using Windows.Win32.Foundation;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public interface IWindowsMinecraftWindowFinder
+public interface IMinecraftWindowFinder
 {
     MinecraftWindow? TryFindWindow(string packageFamilyName, TargetKind target);
 }
 
-public sealed class WindowsMinecraftWindowFinder : IWindowsMinecraftWindowFinder
+public sealed class MinecraftWindowFinder : IMinecraftWindowFinder
 {
     public MinecraftWindow? TryFindWindow(string packageFamilyName, TargetKind target)
     {
@@ -19,7 +20,7 @@ public sealed class WindowsMinecraftWindowFinder : IWindowsMinecraftWindowFinder
         {
             using (process)
             {
-                if (!WindowsProcessPackage.TryGetPackageFamilyName(process.Id, out string? processPackageFamilyName) ||
+                if (!ProcessPackage.TryGetPackageFamilyName(process.Id, out string? processPackageFamilyName) ||
                     !packageFamilyName.Equals(processPackageFamilyName, StringComparison.Ordinal))
                 {
                     continue;

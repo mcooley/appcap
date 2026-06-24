@@ -1,4 +1,5 @@
-﻿using RunMc;
+using RunMc;
+using RunMc.Windows;
 using Windows.Win32;
 using Windows.Win32.UI.HiDpi;
 using WinRT;
@@ -8,5 +9,5 @@ ComWrappersSupport.InitializeComWrappers();
 
 return await CliApplication.RunAsync(
 	args,
-	WindowsCommandServices.CreatePhaseOneRunner(),
+	CommandServices.CreatePhaseOneRunner(),
 	new SystemConsole()).ConfigureAwait(false);

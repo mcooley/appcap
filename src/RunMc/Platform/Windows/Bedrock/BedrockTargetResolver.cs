@@ -1,16 +1,17 @@
+using RunMc;
 using System.Diagnostics;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public sealed class WindowsBedrockTargetResolver : IMinecraftTargetResolver
+public sealed class BedrockTargetResolver : IMinecraftTargetResolver
 {
     private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan PollDelay = TimeSpan.FromMilliseconds(250);
 
-    private readonly IWindowsMinecraftWindowFinder windowFinder;
-    private readonly IWindowsAppLauncher appLauncher;
+    private readonly IMinecraftWindowFinder windowFinder;
+    private readonly IAppLauncher appLauncher;
 
-    public WindowsBedrockTargetResolver(IWindowsMinecraftWindowFinder windowFinder, IWindowsAppLauncher appLauncher)
+    public BedrockTargetResolver(IMinecraftWindowFinder windowFinder, IAppLauncher appLauncher)
     {
         this.windowFinder = windowFinder;
         this.appLauncher = appLauncher;

@@ -1,10 +1,11 @@
+using RunMc;
 using System.Drawing;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.UI.Input.Pointer;
-using Windows.Win32.UI.WindowsAndMessaging;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
+using global::Windows.Win32.UI.Input.Pointer;
+using global::Windows.Win32.UI.WindowsAndMessaging;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
 public sealed class SyntheticPointerInputInjector : IInputInjector
 {
@@ -116,7 +117,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         string expectedPackageFamilyName = BedrockPackage.FamilyNameFor(window.Target);
         _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
         bool samePackage = processId != 0 &&
-            WindowsProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
+            ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
             expectedPackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
         return samePackage;
     }

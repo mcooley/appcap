@@ -1,13 +1,14 @@
+using RunMc;
 using System.Diagnostics;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public interface IWindowsAppLauncher
+public interface IAppLauncher
 {
     void LaunchAumid(string aumid);
 }
 
-public sealed class WindowsAppLauncher : IWindowsAppLauncher
+public sealed class AppLauncher : IAppLauncher
 {
     public void LaunchAumid(string aumid)
     {

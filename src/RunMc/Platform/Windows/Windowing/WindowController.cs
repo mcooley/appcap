@@ -1,12 +1,13 @@
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Dwm;
-using Windows.Win32.System.Threading;
-using Windows.Win32.UI.WindowsAndMessaging;
+using RunMc;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
+using global::Windows.Win32.Graphics.Dwm;
+using global::Windows.Win32.System.Threading;
+using global::Windows.Win32.UI.WindowsAndMessaging;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
-public sealed class WindowsWindowController : IWindowController
+public sealed class WindowController : IWindowController
 {
     public Task BringToForegroundAsync(MinecraftWindow window, CancellationToken cancellationToken)
     {
@@ -120,7 +121,7 @@ public sealed class WindowsWindowController : IWindowController
 
         _ = PInvoke.GetWindowThreadProcessId(foregroundWindow, out uint processId);
         return processId != 0 &&
-            WindowsProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
+            ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
             BedrockPackage.FamilyNameFor(window.Target).Equals(packageFamilyName, StringComparison.Ordinal);
     }
 

@@ -1,4 +1,5 @@
-namespace RunMc;
+using RunMc;
+namespace RunMc.Windows;
 
 public static class BedrockPackage
 {

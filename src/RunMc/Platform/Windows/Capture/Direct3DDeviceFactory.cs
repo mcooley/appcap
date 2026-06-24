@@ -1,11 +1,12 @@
-using Windows.Graphics.DirectX.Direct3D11;
-using Windows.Win32;
-using Windows.Win32.Graphics.Direct3D;
-using Windows.Win32.Graphics.Direct3D11;
-using Windows.Win32.Graphics.Dxgi;
+using RunMc;
+using global::Windows.Graphics.DirectX.Direct3D11;
+using global::Windows.Win32;
+using global::Windows.Win32.Graphics.Direct3D;
+using global::Windows.Win32.Graphics.Direct3D11;
+using global::Windows.Win32.Graphics.Dxgi;
 using WinRT;
 
-namespace RunMc;
+namespace RunMc.Windows;
 
 internal static partial class Direct3DDeviceFactory
 {
@@ -14,7 +15,7 @@ internal static partial class Direct3DDeviceFactory
         ID3D11Device* d3dDevice = null;
         ID3D11DeviceContext* immediateContext = null;
         IDXGIDevice* dxgiDevice = null;
-        Windows.Win32.System.WinRT.IInspectable* direct3DDevice = null;
+        global::Windows.Win32.System.WinRT.IInspectable* direct3DDevice = null;
         try
         {
             PInvoke.D3D11CreateDevice(
