@@ -5,17 +5,20 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
     private readonly IMinecraftTargetResolver targetResolver;
     private readonly IWindowController windowController;
     private readonly IInputInjector inputInjector;
+    private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly IScreenshotCapture screenshotCapture;
 
     public PhaseOneCommandRunner(
         IMinecraftTargetResolver targetResolver,
         IWindowController windowController,
         IInputInjector inputInjector,
+        IKeyboardInputInjector keyboardInputInjector,
         IScreenshotCapture screenshotCapture)
     {
         this.targetResolver = targetResolver;
         this.windowController = windowController;
         this.inputInjector = inputInjector;
+        this.keyboardInputInjector = keyboardInputInjector;
         this.screenshotCapture = screenshotCapture;
     }
 
@@ -31,6 +34,9 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
                 break;
             case ClickCommand click:
                 await ClickAsync(click, cancellationToken).ConfigureAwait(false);
+                break;
+            case TypeCommand type:
+                await TypeAsync(type, cancellationToken).ConfigureAwait(false);
                 break;
             case ResizeCommand resize:
                 await ResizeAsync(resize, cancellationToken).ConfigureAwait(false);
@@ -73,6 +79,13 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
         int screenX = bounds.Left + command.X;
         int screenY = bounds.Top + command.Y;
         await inputInjector.ClickAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task TypeAsync(TypeCommand command, CancellationToken cancellationToken)
+    {
+        MinecraftWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
+        await keyboardInputInjector.TypeAsync(window, command.Actions, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ResizeAsync(ResizeCommand command, CancellationToken cancellationToken)

@@ -50,6 +50,39 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task TypeParsesTextAndKeys()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "runningbedrock", "type", "hello[Enter]"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
+        Assert.Equal(TargetKind.RunningBedrock, command.Target);
+        Assert.Collection(
+            command.Actions,
+            action => Assert.Equal("hello", Assert.IsType<TextKeyboardAction>(action).Text),
+            action => Assert.Equal(KeyboardKey.Enter, Assert.IsType<KeyPressKeyboardAction>(action).Key));
+    }
+
+    [Fact]
+    public async Task TypeHelpMentionsWebDriverPlaywrightStyleKeys()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["type", "--help"], runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("WebDriver/Playwright-style key names", console.OutputText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ResizeParsesShortWidthAndHeightAliases()
     {
         RecordingRunner runner = new();

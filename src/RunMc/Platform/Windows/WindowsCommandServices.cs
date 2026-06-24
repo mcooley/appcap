@@ -9,6 +9,7 @@ public static class WindowsCommandServices
             new WindowsBedrockTargetResolver(new WindowsMinecraftWindowFinder(), new WindowsAppLauncher()),
             windowController,
             new SyntheticPointerInputInjector(),
+            new WindowsKeyboardInputInjector(),
             new WindowsGraphicsCaptureScreenshotCapture());
     }
 }

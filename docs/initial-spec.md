@@ -49,7 +49,7 @@ Implementation notes: --time is optional and defaults to 500ms. Follow a realist
 ### runmc type "the Creeper exploded[ESC][F2][Shift+F2]"
 Injects keyboard input into the Minecraft window.
 
-Implementation notes: supports both literal text and keyboard keys + modifiers in square brackets. Write unit tests for the parsing.
+Implementation notes: supports both literal text and keyboard keys + modifiers in square brackets. Bracketed keys should use WebDriver/Playwright-style key names, such as `[Escape]`, `[Enter]`, `[Shift+F2]`, and `[Control+A]`. Write unit tests for the parsing.
 
 ### runmc resize --width 800 --height 600
 Resizes the Minecraft window.

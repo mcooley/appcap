@@ -6,6 +6,8 @@ public sealed record FocusCommand(TargetKind Target) : RunMcCommand(Target);
 
 public sealed record ClickCommand(TargetKind Target, int X, int Y) : RunMcCommand(Target);
 
+public sealed record TypeCommand(TargetKind Target, IReadOnlyList<KeyboardAction> Actions) : RunMcCommand(Target);
+
 public sealed record ResizeCommand(TargetKind Target, int Width, int Height) : RunMcCommand(Target);
 
 public sealed record ScreenshotCommand(TargetKind Target, string OutputPath) : RunMcCommand(Target);
@@ -23,6 +25,7 @@ public enum HelpTopic
 {
     Root,
     Click,
+    Type,
     Resize,
     Screenshot,
 }

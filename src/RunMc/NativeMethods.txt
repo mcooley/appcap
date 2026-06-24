@@ -16,6 +16,8 @@ SetFocus
 GetWindowRect
 SetWindowPos
 WindowFromPoint
+SendInput
+INPUT
 DwmGetWindowAttribute
 D3D11CreateDevice
 CreateDirect3D11DeviceFromDXGIDevice

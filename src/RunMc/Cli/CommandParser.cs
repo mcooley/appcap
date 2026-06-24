@@ -47,6 +47,17 @@ public static class CommandParser
                 result.GetRequiredValue(model.ClickYOption)));
         }
 
+        if (command == model.TypeCommand)
+        {
+            string sequence = result.GetRequiredValue(model.TypeTextArgument);
+            if (!KeyboardSequenceParser.TryParse(sequence, out IReadOnlyList<KeyboardAction> actions, out string? errorMessage))
+            {
+                return ParseResult.Failure(errorMessage ?? "Invalid keyboard sequence.");
+            }
+
+            return ParseResult.Valid(new TypeCommand(target, actions));
+        }
+
         if (command == model.ResizeCommand)
         {
             return ParseResult.Valid(new ResizeCommand(
@@ -86,6 +97,7 @@ public static class CommandParser
         topic = args[0] switch
         {
             "click" => HelpTopic.Click,
+            "type" => HelpTopic.Type,
             "resize" => HelpTopic.Resize,
             "screenshot" => HelpTopic.Screenshot,
             _ => HelpTopic.Root,
@@ -133,6 +145,8 @@ public static class CommandParser
             Command clickCommand,
             Option<int> clickXOption,
             Option<int> clickYOption,
+            Command typeCommand,
+            Argument<string> typeTextArgument,
             Command resizeCommand,
             Option<int> resizeWidthOption,
             Option<int> resizeHeightOption,
@@ -144,6 +158,8 @@ public static class CommandParser
             ClickCommand = clickCommand;
             ClickXOption = clickXOption;
             ClickYOption = clickYOption;
+            TypeCommand = typeCommand;
+            TypeTextArgument = typeTextArgument;
             ResizeCommand = resizeCommand;
             ResizeWidthOption = resizeWidthOption;
             ResizeHeightOption = resizeHeightOption;
@@ -160,6 +176,10 @@ public static class CommandParser
         public Option<int> ClickXOption { get; }
 
         public Option<int> ClickYOption { get; }
+
+        public Command TypeCommand { get; }
+
+        public Argument<string> TypeTextArgument { get; }
 
         public Command ResizeCommand { get; }
 
@@ -183,6 +203,10 @@ public static class CommandParser
             Command clickCommand = new("click", "Injects a mouse click into the Minecraft window.");
             clickCommand.Add(clickXOption);
             clickCommand.Add(clickYOption);
+
+            Argument<string> typeTextArgument = new("text-and-keys");
+            Command typeCommand = new("type", "Injects keyboard input into the Minecraft window.");
+            typeCommand.Add(typeTextArgument);
 
             Option<int> resizeWidthOption = RequiredPositiveIntegerOption("--width", "--width", "-w");
             Option<int> resizeHeightOption = RequiredPositiveIntegerOption("--height", "--height", "-h");
@@ -217,6 +241,7 @@ public static class CommandParser
             RootCommand rootCommand = new("Automates interactions with Minecraft.");
             rootCommand.Add(targetOption);
             rootCommand.Add(clickCommand);
+            rootCommand.Add(typeCommand);
             rootCommand.Add(resizeCommand);
             rootCommand.Add(screenshotCommand);
 
@@ -226,6 +251,8 @@ public static class CommandParser
                 clickCommand,
                 clickXOption,
                 clickYOption,
+                typeCommand,
+                typeTextArgument,
                 resizeCommand,
                 resizeWidthOption,
                 resizeHeightOption,

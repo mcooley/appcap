@@ -46,6 +46,19 @@ public sealed class PhaseOneCommandRunnerTests
     }
 
     [Fact]
+    public async Task TypeBringsWindowToForegroundAndInjectsKeyboardInput()
+    {
+        TestServices services = new();
+        PhaseOneCommandRunner runner = services.CreateRunner();
+        KeyboardAction[] actions = [new TextKeyboardAction("hello"), new KeyPressKeyboardAction([], KeyboardKey.Enter)];
+
+        await runner.RunAsync(new TypeCommand(TargetKind.RunningBedrock, actions), CancellationToken.None);
+
+        Assert.Same(actions, services.KeyboardInputInjector.Actions);
+        Assert.Equal(["foreground", "type"], services.Events);
+    }
+
+    [Fact]
     public async Task ResizeDelegatesRequestedOuterSize()
     {
         TestServices services = new();
@@ -94,6 +107,8 @@ public sealed class PhaseOneCommandRunnerTests
 
         public TestInputInjector InputInjector { get; private set; } = null!;
 
+        public TestKeyboardInputInjector KeyboardInputInjector { get; private set; } = null!;
+
         public TestScreenshotCapture ScreenshotCapture { get; private set; } = null!;
 
         public PhaseOneCommandRunner CreateRunner()
@@ -101,12 +116,14 @@ public sealed class PhaseOneCommandRunnerTests
             TargetResolver = new TestTargetResolver(Window);
             WindowController = new TestWindowController(Bounds, Events);
             InputInjector = new TestInputInjector(Events);
+            KeyboardInputInjector = new TestKeyboardInputInjector(Events);
             ScreenshotCapture = new TestScreenshotCapture();
 
             return new PhaseOneCommandRunner(
                 TargetResolver,
                 WindowController,
                 InputInjector,
+                KeyboardInputInjector,
                 ScreenshotCapture);
         }
     }
@@ -179,6 +196,25 @@ public sealed class PhaseOneCommandRunnerTests
         {
             events.Add("click");
             Click = (screenX, screenY);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestKeyboardInputInjector : IKeyboardInputInjector
+    {
+        private readonly List<string> events;
+
+        public TestKeyboardInputInjector(List<string> events)
+        {
+            this.events = events;
+        }
+
+        public IReadOnlyList<KeyboardAction>? Actions { get; private set; }
+
+        public Task TypeAsync(MinecraftWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
+        {
+            events.Add("type");
+            Actions = actions;
             return Task.CompletedTask;
         }
     }
