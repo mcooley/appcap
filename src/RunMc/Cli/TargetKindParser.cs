@@ -8,9 +8,11 @@ public static class TargetKindParser
         {
             "runningbedrock" => TargetKind.RunningBedrock,
             "runningbedrockpreview" => TargetKind.RunningBedrockPreview,
+            "runningeducation" => TargetKind.RunningEducation,
             "runningjava" => TargetKind.RunningJava,
             "installedbedrock" => TargetKind.InstalledBedrock,
             "installedbedrockpreview" => TargetKind.InstalledBedrockPreview,
+            "installededucation" => TargetKind.InstalledEducation,
             "installedjava" => TargetKind.InstalledJava,
             _ => TargetKind.Default,
         };

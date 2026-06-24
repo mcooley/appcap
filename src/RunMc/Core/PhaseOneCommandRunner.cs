@@ -57,7 +57,7 @@ public sealed class PhaseOneCommandRunner : IPhaseOneCommandRunner
 
     private static void EnsurePhaseOneTarget(TargetKind target)
     {
-        if (target is TargetKind.Default or TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview or TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview)
+        if (target is TargetKind.Default or TargetKind.RunningBedrock or TargetKind.RunningBedrockPreview or TargetKind.RunningEducation or TargetKind.InstalledBedrock or TargetKind.InstalledBedrockPreview or TargetKind.InstalledEducation)
         {
             return;
         }

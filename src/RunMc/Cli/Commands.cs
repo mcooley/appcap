@@ -38,8 +38,10 @@ public enum TargetKind
     Default,
     RunningBedrock,
     RunningBedrockPreview,
+    RunningEducation,
     RunningJava,
     InstalledBedrock,
     InstalledBedrockPreview,
+    InstalledEducation,
     InstalledJava,
 }

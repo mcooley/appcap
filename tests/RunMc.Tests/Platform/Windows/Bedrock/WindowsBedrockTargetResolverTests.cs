@@ -5,7 +5,8 @@ public sealed class WindowsBedrockTargetResolverTests
     [Fact]
     public async Task DefaultUsesRunningBedrockWhenAvailable()
     {
-        TestWindowFinder windowFinder = new(new MinecraftWindow(TargetKind.RunningBedrock, 10));
+        TestWindowFinder windowFinder = new();
+        windowFinder.Set(BedrockPackage.RetailFamilyName, new MinecraftWindow(TargetKind.RunningBedrock, 10));
         TestAppLauncher appLauncher = new();
         WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
@@ -16,9 +17,27 @@ public sealed class WindowsBedrockTargetResolverTests
     }
 
     [Fact]
+    public async Task DefaultPrioritizesPreviewBeforeEducation()
+    {
+        TestWindowFinder windowFinder = new();
+        windowFinder.Set(BedrockPackage.PreviewFamilyName, new MinecraftWindow(TargetKind.RunningBedrockPreview, 20));
+        windowFinder.Set(BedrockPackage.EducationFamilyName, new MinecraftWindow(TargetKind.RunningEducation, 30));
+        TestAppLauncher appLauncher = new();
+        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+
+        MinecraftWindow window = await resolver.ResolveAsync(TargetKind.Default, CancellationToken.None);
+
+        Assert.Equal(20, window.Handle);
+        Assert.Equal(
+            [BedrockPackage.RetailFamilyName, BedrockPackage.PreviewFamilyName],
+            windowFinder.RequestedPackageFamilyNames);
+    }
+
+    [Fact]
     public async Task InstalledLaunchesBedrockWhenNoWindowIsRunning()
     {
-        TestWindowFinder windowFinder = new(BedrockPackage.RetailFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrock, 20));
+        TestWindowFinder windowFinder = new();
+        windowFinder.Set(BedrockPackage.RetailFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrock, 20));
         TestAppLauncher appLauncher = new();
         WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
@@ -32,7 +51,8 @@ public sealed class WindowsBedrockTargetResolverTests
     [Fact]
     public async Task PreviewInstalledLaunchesPreviewPackage()
     {
-        TestWindowFinder windowFinder = new(BedrockPackage.PreviewFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrockPreview, 30));
+        TestWindowFinder windowFinder = new();
+        windowFinder.Set(BedrockPackage.PreviewFamilyName, null, new MinecraftWindow(TargetKind.RunningBedrockPreview, 30));
         TestAppLauncher appLauncher = new();
         WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
 
@@ -43,25 +63,40 @@ public sealed class WindowsBedrockTargetResolverTests
         Assert.Equal(BedrockPackage.PreviewAumid, appLauncher.Aumid);
     }
 
+    [Fact]
+    public async Task EducationInstalledLaunchesEducationPackage()
+    {
+        TestWindowFinder windowFinder = new();
+        windowFinder.Set(BedrockPackage.EducationFamilyName, null, new MinecraftWindow(TargetKind.RunningEducation, 40));
+        TestAppLauncher appLauncher = new();
+        WindowsBedrockTargetResolver resolver = new(windowFinder, appLauncher);
+
+        MinecraftWindow window = await resolver.ResolveAsync(TargetKind.InstalledEducation, CancellationToken.None);
+
+        Assert.Equal(40, window.Handle);
+        Assert.True(appLauncher.Launched);
+        Assert.Equal(BedrockPackage.EducationAumid, appLauncher.Aumid);
+    }
+
     private sealed class TestWindowFinder : IWindowsMinecraftWindowFinder
     {
-        private readonly string expectedPackageFamilyName;
-        private readonly Queue<MinecraftWindow?> windows;
+        private readonly Dictionary<string, Queue<MinecraftWindow?>> windowsByPackageFamilyName = [];
 
-        public TestWindowFinder(params MinecraftWindow?[] windows)
-            : this(BedrockPackage.RetailFamilyName, windows)
-        {
-        }
+        public List<string> RequestedPackageFamilyNames { get; } = [];
 
-        public TestWindowFinder(string expectedPackageFamilyName, params MinecraftWindow?[] windows)
+        public void Set(string packageFamilyName, params MinecraftWindow?[] windows)
         {
-            this.expectedPackageFamilyName = expectedPackageFamilyName;
-            this.windows = new Queue<MinecraftWindow?>(windows);
+            windowsByPackageFamilyName[packageFamilyName] = new Queue<MinecraftWindow?>(windows);
         }
 
         public MinecraftWindow? TryFindWindow(string packageFamilyName, TargetKind target)
         {
-            Assert.Equal(expectedPackageFamilyName, packageFamilyName);
+            RequestedPackageFamilyNames.Add(packageFamilyName);
+            if (!windowsByPackageFamilyName.TryGetValue(packageFamilyName, out Queue<MinecraftWindow?>? windows))
+            {
+                return null;
+            }
+
             return windows.Count > 1 ? windows.Dequeue() : windows.Peek();
         }
     }

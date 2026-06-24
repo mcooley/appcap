@@ -67,6 +67,24 @@ public sealed class CliApplicationTests
         Assert.Equal(7, command.Y);
     }
 
+    [Theory]
+    [InlineData("runningeducation", TargetKind.RunningEducation)]
+    [InlineData("installededucation", TargetKind.InstalledEducation)]
+    public async Task ParsesEducationTargets(string targetValue, TargetKind expectedTarget)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", targetValue, "hover", "-x", "5", "-y", "7"],
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
+        Assert.Equal(expectedTarget, command.Target);
+    }
+
     [Fact]
     public async Task TypeParsesTextAndKeys()
     {

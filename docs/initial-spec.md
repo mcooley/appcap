@@ -18,9 +18,11 @@ runmc is a command-line tool to automate interactions with Minecraft for bug rep
 Selects which instance of Minecraft to target. If omitted, tries the options below _in order_. Options:
  - `runningbedrock` - attach to a currently-running instance of Bedrock on the local machine
  - `runningbedrockpreview` - attach to a currently-running instance of Bedrock Preview on the local machine
+ - `runningeducation` - attach to a currently-running instance of Minecraft: Education Edition on the local machine
  - `runningjava`- attach to a currently-running instance of Java on the local machine
  - `installedbedrock` - launch an installed copy of Minecraft Bedrock on the local machine
  - `installedbedrockpreview` - launch an installed copy of Minecraft Bedrock (Preview) on the local machine
+ - `installededucation` - launch an installed copy of Minecraft: Education Edition on the local machine
  - `installedjava` - launch an installed copy of Minecraft Java on the local machine
  - (to be expanded later: emulators, attached consoles, remote machines, etc.)
 

@@ -13,4 +13,10 @@ public sealed class BedrockPackageTests
     {
         Assert.Equal("Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game", BedrockPackage.PreviewAumid);
     }
+
+    [Fact]
+    public void EducationAumidUsesEducationEntryPoint()
+    {
+        Assert.Equal("Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition", BedrockPackage.EducationAumid);
+    }
 }
