@@ -13,26 +13,24 @@ public sealed class WindowsWindowController : IWindowController
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
 
-        _ = PInvoke.ShowWindow(new HWND(window.Handle), SHOW_WINDOW_CMD.SW_RESTORE);
-        if (IsForegroundBedrockWindow(window))
-        {
-            return Task.CompletedTask;
-        }
+        HWND hwnd = new(window.Handle);
 
-        _ = PInvoke.SetForegroundWindow(new HWND(window.Handle));
-        if (IsForegroundBedrockWindow(window))
-        {
-            return Task.CompletedTask;
-        }
+        _ = PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_RESTORE);
+        _ = PInvoke.SetForegroundWindow(hwnd);
 
         _ = PInvoke.SetWindowPos(
-            new HWND(window.Handle),
+            hwnd,
             HWND.Null,
             0,
             0,
             0,
             0,
             SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+
+        if (IsForegroundBedrockWindow(window))
+        {
+            return Task.CompletedTask;
+        }
 
         AttachToForegroundAndActivate(window.Handle);
         if (!IsForegroundBedrockWindow(window))

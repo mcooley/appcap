@@ -14,7 +14,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         cancellationToken.ThrowIfCancellationRequested();
 
         HWND hwnd = new(window.Handle);
-        if (!IsTargetAtPoint(window, screenX, screenY))
+        if (!IsTargetAtPoint(window, hwnd, screenX, screenY))
         {
             throw new RunMcException("Click target is not visible at the requested coordinates.");
         }
@@ -94,7 +94,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         return input;
     }
 
-    private static bool IsTargetAtPoint(MinecraftWindow window, int screenX, int screenY)
+    private static bool IsTargetAtPoint(MinecraftWindow window, HWND targetWindow, int screenX, int screenY)
     {
         HWND pointWindow = PInvoke.WindowFromPoint(new Point(screenX, screenY));
         if (pointWindow.IsNull)
@@ -102,15 +102,22 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
             return false;
         }
 
-        if (pointWindow == new HWND(window.Handle))
+        HWND rootWindow = PInvoke.GetAncestor(pointWindow, GET_ANCESTOR_FLAGS.GA_ROOT);
+        if (pointWindow == targetWindow)
         {
             return true;
         }
 
-        _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
-        return processId != 0 &&
-            WindowsProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
-            BedrockPackage.FamilyNameFor(window.Target).Equals(packageFamilyName, StringComparison.Ordinal);
-    }
+        if (rootWindow == targetWindow)
+        {
+            return true;
+        }
 
+        string expectedPackageFamilyName = BedrockPackage.FamilyNameFor(window.Target);
+        _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
+        bool samePackage = processId != 0 &&
+            WindowsProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
+            expectedPackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
+        return samePackage;
+    }
 }
