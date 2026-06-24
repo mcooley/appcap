@@ -3,6 +3,8 @@
     <Project Path="src/RunMc/RunMc.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/RunMc.E2ETests/RunMc.E2ETests.csproj" />
     <Project Path="tests/RunMc.Tests/RunMc.Tests.csproj" />
+    <Project Path="tests/RunMc.TestApp/RunMc.TestApp.csproj" />
   </Folder>
 </Solution>

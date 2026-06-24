@@ -18,6 +18,7 @@ AttachThreadInput
 BringWindowToTop
 SetFocus
 GetWindowRect
+GetCursorPos
 SetWindowPos
 WindowFromPoint
 SetCursorPos

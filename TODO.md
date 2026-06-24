@@ -37,18 +37,9 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 
 ## Testing
 
-- Write a test app to support end-to-end tests
-  - Use CsWin32+NativeAOT
-  - Package it into an MSIX file (potentially multiple packages with different identities, so we have multiple apps to test targeting behavior)
-  - Have it show a window with a known background color that we can use to visually detect overlays
-  - Have it use GameInput from NuGet to get pointer input, have some simple UI controls that react to pointer input
-  - Have an area to test text input
-  - Add target configuration for it
-- Write end-to-end test suite:
+- Expand the purpose-built E2E test app with multiple package identities, so targeting behavior can be tested across multiple installed apps
+- Expand end-to-end test coverage:
   - Targeting behavior: prefer running app, fall back to installed app
-  - Test pointer input
-  - Test keyboard input
   - Verify that pointer input coordinates match screenshot coordinates
-  - Screenshots: includes/excludes cursor as requested
   - Screenshots: writes metadata to the PNG file with the window name and app version
   - Screenshots: adds caption as requested

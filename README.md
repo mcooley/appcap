@@ -16,6 +16,7 @@ Available targets:
 - `bedrock`
 - `bedrockpreview`
 - `education`
+- `testapp` - developer E2E test app, when registered locally
 
 If `--target` is omitted, `runmc` tries the built-in targets in this order:
 

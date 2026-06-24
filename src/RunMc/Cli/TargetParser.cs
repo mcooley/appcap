@@ -17,6 +17,11 @@ public static class TargetParser
         "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe",
         "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition");
 
+    private static readonly TargetApplication TestApp = new(
+        "testapp",
+        "RunMc.E2ETestApp_87ehf5vpf4evy",
+        "RunMc.E2ETestApp_87ehf5vpf4evy!App");
+
     public static TargetConfiguration Default { get; } = new("default", [Bedrock, BedrockPreview, Education]);
 
     public static bool TryParse(string value, out TargetConfiguration target)
@@ -26,6 +31,7 @@ public static class TargetParser
             "bedrock" => new TargetConfiguration("bedrock", [Bedrock]),
             "bedrockpreview" => new TargetConfiguration("bedrockpreview", [BedrockPreview]),
             "education" => new TargetConfiguration("education", [Education]),
+            "testapp" => new TargetConfiguration("testapp", [TestApp]),
             _ => Default,
         };
 

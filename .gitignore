@@ -2,6 +2,7 @@ bin/
 obj/
 TestResults/
 .vs/
+artifacts/
 *.user
 *.suo
 *.nupkg

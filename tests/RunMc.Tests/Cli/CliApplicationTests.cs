@@ -86,6 +86,7 @@ public sealed class CliApplicationTests
     [Theory]
     [InlineData("bedrockpreview")]
     [InlineData("education")]
+    [InlineData("testapp")]
     public async Task ParsesNamedTargets(string targetValue)
     {
         RecordingRunner runner = new();

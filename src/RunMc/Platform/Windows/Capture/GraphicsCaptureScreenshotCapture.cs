@@ -54,12 +54,25 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, includeCursor, cancellationToken).ConfigureAwait(false);
 
         IDirect3DSurface surface = frame.Surface;
-        IDisposable? captionedSurfaceLease = null;
+        List<IDisposable> renderedSurfaceLeases = [];
         if (!string.IsNullOrWhiteSpace(caption))
         {
             using CaptionRenderer captionRenderer = new((uint)frame.ContentSize.Width, (uint)frame.ContentSize.Height, caption);
             surface = captionRenderer.Render(frame.Surface);
-            captionedSurfaceLease = surface as IDisposable;
+            if (surface is IDisposable captionedSurfaceLease)
+            {
+                renderedSurfaceLeases.Add(captionedSurfaceLease);
+            }
+        }
+
+        if (includeCursor && TryGetCursorLocation(window, out float cursorX, out float cursorY))
+        {
+            using CursorRenderer cursorRenderer = new(cursorX, cursorY);
+            surface = cursorRenderer.Render(surface);
+            if (surface is IDisposable cursorSurfaceLease)
+            {
+                renderedSurfaceLeases.Add(cursorSurfaceLease);
+            }
         }
 
         try
@@ -68,8 +81,44 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
         }
         finally
         {
-            captionedSurfaceLease?.Dispose();
+            foreach (IDisposable lease in renderedSurfaceLeases)
+            {
+                lease.Dispose();
+            }
         }
+    }
+
+    private static bool TryGetCursorLocation(TargetWindow window, out float x, out float y)
+    {
+        x = 0;
+        y = 0;
+        if (!PInvoke.GetCursorPos(out System.Drawing.Point cursorPosition))
+        {
+            return false;
+        }
+
+        int result = GetDwmExtendedFrameBounds(new HWND(window.Handle), out RECT bounds);
+        if (result is not 0)
+        {
+            return false;
+        }
+
+        x = cursorPosition.X - bounds.left;
+        y = cursorPosition.Y - bounds.top;
+        return x >= 0 && y >= 0 && x < bounds.Width && y < bounds.Height;
+    }
+
+    private static unsafe int GetDwmExtendedFrameBounds(HWND windowHandle, out RECT rect)
+    {
+        rect = default;
+        RECT nativeRect = default;
+        int result = PInvoke.DwmGetWindowAttribute(
+            windowHandle,
+            global::Windows.Win32.Graphics.Dwm.DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
+            &nativeRect,
+            (uint)System.Runtime.InteropServices.Marshal.SizeOf<RECT>()).Value;
+        rect = nativeRect;
+        return result;
     }
 
     private static async Task SavePngAsync(IDirect3DSurface surface, string outputPath, ScreenshotMetadata? metadata, CancellationToken cancellationToken)
