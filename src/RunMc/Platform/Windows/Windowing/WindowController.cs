@@ -1,4 +1,6 @@
 using RunMc;
+using System.Runtime.InteropServices;
+
 using global::Windows.Win32;
 using global::Windows.Win32.Foundation;
 using global::Windows.Win32.Graphics.Dwm;
@@ -152,13 +154,11 @@ public sealed class WindowController : IWindowController
     private static unsafe int GetDwmExtendedFrameBounds(HWND windowHandle, out RECT rect)
     {
         rect = default;
-        RECT nativeRect = default;
+        Span<byte> rectBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref rect, 1));
         int result = PInvoke.DwmGetWindowAttribute(
             windowHandle,
             DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
-            &nativeRect,
-            (uint)System.Runtime.InteropServices.Marshal.SizeOf<RECT>()).Value;
-        rect = nativeRect;
+            rectBytes).Value;
         return result;
     }
 }

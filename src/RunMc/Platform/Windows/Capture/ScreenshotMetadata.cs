@@ -38,7 +38,7 @@ internal sealed record ScreenshotMetadata(string CapturedFrom)
         return string.Empty;
     }
 
-    private static unsafe string? GetWindowTitle(HWND hwnd)
+    private static string? GetWindowTitle(HWND hwnd)
     {
         int length = PInvoke.GetWindowTextLength(hwnd);
         if (length <= 0)
@@ -47,13 +47,10 @@ internal sealed record ScreenshotMetadata(string CapturedFrom)
         }
 
         char[] buffer = new char[length + 1];
-        fixed (char* bufferPointer = buffer)
+        int copied = PInvoke.GetWindowText(hwnd, buffer);
+        if (copied > 0)
         {
-            int copied = PInvoke.GetWindowText(hwnd, new PWSTR(bufferPointer), buffer.Length);
-            if (copied > 0)
-            {
-                return new string(buffer, 0, copied);
-            }
+            return new string(buffer, 0, copied);
         }
 
         return null;

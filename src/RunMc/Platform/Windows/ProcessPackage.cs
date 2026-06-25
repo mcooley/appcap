@@ -1,4 +1,6 @@
 using RunMc;
+using System.Runtime.InteropServices;
+
 namespace RunMc.Windows;
 
 using global::Windows.Win32;
@@ -8,98 +10,77 @@ using global::Windows.Win32.System.Threading;
 
 public static class ProcessPackage
 {
-    public static unsafe bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
+    public static bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
     {
         packageFamilyName = null;
 
-        HANDLE processHandle = PInvoke.OpenProcess(
+        using Microsoft.Win32.SafeHandles.SafeFileHandle processHandle = PInvoke.OpenProcess_SafeHandle(
             PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION,
             false,
             (uint)processId);
-        if (processHandle.IsNull)
+        if (processHandle.IsInvalid)
         {
             return false;
         }
 
-        try
+        uint length = 0;
+        WIN32_ERROR result = PInvoke.GetPackageFamilyName(processHandle, ref length);
+        if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
         {
-            uint length = 0;
-            WIN32_ERROR result = PInvoke.GetPackageFamilyName(processHandle, &length, default);
-            if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
-            {
-                return false;
-            }
-
-            if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
-            {
-                return false;
-            }
-
-            char[] buffer = new char[length];
-            fixed (char* bufferPointer = buffer)
-            {
-                result = PInvoke.GetPackageFamilyName(processHandle, &length, new PWSTR(bufferPointer));
-            }
-
-            if (result != WIN32_ERROR.NO_ERROR)
-            {
-                return false;
-            }
-
-            packageFamilyName = new string(buffer, 0, Math.Max(0, checked((int)length) - 1));
-            return true;
+            return false;
         }
-        finally
+
+        if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
         {
-            _ = PInvoke.CloseHandle(processHandle);
+            return false;
         }
+
+        char[] buffer = new char[length];
+        result = PInvoke.GetPackageFamilyName(processHandle, ref length, buffer);
+        if (result != WIN32_ERROR.NO_ERROR)
+        {
+            return false;
+        }
+
+        packageFamilyName = new string(buffer, 0, Math.Max(0, checked((int)length) - 1));
+        return true;
     }
 
-    public static unsafe bool TryGetPackageVersion(int processId, out Version? version)
+    public static bool TryGetPackageVersion(int processId, out Version? version)
     {
         version = null;
 
-        HANDLE processHandle = PInvoke.OpenProcess(
+        using Microsoft.Win32.SafeHandles.SafeFileHandle processHandle = PInvoke.OpenProcess_SafeHandle(
             PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION,
             false,
             (uint)processId);
-        if (processHandle.IsNull)
+        if (processHandle.IsInvalid)
         {
             return false;
         }
 
-        try
+        uint length = 0;
+        WIN32_ERROR result = PInvoke.GetPackageId(processHandle, ref length);
+        if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
         {
-            uint length = 0;
-            WIN32_ERROR result = PInvoke.GetPackageId(processHandle, &length, null);
-            if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
-            {
-                return false;
-            }
-
-            if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
-            {
-                return false;
-            }
-
-            byte[] buffer = new byte[length];
-            fixed (byte* bufferPointer = buffer)
-            {
-                result = PInvoke.GetPackageId(processHandle, &length, bufferPointer);
-                if (result != WIN32_ERROR.NO_ERROR)
-                {
-                    return false;
-                }
-
-                PACKAGE_ID* packageId = (PACKAGE_ID*)bufferPointer;
-                PACKAGE_VERSION packageVersion = packageId->version;
-                version = new Version(packageVersion.Major, packageVersion.Minor, packageVersion.Build, packageVersion.Revision);
-                return true;
-            }
+            return false;
         }
-        finally
+
+        if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
         {
-            _ = PInvoke.CloseHandle(processHandle);
+            return false;
         }
+
+        byte[] buffer = new byte[length];
+        result = PInvoke.GetPackageId(processHandle, ref length, buffer);
+        if (result != WIN32_ERROR.NO_ERROR)
+        {
+            return false;
+        }
+
+        PACKAGE_ID packageId = MemoryMarshal.Read<PACKAGE_ID>(buffer);
+        PACKAGE_VERSION packageVersion = packageId.version;
+        version = new Version(packageVersion.Major, packageVersion.Minor, packageVersion.Build, packageVersion.Revision);
+        return true;
     }
 }

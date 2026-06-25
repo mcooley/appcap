@@ -1,4 +1,6 @@
 using RunMc;
+using System.Runtime.InteropServices;
+
 using global::Windows.Foundation;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
@@ -111,13 +113,11 @@ public sealed class GraphicsCaptureScreenshotCapture : IScreenshotCapture
     private static unsafe int GetDwmExtendedFrameBounds(HWND windowHandle, out RECT rect)
     {
         rect = default;
-        RECT nativeRect = default;
+        Span<byte> rectBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref rect, 1));
         int result = PInvoke.DwmGetWindowAttribute(
             windowHandle,
             global::Windows.Win32.Graphics.Dwm.DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
-            &nativeRect,
-            (uint)System.Runtime.InteropServices.Marshal.SizeOf<RECT>()).Value;
-        rect = nativeRect;
+            rectBytes).Value;
         return result;
     }
 

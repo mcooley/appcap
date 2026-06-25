@@ -39,7 +39,6 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 
 ## Platform Support
 
-- Investigate whether CsWin32's "friendly overloads" can be used to simplify code while preserving NativeAOT compatibility
 - Generalize to cover other platforms, like MacOS
 
 ## Testing
