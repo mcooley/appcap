@@ -46,7 +46,7 @@ public sealed class RecordingController : IRecordingController
 
         try
         {
-            await WaitForWorkerAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
+            await WaitForWorkerAsync(window.Target.Name, process, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -98,12 +98,19 @@ public sealed class RecordingController : IRecordingController
         startInfo.ArgumentList.Add(outputPath);
     }
 
-    private static async Task WaitForWorkerAsync(string targetName, CancellationToken cancellationToken)
+    private static async Task WaitForWorkerAsync(string targetName, Process process, CancellationToken cancellationToken)
     {
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(TimeSpan.FromSeconds(5));
         while (!timeoutSource.IsCancellationRequested)
         {
+            // If the worker exits before confirming it is recording, it failed to start;
+            // surface its reported reason and exit code rather than a generic timeout.
+            if (process.HasExited)
+            {
+                throw await CreateWorkerFailureAsync(process).ConfigureAwait(false);
+            }
+
             if (await RecordingIpc.IsRecordingAsync(targetName, timeoutSource.Token).ConfigureAwait(false))
             {
                 return;
@@ -114,6 +121,24 @@ public sealed class RecordingController : IRecordingController
 
         throw new RunMcException("Recording worker did not start.");
     }
+
+    // Translates a worker that exited before it started recording into a structured
+    // failure: its stderr becomes the message and its process exit code is mapped into
+    // the CLI exit-code scheme, so callers see the real reason instead of a timeout.
+    private static async Task<RunMcException> CreateWorkerFailureAsync(Process process)
+    {
+        string error = (await process.StandardError.ReadToEndAsync().ConfigureAwait(false)).Trim();
+        int exitCode = process.ExitCode;
+        string message = error.Length > 0
+            ? error
+            : $"Recording worker exited with code {exitCode.ToString(CultureInfo.InvariantCulture)} before it started recording.";
+        return new RunMcException(message, MapWorkerExitCode(exitCode));
+    }
+
+    // A usage error from the worker stays a usage error; every other non-success exit
+    // (including native crash codes) is reported as an operational failure.
+    private static int MapWorkerExitCode(int workerExitCode)
+        => workerExitCode == ExitCodes.UsageError ? ExitCodes.UsageError : ExitCodes.OperationalError;
 
     // Cleans up a worker that failed to confirm it started. If the worker has not
     // already exited, it is asked to cancel (discarding any partial output) and then

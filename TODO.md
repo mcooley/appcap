@@ -35,11 +35,6 @@ High priority (correctness / data loss):
 
 - Don't swallow encode failures after `stop` is acknowledged: if `EncodeAsync` throws after `OK` was written to the stop client, the worker currently exits `Success` and skips `EnsureOutputFileExists`, so the user is told a recording succeeded that is missing/corrupt. Validate the output before acknowledging, or report the failure back. (`RecordingWorker.RunAsync`)
 
-Error reporting:
-
-- Surface real worker errors to the caller: the controller redirects stdout/stderr but never reads them, and never checks the worker exit code, so genuine failures (e.g. capture unsupported) are reported only as the generic "Recording worker did not start" timeout. Read the worker's stderr / propagate a structured failure. (`RecordingController.WaitForWorkerAsync`, `RecordingWorker.RunAsync`)
-- Use a meaningful exit code for runtime failures instead of `UsageError`. (`RecordingWorker.RunAsync`)
-
 Cleanup / resource leaks:
 
 - Cancel and dispose the abandoned `waitForStop` task and its `NamedPipeServerStream` when `EncodeAsync` completes first (e.g. window closed); today the task is left unobserved and the pipe is leaked. (`RecordingWorker.RunAsync`)

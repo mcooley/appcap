@@ -39,10 +39,15 @@ internal sealed class RecordingWorker : IDisposable
             await worker.RunAsync(cancellationToken).ConfigureAwait(false);
             return ExitCodes.Success;
         }
+        catch (RunMcException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return exception.ExitCode;
+        }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Console.Error.WriteLine(exception.Message);
-            return ExitCodes.UsageError;
+            return ExitCodes.OperationalError;
         }
     }
 
