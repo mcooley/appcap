@@ -45,11 +45,6 @@ Cleanup / resource leaks:
 - Cancel and dispose the abandoned `waitForStop` task and its `NamedPipeServerStream` when `EncodeAsync` completes first (e.g. window closed); today the task is left unobserved and the pipe is leaked. (`RecordingWorker.RunAsync`)
 - Delete partial/zero-length output files on the error path; `CreateOutputStreamAsync` uses `ReplaceExisting` and leaves corrupt files behind on failure. (`RecordingWorker`)
 
-Concurrency:
-
-- Synchronize `firstSampleTime`/`lastSampleTime`, which are written in `OnMediaStreamSourceStarting` and read/written in `OnMediaStreamSourceSampleRequested` on potentially different threads.
-- Replace the blocking `Thread.Sleep(33)` in `OnMediaStreamSourceSampleRequested`, which stalls the MediaStreamSource encoder thread.
-
 ## Platform Support
 
 - Investigate whether CsWin32's "friendly overloads" can be used to simplify code while preserving NativeAOT compatibility
