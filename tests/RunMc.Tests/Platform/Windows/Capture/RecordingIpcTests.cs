@@ -149,4 +149,34 @@ public sealed class RecordingIpcTests
         RunMcException exception = await Assert.ThrowsAsync<RunMcException>(async () => await stopClient);
         Assert.Equal("capture failed", exception.Message);
     }
+
+    [Fact]
+    public async Task CancellingListenerReleasesItsPipe()
+    {
+        string target = Guid.NewGuid().ToString();
+        using CancellationTokenSource probe = new(TimeSpan.FromSeconds(15));
+
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        using CancellationTokenSource firstWait = new();
+        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(firstWait.Token);
+
+        // The listener is up and answering status pings.
+        Assert.True(await RecordingIpc.IsRecordingAsync(target, probe.Token));
+
+        // Cancelling the wait tears the listener down instead of leaking the pipe.
+        await firstWait.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await waitForStop);
+
+        // The pipe instance was released: a brand-new listener can bind the same
+        // well-known name (it uses FirstPipeInstance, which fails if one is leaked)
+        // and once again answers status pings for the target.
+        RecordingIpc.RecordingCommandListener replacement = RecordingIpc.CreateCommandListener(target);
+        using CancellationTokenSource secondWait = new();
+        Task<RecordingIpc.RecordingStopRequest> rebound = replacement.WaitForStopAsync(secondWait.Token);
+
+        Assert.True(await RecordingIpc.IsRecordingAsync(target, probe.Token));
+
+        await secondWait.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await rebound);
+    }
 }

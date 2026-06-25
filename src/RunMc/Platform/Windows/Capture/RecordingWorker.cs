@@ -56,12 +56,12 @@ internal sealed class RecordingWorker : IDisposable
         RecordingIpc.RecordingStopRequest? stopRequest = null;
         bool stopAcknowledged = false;
         using CancellationTokenSource captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using CancellationTokenSource listenerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Target.Name);
+        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(listenerCancellation.Token);
+        Task encode = EncodeAsync(captureCancellation.Token);
         try
         {
-            Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cancellationToken);
-            Task encode = EncodeAsync(captureCancellation.Token);
-
             Task completed = await Task.WhenAny(waitForStop, encode).ConfigureAwait(false);
             if (completed == waitForStop)
             {
@@ -78,17 +78,30 @@ internal sealed class RecordingWorker : IDisposable
                 }
 
                 frames.CompleteAdding();
+            }
+
+            // Finish encoding and validate the output *before* acknowledging the stop,
+            // so an encode failure or a missing/empty file is reported back to the stop
+            // client instead of being hidden behind a premature success acknowledgement.
+            await encode.ConfigureAwait(false);
+            EnsureOutputFileExists();
+
+            if (stopRequest is not null)
+            {
                 await stopRequest.AcknowledgeAsync(cancellationToken).ConfigureAwait(false);
                 stopAcknowledged = true;
             }
-
-            await encode.ConfigureAwait(false);
-            EnsureOutputFileExists();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await captureCancellation.CancelAsync().ConfigureAwait(false);
             frames.CompleteAdding();
+
+            // Let the encoder unwind and release the output file before deleting the
+            // partial/corrupt recording it may have left behind.
+            await DrainEncodeAsync(encode).ConfigureAwait(false);
+            DeleteOutputFile();
+
             if (stopRequest is not null && !stopAcknowledged)
             {
                 await stopRequest.FailAsync(exception.Message, CancellationToken.None).ConfigureAwait(false);
@@ -96,8 +109,35 @@ internal sealed class RecordingWorker : IDisposable
         }
         finally
         {
+            // If the encoder finished first (e.g. the target window closed), the stop
+            // listener is still waiting on its pipe; cancel and drain it so the task is
+            // observed and its named-pipe instance is released rather than leaked.
+            await listenerCancellation.CancelAsync().ConfigureAwait(false);
+            await DrainListenerAsync(waitForStop, stopRequest).ConfigureAwait(false);
             stopRequest?.Dispose();
             DisposeQueuedFrames();
+        }
+    }
+
+    // Observes the stop-command listener task after it has been cancelled so its
+    // named-pipe instance is released and no exception is left unobserved. Any request
+    // it produced is disposed unless it is the one the caller already consumed (which
+    // is disposed separately).
+    private static async Task DrainListenerAsync(Task<RecordingIpc.RecordingStopRequest> waitForStop, RecordingIpc.RecordingStopRequest? consumed)
+    {
+        RecordingIpc.RecordingStopRequest request;
+        try
+        {
+            request = await waitForStop.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(request, consumed))
+        {
+            request.Dispose();
         }
     }
 

@@ -29,17 +29,6 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 - Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation
 
-### Recording reliability (code review follow-ups)
-
-High priority (correctness / data loss):
-
-- Don't swallow encode failures after `stop` is acknowledged: if `EncodeAsync` throws after `OK` was written to the stop client, the worker currently exits `Success` and skips `EnsureOutputFileExists`, so the user is told a recording succeeded that is missing/corrupt. Validate the output before acknowledging, or report the failure back. (`RecordingWorker.RunAsync`)
-
-Cleanup / resource leaks:
-
-- Cancel and dispose the abandoned `waitForStop` task and its `NamedPipeServerStream` when `EncodeAsync` completes first (e.g. window closed); today the task is left unobserved and the pipe is leaked. (`RecordingWorker.RunAsync`)
-- Delete partial/zero-length output files on the error path; `CreateOutputStreamAsync` uses `ReplaceExisting` and leaves corrupt files behind on failure. (`RecordingWorker`)
-
 ## Platform Support
 
 - Investigate whether CsWin32's "friendly overloads" can be used to simplify code while preserving NativeAOT compatibility
