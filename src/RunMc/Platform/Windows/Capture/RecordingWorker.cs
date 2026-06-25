@@ -21,6 +21,7 @@ internal sealed class RecordingWorker : IDisposable
     private readonly string outputPath;
     private readonly BlockingCollection<Direct3D11CaptureFrame> frames = new(new ConcurrentQueue<Direct3D11CaptureFrame>());
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Direct3D11CaptureFrame? startFrame;
     private bool disposed;
 
     private RecordingWorker(TargetWindow window, string outputPath)
@@ -301,18 +302,21 @@ internal sealed class RecordingWorker : IDisposable
 
     private void OnMediaStreamSourceStarting(MediaStreamSource sender, MediaStreamSourceStartingEventArgs args)
     {
-        // The first captured frame establishes the start of the media timeline.
-        // Every sample carries its own SystemRelativeTime, so the encoder reconstructs
-        // the real capture cadence without any artificial pacing.
-        using Direct3D11CaptureFrame? frame = TakeNextFrame();
-        args.Request.SetActualStartPosition(frame?.SystemRelativeTime ?? TimeSpan.Zero);
+        // Hold the first captured frame so it both anchors the media timeline and is
+        // emitted as the first sample. A static window may produce only this one frame,
+        // so discarding it here would leave the encoder with no samples at all.
+        startFrame = TakeNextFrame();
+        args.Request.SetActualStartPosition(startFrame?.SystemRelativeTime ?? TimeSpan.Zero);
     }
 
     private void OnMediaStreamSourceSampleRequested(MediaStreamSource sender, MediaStreamSourceSampleRequestedEventArgs args)
     {
-        // Block until the next captured frame is available (or capture has stopped).
-        // This paces the encoder to the capture rate without busy-waiting.
-        Direct3D11CaptureFrame? frame = TakeNextFrame();
+        // Emit the held start frame first, then block for each subsequent captured frame
+        // (or until capture stops). This paces the encoder to the capture rate without
+        // busy-waiting. Starting and SampleRequested are serialized by the
+        // MediaStreamSource, so reading startFrame here needs no synchronization.
+        Direct3D11CaptureFrame? frame = startFrame ?? TakeNextFrame();
+        startFrame = null;
         if (frame is null)
         {
             args.Request.Sample = null;
@@ -353,6 +357,12 @@ internal sealed class RecordingWorker : IDisposable
 
     private void DisposeQueuedFrames()
     {
+        // Safe to touch startFrame here: callers run only after the encode task has
+        // completed, so the MediaStreamSource is no longer raising frame callbacks.
+        Direct3D11CaptureFrame? pending = startFrame;
+        startFrame = null;
+        pending?.Dispose();
+
         while (frames.TryTake(out Direct3D11CaptureFrame? frame))
         {
             frame.Dispose();
