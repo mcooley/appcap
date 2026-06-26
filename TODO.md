@@ -1,6 +1,6 @@
 # TODO
 
-This is the developer backlog for `runmc`. Keep this file focused on implementation work, design decisions, and validation gaps.
+This is the developer backlog for `appcap`. Keep this file focused on implementation work, design decisions, and validation gaps.
 
 ## Target Configuration
 
@@ -18,7 +18,7 @@ This is the developer backlog for `runmc`. Keep this file focused on implementat
 - Add mouse wheel or scroll support.
 - Add drag support.
 - Add gamepad input support.
-- Add broader key-name coverage for `runmc type` if real workflows need it.
+- Add broader key-name coverage for `appcap type` if real workflows need it.
 - Add optional timing controls for type and pointer input.
 
 ## Video Capture

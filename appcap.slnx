@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AppCap/AppCap.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AppCap.E2ETests/AppCap.E2ETests.csproj" />
+    <Project Path="tests/AppCap.Tests/AppCap.Tests.csproj" />
+    <Project Path="tests/AppCap.TestApp/AppCap.TestApp.csproj" />
+  </Folder>
+</Solution>
