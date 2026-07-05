@@ -28,4 +28,8 @@
     <InternalsVisibleTo Include="AppCap.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="appcap.config.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

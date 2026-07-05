@@ -2,7 +2,7 @@ namespace AppCap.Tests;
 
 public sealed class CommandRunnerTests
 {
-    private static readonly TargetApplication Application = new("target", "Package_family", "Package_family!App");
+    private static readonly AppCapTargetConfig Application = new() { Name = "target", Id = "Package_family!App" };
     private static readonly TargetConfiguration Target = new("target", [Application]);
 
     [Fact]

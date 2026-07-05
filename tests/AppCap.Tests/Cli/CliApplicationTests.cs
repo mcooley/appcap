@@ -2,18 +2,26 @@ namespace AppCap.Tests;
 
 public sealed class CliApplicationTests
 {
+    private static readonly TargetCatalog Catalog = new(
+    [
+        new AppCapTargetConfig { Name = "bedrock", Id = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!Game" },
+        new AppCapTargetConfig { Name = "bedrockpreview", Id = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game" },
+        new AppCapTargetConfig { Name = "education", Id = "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition" },
+        new AppCapTargetConfig { Name = "testapp", Id = "AppCap.E2ETestApp_87ehf5vpf4evy!App" },
+    ]);
+
     [Fact]
     public async Task EmptyArgsRunsFocusCommandWithDefaultTarget()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync([], runner, console);
+        int exitCode = await CliApplication.RunAsync([], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
         Assert.Equal("default", command.Target.Name);
-        Assert.Equal(["bedrock", "bedrockpreview", "education"], command.Target.Applications.Select(application => application.Name));
+        Assert.Equal(["bedrock", "bedrockpreview", "education", "testapp"], command.Target.Applications.Select(application => application.Name));
     }
 
     [Fact]
@@ -24,6 +32,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["--target", "bedrock", "click", "-x", "5", "-y", "7"],
+            Catalog,
             runner,
             console);
 
@@ -41,12 +50,25 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "education"], runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "education"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
         Assert.Equal("education", command.Target.Name);
         Assert.Single(command.Target.Applications);
+    }
+
+    [Fact]
+    public async Task UnknownTargetReturnsUsageError()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--target", "nope"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Unknown target 'nope'.", console.ErrorText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -57,6 +79,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["resize", "--width", "0", "--height", "600"],
+            Catalog,
             runner,
             console);
 
@@ -73,6 +96,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["--target", "bedrock", "hover", "-x", "5", "-y", "7"],
+            Catalog,
             runner,
             console);
 
@@ -94,6 +118,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["--target", targetValue, "hover", "-x", "5", "-y", "7"],
+            Catalog,
             runner,
             console);
 
@@ -111,6 +136,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["--target", "bedrock", "type", "hello[Enter]"],
+            Catalog,
             runner,
             console);
 
@@ -129,7 +155,7 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["type", "--help"], runner, console);
+        int exitCode = await CliApplication.RunAsync(["type", "--help"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
@@ -144,6 +170,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["resize", "-w", "1024", "-h", "768"],
+            Catalog,
             runner,
             console);
 
@@ -161,6 +188,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["screenshot", "--output", "shot.jpg"],
+            Catalog,
             runner,
             console);
 
@@ -177,6 +205,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["screenshot", "--include-cursor", "--output", "shot.png"],
+            Catalog,
             runner,
             console);
 
@@ -194,6 +223,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["screenshot", "--caption", "Test caption", "--output", "shot.png"],
+            Catalog,
             runner,
             console);
 
@@ -210,6 +240,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["--target", "testapp", "record", "start", "--output", "recording.mp4"],
+            Catalog,
             runner,
             console);
 
@@ -227,6 +258,7 @@ public sealed class CliApplicationTests
 
         int exitCode = await CliApplication.RunAsync(
             ["record", "start", "--output", "recording.avi"],
+            Catalog,
             runner,
             console);
 
@@ -241,7 +273,7 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "stop"], runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "stop"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStopCommand command = Assert.IsType<RecordStopCommand>(runner.Command);
@@ -254,7 +286,7 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "cancel"], runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "cancel"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordCancelCommand command = Assert.IsType<RecordCancelCommand>(runner.Command);
@@ -267,7 +299,7 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["screenshot", "--help"], runner, console);
+        int exitCode = await CliApplication.RunAsync(["screenshot", "--help"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);

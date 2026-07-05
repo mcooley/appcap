@@ -56,7 +56,7 @@ finally {
 }
 ```
 
-`APPCAP_E2E_EXECUTABLE` can point to any previously-built `AppCap.exe`. E2E tests always invoke `appcap --target testapp`.
+`APPCAP_E2E_EXECUTABLE` can point to any previously-built `AppCap.exe`. E2E tests always invoke `appcap --target testapp`. The test harness deploys its own `appcap.config.json` (defining the `testapp` target) next to the executable before running.
 
 ### Purpose-Built Test App
 
@@ -74,9 +74,9 @@ Concrete Windows-specific implementations of those interfaces live under `src/Ap
 
 ## Target Configuration
 
-Targets are represented by `TargetConfiguration` and `TargetApplication`. Built-in targets are currently created in `TargetParser`.
+Targets are represented by `TargetConfiguration`, which holds one or more `AppCapTargetConfig` applications. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. Each configured target supplies an `id`; the package family name is computed from the AUMID at runtime.
 
-Currently, targets must define a package family name and AUMID. In the future, we may generalize this to support unpackaged applications and other platforms.
+In the future, we may generalize this further to support unpackaged applications and other platforms.
 
 ## Dependencies and Interop
 

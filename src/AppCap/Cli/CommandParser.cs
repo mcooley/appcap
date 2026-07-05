@@ -5,13 +5,14 @@ namespace AppCap;
 
 public static class CommandParser
 {
-    public static ParseResult Parse(IReadOnlyList<string> args)
+    public static ParseResult Parse(IReadOnlyList<string> args, TargetCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(catalog);
 
         if (args.Count is 0)
         {
-            return ParseResult.Valid(new FocusCommand(TargetParser.Default));
+            return ParseResult.Valid(new FocusCommand(catalog.Default));
         }
 
         if (TryParseHelp(args, out HelpTopic helpTopic))
@@ -27,8 +28,8 @@ public static class CommandParser
         }
 
         string? targetValue = result.GetValue(model.TargetOption);
-        TargetConfiguration target = TargetParser.Default;
-        if (targetValue is not null && !TargetParser.TryParse(targetValue, out target))
+        TargetConfiguration target = catalog.Default;
+        if (targetValue is not null && !catalog.TryParse(targetValue, out target))
         {
             return ParseResult.Failure($"Unknown target '{targetValue}'.");
         }

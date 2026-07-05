@@ -5,24 +5,44 @@
 Currently supports Windows 11.
 
 ## Installing
-`appcap` is a single-file executable with no dependencies. Copy the exe to your target machine and run it from the command line.
+`appcap` is a single-file executable. Copy the exe to your target machine along with an `appcap.config.json` file (see [Targets](#targets)) and run it from the command line.
 
 ## Targets
 
-Use `--target` to choose a configured target. If the target is already running, `appcap` attaches to the running window. If not, it launches the installed app and waits for the window.
+`appcap` reads its targets from a JSON configuration file named `appcap.config.json` located next to the executable.
 
-Available targets:
+Use `--target` to choose a configured target. If the target is already running, `appcap` attaches to the running window. If not, it launches the installed app and waits for the window. If `--target` is omitted, `appcap` tries every configured target in order.
 
-- `bedrock`
-- `bedrockpreview`
-- `education`
-- `testapp` - developer E2E test app, when registered locally
+### Configuration file
 
-If `--target` is omitted, `appcap` tries the built-in targets in this order:
+Each entry under `targets` maps a target name to an application. For now the only supported setting is `id`, the application's AUMID (Application User Model ID). The package family name is computed from the AUMID automatically.
 
-1. `bedrock`
-2. `bedrockpreview`
-3. `education`
+```json
+{
+    "targets": {
+        "calculator": {
+            "id": "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+        }
+    }
+}
+```
+
+You can define as many targets as you like:
+
+```json
+{
+    "targets": {
+        "calculator": {
+            "id": "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"
+        },
+        "store": {
+            "id": "Microsoft.WindowsStore_8wekyb3d8bbwe!App"
+        }
+    }
+}
+```
+
+If the configuration file is missing or malformed, `appcap` prints a friendly error describing what to fix.
 
 ## Commands
 
@@ -31,7 +51,7 @@ If `--target` is omitted, `appcap` tries the built-in targets in this order:
 Launches or finds the target and brings its window to the foreground.
 
 ```powershell
-appcap --target bedrock
+appcap --target calculator
 ```
 
 ### Click
@@ -39,7 +59,7 @@ appcap --target bedrock
 Taps the screen.
 
 ```powershell
-appcap --target bedrock click -x 151 -y 684
+appcap --target calculator click -x 151 -y 684
 ```
 
 Coordinates are relative to the top-left corner of the target window.
@@ -49,7 +69,7 @@ Coordinates are relative to the top-left corner of the target window.
 Moves the cursor.
 
 ```powershell
-appcap --target education hover -x 151 -y 684
+appcap --target calculator hover -x 151 -y 684
 ```
 
 Coordinates are relative to the top-left corner of the target window.
@@ -59,9 +79,9 @@ Coordinates are relative to the top-left corner of the target window.
 Injects literal text and bracketed key presses.
 
 ```powershell
-appcap --target bedrock type "hello[Enter]"
-appcap --target bedrock type "[Escape][F2][Shift+F2]"
-appcap --target bedrock type "[Control+A]replacement text[Enter]"
+appcap --target calculator type "hello[Enter]"
+appcap --target calculator type "[Escape][F2][Shift+F2]"
+appcap --target calculator type "[Control+A]replacement text[Enter]"
 ```
 
 Bracketed keys use WebDriver/Playwright-style key names, for example `[Escape]`, `[Enter]`, `[Shift+F2]`, and `[Control+A]`.
@@ -73,8 +93,8 @@ Use `[[` and `]]` for literal square brackets.
 Resizes the target window so screenshots match the requested dimensions.
 
 ```powershell
-appcap --target bedrock resize --width 1024 --height 768
-appcap --target bedrock resize -w 1024 -h 768
+appcap --target calculator resize --width 1024 --height 768
+appcap --target calculator resize -w 1024 -h 768
 ```
 
 ### Screenshot
@@ -82,19 +102,19 @@ appcap --target bedrock resize -w 1024 -h 768
 Captures the target window as a PNG.
 
 ```powershell
-appcap --target bedrock screenshot --output shot.png
+appcap --target calculator screenshot --output shot.png
 ```
 
 Optional cursor capture:
 
 ```powershell
-appcap --target bedrock screenshot --include-cursor --output shot.png
+appcap --target calculator screenshot --include-cursor --output shot.png
 ```
 
 Optional caption overlay:
 
 ```powershell
-appcap --target education screenshot --caption "Before opening inventory" --output shot.png
+appcap --target calculator screenshot --caption "Before clearing the display" --output shot.png
 ```
 
 Screenshots include `Captured from <window title> <version>` as a comment in file metadata.
@@ -104,8 +124,8 @@ Screenshots include `Captured from <window title> <version>` as a comment in fil
 Starts or stops a recording session for the target.
 
 ```powershell
-appcap --target bedrock record start --output recording.mp4
-appcap --target bedrock record stop
+appcap --target calculator record start --output recording.mp4
+appcap --target calculator record stop
 ```
 
 Recording start/stop currently tracks recording lifecycle state for the target. MP4 encoding is planned separately.

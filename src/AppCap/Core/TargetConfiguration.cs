@@ -1,5 +1,6 @@
 namespace AppCap;
 
-public sealed record TargetConfiguration(string Name, IReadOnlyList<TargetApplication> Applications);
-
-public sealed record TargetApplication(string Name, string PackageFamilyName, string Aumid);
+public sealed record TargetConfiguration(string Name, IReadOnlyList<AppCapTargetConfig> Applications)
+{
+    public static TargetConfiguration None { get; } = new("none", []);
+}

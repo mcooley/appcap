@@ -20,7 +20,7 @@ public sealed class TargetResolver : ITargetResolver
     public async Task<TargetWindow> ResolveAsync(TargetConfiguration target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        foreach (TargetApplication application in target.Applications)
+        foreach (AppCapTargetConfig application in target.Applications)
         {
             TargetWindow? runningWindow = windowFinder.TryFindWindow(target, application);
             if (runningWindow is not null)
@@ -29,7 +29,7 @@ public sealed class TargetResolver : ITargetResolver
             }
         }
 
-        foreach (TargetApplication application in target.Applications)
+        foreach (AppCapTargetConfig application in target.Applications)
         {
             TargetWindow? window = await ResolveInstalledAsync(target, application, cancellationToken).ConfigureAwait(false);
             if (window is not null)
@@ -41,9 +41,9 @@ public sealed class TargetResolver : ITargetResolver
         throw new AppCapException($"Window was not found for target '{TargetFormatter.Format(target)}'.");
     }
 
-    private async Task<TargetWindow?> ResolveInstalledAsync(TargetConfiguration target, TargetApplication application, CancellationToken cancellationToken)
+    private async Task<TargetWindow?> ResolveInstalledAsync(TargetConfiguration target, AppCapTargetConfig application, CancellationToken cancellationToken)
     {
-        appLauncher.LaunchAumid(application.Aumid);
+        appLauncher.LaunchAumid(application.Id);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < LaunchTimeout)

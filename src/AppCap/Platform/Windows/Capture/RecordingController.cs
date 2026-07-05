@@ -88,10 +88,8 @@ public sealed class RecordingController : IRecordingController
         startInfo.ArgumentList.Add(window.Target.Name);
         startInfo.ArgumentList.Add("--application-name");
         startInfo.ArgumentList.Add(window.Application.Name);
-        startInfo.ArgumentList.Add("--package-family-name");
-        startInfo.ArgumentList.Add(window.Application.PackageFamilyName);
         startInfo.ArgumentList.Add("--aumid");
-        startInfo.ArgumentList.Add(window.Application.Aumid);
+        startInfo.ArgumentList.Add(window.Application.Id);
         startInfo.ArgumentList.Add("--window-handle");
         startInfo.ArgumentList.Add(window.Handle.ToString(CultureInfo.InvariantCulture));
         startInfo.ArgumentList.Add("--output");

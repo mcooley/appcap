@@ -4,8 +4,8 @@ namespace AppCap.Tests;
 
 public sealed class TargetResolverTests
 {
-    private static readonly TargetApplication App = new("app", "Package_family", "Package_family!App");
-    private static readonly TargetApplication OtherApp = new("other", "Other_family", "Other_family!App");
+    private static readonly AppCapTargetConfig App = new() { Name = "app", Id = "Package_family!App" };
+    private static readonly AppCapTargetConfig OtherApp = new() { Name = "other", Id = "Other_family!App" };
     private static readonly TargetConfiguration Target = new("target", [App]);
 
     [Fact]
@@ -33,7 +33,7 @@ public sealed class TargetResolverTests
         TargetWindow window = await resolver.ResolveAsync(Target, CancellationToken.None);
 
         Assert.Equal(20, window.Handle);
-        Assert.Equal(App.Aumid, appLauncher.Aumid);
+        Assert.Equal(App.Id, appLauncher.Aumid);
     }
 
     [Fact]
@@ -54,16 +54,16 @@ public sealed class TargetResolverTests
 
     private sealed class TestWindowFinder : IWindowFinder
     {
-        private readonly Dictionary<TargetApplication, Queue<TargetWindow?>> windowsByApplication = [];
+        private readonly Dictionary<AppCapTargetConfig, Queue<TargetWindow?>> windowsByApplication = [];
 
-        public List<TargetApplication> RequestedApplications { get; } = [];
+        public List<AppCapTargetConfig> RequestedApplications { get; } = [];
 
-        public void Set(TargetApplication application, params TargetWindow?[] windows)
+        public void Set(AppCapTargetConfig application, params TargetWindow?[] windows)
         {
             windowsByApplication[application] = new Queue<TargetWindow?>(windows);
         }
 
-        public TargetWindow? TryFindWindow(TargetConfiguration target, TargetApplication application)
+        public TargetWindow? TryFindWindow(TargetConfiguration target, AppCapTargetConfig application)
         {
             RequestedApplications.Add(application);
             if (!windowsByApplication.TryGetValue(application, out Queue<TargetWindow?>? windows))

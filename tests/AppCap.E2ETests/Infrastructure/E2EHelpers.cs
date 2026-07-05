@@ -27,8 +27,27 @@ internal static class E2EHelpers
             throw new InvalidOperationException($"APPCAP_E2E_EXECUTABLE does not exist: {fullExecutablePath}");
         }
 
+        DeployConfig(fullExecutablePath);
+
         string outputDirectory = Path.Combine(Path.GetTempPath(), "appcap-e2e", Guid.NewGuid().ToString("N"));
         return new E2EContext("testapp", fullExecutablePath, outputDirectory);
+    }
+
+    private static void DeployConfig(string executablePath)
+    {
+        string source = Path.Combine(AppContext.BaseDirectory, "appcap.config.json");
+        if (!File.Exists(source))
+        {
+            throw new InvalidOperationException($"E2E configuration file was not found: {source}");
+        }
+
+        string? executableDirectory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrEmpty(executableDirectory))
+        {
+            throw new InvalidOperationException($"Could not determine the directory for APPCAP_E2E_EXECUTABLE: {executablePath}");
+        }
+
+        File.Copy(source, Path.Combine(executableDirectory, "appcap.config.json"), overwrite: true);
     }
 
     public static async Task<ImageInfo> ReadImageInfoAsync(string path)

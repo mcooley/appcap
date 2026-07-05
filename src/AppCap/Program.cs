@@ -12,7 +12,21 @@ if (RecordingWorker.IsWorkerInvocation(args))
 	return await RecordingWorker.RunAsync(args, CancellationToken.None).ConfigureAwait(false);
 }
 
+SystemConsole console = new();
+
+TargetCatalog catalog;
+try
+{
+	catalog = ConfigLoader.Load(AppContext.BaseDirectory);
+}
+catch (AppCapException exception)
+{
+	console.ErrorOutput.WriteLine(exception.Message);
+	return exception.ExitCode;
+}
+
 return await CliApplication.RunAsync(
 	args,
+	catalog,
 	CommandServices.CreateRunner(),
-	new SystemConsole()).ConfigureAwait(false);
+	console).ConfigureAwait(false);

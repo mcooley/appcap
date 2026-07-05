@@ -1,3 +1,3 @@
 namespace AppCap;
 
-public sealed record TargetWindow(TargetConfiguration Target, TargetApplication Application, nint Handle);
+public sealed record TargetWindow(TargetConfiguration Target, AppCapTargetConfig Application, nint Handle);

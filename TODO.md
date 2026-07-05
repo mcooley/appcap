@@ -4,7 +4,6 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Target Configuration
 
-- Make it possible to use a JSON config file to define targets. Add validation and clear errors for malformed target applications
 - Include a notion of "device" in the target configuration, to support targeting applications on remote devices
 - Add the ability to target unpackaged executables--match by executable path or PID
 - Add graceful handling for game bootstrapper windows and child sign-in/pop-up windows. Capture any child windows separately and composite them into screenshots and recordings. Perhaps add a command to center/resize child windows as needed so they fully overlap the parent window.

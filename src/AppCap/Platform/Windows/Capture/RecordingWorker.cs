@@ -372,7 +372,7 @@ internal sealed class RecordingWorker : IDisposable
     private static RecordingWorker Create(IReadOnlyList<string> args)
     {
         Dictionary<string, string> options = ParseOptions(args.Skip(1));
-        TargetApplication application = new(options["application-name"], options["package-family-name"], options["aumid"]);
+        AppCapTargetConfig application = new() { Name = options["application-name"], Id = options["aumid"] };
         TargetConfiguration target = new(options["target-name"], [application]);
         TargetWindow window = new(target, application, nint.Parse(options["window-handle"], CultureInfo.InvariantCulture));
         return new RecordingWorker(window, options["output"]);
@@ -393,7 +393,7 @@ internal sealed class RecordingWorker : IDisposable
             options[key[2..]] = enumerator.Current;
         }
 
-        foreach (string required in new[] { "target-name", "application-name", "package-family-name", "aumid", "window-handle", "output" })
+        foreach (string required in new[] { "target-name", "application-name", "aumid", "window-handle", "output" })
         {
             if (!options.ContainsKey(required))
             {

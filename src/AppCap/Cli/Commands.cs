@@ -20,7 +20,7 @@ public sealed record RecordStopCommand(TargetConfiguration Target) : AppCapComma
 
 public sealed record RecordCancelCommand(TargetConfiguration Target) : AppCapCommand(Target);
 
-public sealed record HelpCommand(HelpTopic Topic) : AppCapCommand(TargetParser.Default);
+public sealed record HelpCommand(HelpTopic Topic) : AppCapCommand(TargetConfiguration.None);
 
 public sealed record ParseResult(bool Success, AppCapCommand Command, string? ErrorMessage)
 {

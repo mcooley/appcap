@@ -7,12 +7,12 @@ namespace AppCap.Windows;
 
 public interface IWindowFinder
 {
-    TargetWindow? TryFindWindow(TargetConfiguration target, TargetApplication application);
+    TargetWindow? TryFindWindow(TargetConfiguration target, AppCapTargetConfig application);
 }
 
 public sealed class WindowFinder : IWindowFinder
 {
-    public TargetWindow? TryFindWindow(TargetConfiguration target, TargetApplication application)
+    public TargetWindow? TryFindWindow(TargetConfiguration target, AppCapTargetConfig application)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(application);
