@@ -10,9 +10,9 @@ using global::Windows.Win32.System.Threading;
 
 public static class ProcessPackage
 {
-    public static bool TryGetPackageFamilyName(int processId, out string? packageFamilyName)
+    public static bool TryGetApplicationUserModelId(int processId, out string? applicationUserModelId)
     {
-        packageFamilyName = null;
+        applicationUserModelId = null;
 
         using Microsoft.Win32.SafeHandles.SafeFileHandle processHandle = PInvoke.OpenProcess_SafeHandle(
             PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_LIMITED_INFORMATION,
@@ -23,26 +23,32 @@ public static class ProcessPackage
             return false;
         }
 
-        uint length = 0;
-        WIN32_ERROR result = PInvoke.GetPackageFamilyName(processHandle, ref length);
-        if (result == WIN32_ERROR.APPMODEL_ERROR_NO_PACKAGE)
-        {
-            return false;
-        }
-
-        if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length <= 0)
-        {
-            return false;
-        }
-
+        uint length = PInvoke.APPLICATION_USER_MODEL_ID_MAX_LENGTH;
         char[] buffer = new char[length];
-        result = PInvoke.GetPackageFamilyName(processHandle, ref length, buffer);
+        WIN32_ERROR result = PInvoke.GetApplicationUserModelId(processHandle, ref length, buffer);
+        if (result == WIN32_ERROR.APPMODEL_ERROR_NO_APPLICATION)
+        {
+            return false;
+        }
+
+        // Fallback: the pre-allocated buffer was too small, so retry with the required length.
+        if (result == WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER)
+        {
+            if (length <= 0)
+            {
+                return false;
+            }
+
+            buffer = new char[length];
+            result = PInvoke.GetApplicationUserModelId(processHandle, ref length, buffer);
+        }
+
         if (result != WIN32_ERROR.NO_ERROR)
         {
             return false;
         }
 
-        packageFamilyName = new string(buffer, 0, Math.Max(0, checked((int)length) - 1));
+        applicationUserModelId = new string(buffer, 0, Math.Max(0, checked((int)length) - 1));
         return true;
     }
 

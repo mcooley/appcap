@@ -7,7 +7,7 @@ public static class CommandServices
     {
         WindowController windowController = new();
         return new CommandRunner(
-            new TargetResolver(new WindowFinder(), new AppLauncher()),
+            new TargetResolver(new WindowFinder(), new TargetLauncher()),
             windowController,
             new SyntheticPointerInputInjector(),
             new CursorMover(),

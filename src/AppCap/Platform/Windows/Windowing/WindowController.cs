@@ -123,8 +123,8 @@ public sealed class WindowController : IWindowController
 
         _ = PInvoke.GetWindowThreadProcessId(foregroundWindow, out uint processId);
         return processId != 0 &&
-            ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
-            window.Application.PackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
+            ProcessPackage.TryGetApplicationUserModelId((int)processId, out string? applicationUserModelId) &&
+            window.Application.Id.Equals(applicationUserModelId, StringComparison.Ordinal);
     }
 
     private static void AttachToForegroundAndActivate(nint windowHandle)

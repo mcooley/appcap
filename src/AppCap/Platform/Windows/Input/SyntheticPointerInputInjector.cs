@@ -115,9 +115,9 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         }
 
         _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
-        bool samePackage = processId != 0 &&
-            ProcessPackage.TryGetPackageFamilyName((int)processId, out string? packageFamilyName) &&
-            window.Application.PackageFamilyName.Equals(packageFamilyName, StringComparison.Ordinal);
-        return samePackage;
+        bool sameApplication = processId != 0 &&
+            ProcessPackage.TryGetApplicationUserModelId((int)processId, out string? applicationUserModelId) &&
+            window.Application.Id.Equals(applicationUserModelId, StringComparison.Ordinal);
+        return sameApplication;
     }
 }

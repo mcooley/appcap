@@ -13,13 +13,13 @@ public sealed class TargetResolverTests
     {
         TestWindowFinder windowFinder = new();
         windowFinder.Set(App, new TargetWindow(Target, App, 10));
-        TestAppLauncher appLauncher = new();
-        TargetResolver resolver = new(windowFinder, appLauncher);
+        TestTargetLauncher targetLauncher = new();
+        TargetResolver resolver = new(windowFinder, targetLauncher);
 
         TargetWindow window = await resolver.ResolveAsync(Target, CancellationToken.None);
 
         Assert.Equal(10, window.Handle);
-        Assert.False(appLauncher.Launched);
+        Assert.Null(targetLauncher.Launched);
     }
 
     [Fact]
@@ -27,13 +27,13 @@ public sealed class TargetResolverTests
     {
         TestWindowFinder windowFinder = new();
         windowFinder.Set(App, null, new TargetWindow(Target, App, 20));
-        TestAppLauncher appLauncher = new();
-        TargetResolver resolver = new(windowFinder, appLauncher);
+        TestTargetLauncher targetLauncher = new();
+        TargetResolver resolver = new(windowFinder, targetLauncher);
 
         TargetWindow window = await resolver.ResolveAsync(Target, CancellationToken.None);
 
         Assert.Equal(20, window.Handle);
-        Assert.Equal(App.Id, appLauncher.Aumid);
+        Assert.Equal(App, targetLauncher.Launched);
     }
 
     [Fact]
@@ -42,14 +42,14 @@ public sealed class TargetResolverTests
         TargetConfiguration target = new("default", [App, OtherApp]);
         TestWindowFinder windowFinder = new();
         windowFinder.Set(OtherApp, new TargetWindow(target, OtherApp, 30));
-        TestAppLauncher appLauncher = new();
-        TargetResolver resolver = new(windowFinder, appLauncher);
+        TestTargetLauncher targetLauncher = new();
+        TargetResolver resolver = new(windowFinder, targetLauncher);
 
         TargetWindow window = await resolver.ResolveAsync(target, CancellationToken.None);
 
         Assert.Equal(30, window.Handle);
         Assert.Equal([App, OtherApp], windowFinder.RequestedApplications);
-        Assert.False(appLauncher.Launched);
+        Assert.Null(targetLauncher.Launched);
     }
 
     private sealed class TestWindowFinder : IWindowFinder
@@ -75,16 +75,13 @@ public sealed class TargetResolverTests
         }
     }
 
-    private sealed class TestAppLauncher : IAppLauncher
+    private sealed class TestTargetLauncher : ITargetLauncher
     {
-        public bool Launched { get; private set; }
+        public AppCapTargetConfig? Launched { get; private set; }
 
-        public string? Aumid { get; private set; }
-
-        public void LaunchAumid(string aumid)
+        public void Launch(AppCapTargetConfig target)
         {
-            Launched = true;
-            Aumid = aumid;
+            Launched = target;
         }
     }
 }

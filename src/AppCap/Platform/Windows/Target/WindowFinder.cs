@@ -21,8 +21,8 @@ public sealed class WindowFinder : IWindowFinder
         {
             using (process)
             {
-                if (!ProcessPackage.TryGetPackageFamilyName(process.Id, out string? processPackageFamilyName) ||
-                    !application.PackageFamilyName.Equals(processPackageFamilyName, StringComparison.Ordinal))
+                if (!ProcessPackage.TryGetApplicationUserModelId(process.Id, out string? processApplicationUserModelId) ||
+                    !application.Id.Equals(processApplicationUserModelId, StringComparison.Ordinal))
                 {
                     continue;
                 }

@@ -1,7 +1,8 @@
 OpenProcess
 CloseHandle
 GetCurrentThreadId
-GetPackageFamilyName
+GetApplicationUserModelId
+APPLICATION_USER_MODEL_ID_MAX_LENGTH
 GetPackageId
 PACKAGE_ID
 IsWindowVisible

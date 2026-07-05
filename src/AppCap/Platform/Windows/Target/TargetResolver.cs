@@ -9,12 +9,12 @@ public sealed class TargetResolver : ITargetResolver
     private static readonly TimeSpan PollDelay = TimeSpan.FromMilliseconds(250);
 
     private readonly IWindowFinder windowFinder;
-    private readonly IAppLauncher appLauncher;
+    private readonly ITargetLauncher targetLauncher;
 
-    public TargetResolver(IWindowFinder windowFinder, IAppLauncher appLauncher)
+    public TargetResolver(IWindowFinder windowFinder, ITargetLauncher targetLauncher)
     {
         this.windowFinder = windowFinder;
-        this.appLauncher = appLauncher;
+        this.targetLauncher = targetLauncher;
     }
 
     public async Task<TargetWindow> ResolveAsync(TargetConfiguration target, CancellationToken cancellationToken)
@@ -43,7 +43,7 @@ public sealed class TargetResolver : ITargetResolver
 
     private async Task<TargetWindow?> ResolveInstalledAsync(TargetConfiguration target, AppCapTargetConfig application, CancellationToken cancellationToken)
     {
-        appLauncher.LaunchAumid(application.Id);
+        targetLauncher.Launch(application);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < LaunchTimeout)

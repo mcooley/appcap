@@ -19,7 +19,7 @@ public sealed class ConfigLoaderTests : IDisposable
     }
 
     [Fact]
-    public void LoadComputesPackageFamilyNameFromAumid()
+    public void LoadReadsApplicationId()
     {
         WriteConfig("""
             {
@@ -35,7 +35,6 @@ public sealed class ConfigLoaderTests : IDisposable
 
         Assert.True(catalog.TryParse("calculator", out TargetConfiguration target));
         AppCapTargetConfig application = Assert.Single(target.Applications);
-        Assert.Equal("Microsoft.WindowsCalculator_8wekyb3d8bbwe", application.PackageFamilyName);
         Assert.Equal("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", application.Id);
     }
 

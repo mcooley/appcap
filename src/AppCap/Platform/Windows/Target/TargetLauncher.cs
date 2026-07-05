@@ -3,20 +3,21 @@ using System.Diagnostics;
 
 namespace AppCap.Windows;
 
-public interface IAppLauncher
+public interface ITargetLauncher
 {
-    void LaunchAumid(string aumid);
+    void Launch(AppCapTargetConfig target);
 }
 
-public sealed class AppLauncher : IAppLauncher
+public sealed class TargetLauncher : ITargetLauncher
 {
-    public void LaunchAumid(string aumid)
+    public void Launch(AppCapTargetConfig target)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(aumid);
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(target.Id);
 
         ProcessStartInfo startInfo = new()
         {
-            FileName = "shell:AppsFolder\\" + aumid,
+            FileName = "shell:AppsFolder\\" + target.Id,
             UseShellExecute = true,
         };
 
