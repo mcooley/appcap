@@ -8,14 +8,13 @@ namespace AppCap.Windows;
 
 public interface IWindowFinder
 {
-    TargetWindow? TryFindWindow(TargetConfiguration target, AppCapTargetConfig application);
+    TargetWindow? TryFindWindow(TargetApplication application);
 }
 
 public sealed class WindowFinder : IWindowFinder
 {
-    public TargetWindow? TryFindWindow(TargetConfiguration target, AppCapTargetConfig application)
+    public TargetWindow? TryFindWindow(TargetApplication application)
     {
-        ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(application);
 
         FindWindowState state = new(application.Id);
@@ -32,7 +31,7 @@ public sealed class WindowFinder : IWindowFinder
             stateHandle.Free();
         }
 
-        return state.FoundWindow.IsNull ? null : new TargetWindow(target, application, state.FoundWindow);
+        return state.FoundWindow.IsNull ? null : new TargetWindow(application, state.FoundWindow);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

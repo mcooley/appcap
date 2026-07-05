@@ -21,7 +21,7 @@ public sealed class RecordingController : IRecordingController
 
         // Hold the start lock until the worker is confirmed running so two
         // concurrent starts for the same target cannot both spawn competing workers.
-        using RecordingStartLock startLock = await RecordingIpc.BeginStartAsync(window.Target.Name, cancellationToken).ConfigureAwait(false);
+        using RecordingStartLock startLock = await RecordingIpc.BeginStartAsync(window.Application.Name, cancellationToken).ConfigureAwait(false);
 
         string executablePath = Environment.ProcessPath ?? throw new AppCapException("Recording worker could not be launched.");
         ProcessStartInfo startInfo = new()
@@ -46,11 +46,11 @@ public sealed class RecordingController : IRecordingController
 
         try
         {
-            await WaitForWorkerAsync(window.Target.Name, process, cancellationToken).ConfigureAwait(false);
+            await WaitForWorkerAsync(window.Application.Name, process, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            await TerminateWorkerAsync(window.Target.Name, process).ConfigureAwait(false);
+            await TerminateWorkerAsync(window.Application.Name, process).ConfigureAwait(false);
             throw;
         }
         finally
@@ -59,7 +59,7 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
-    public async Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    public async Task StopAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
@@ -70,7 +70,7 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
-    public async Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    public async Task CancelAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
@@ -84,8 +84,6 @@ public sealed class RecordingController : IRecordingController
     private static void AddWorkerArguments(ProcessStartInfo startInfo, TargetWindow window, string outputPath)
     {
         startInfo.ArgumentList.Add(RecordingWorker.WorkerCommand);
-        startInfo.ArgumentList.Add("--target-name");
-        startInfo.ArgumentList.Add(window.Target.Name);
         startInfo.ArgumentList.Add("--application-name");
         startInfo.ArgumentList.Add(window.Application.Name);
         startInfo.ArgumentList.Add("--aumid");

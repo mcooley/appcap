@@ -2,12 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace AppCap;
 
-public sealed class AppCapConfig
-{
-    public Dictionary<string, AppCapTargetConfig>? Targets { get; set; }
-}
-
-public sealed class AppCapTargetConfig
+public sealed class TargetApplication
 {
     // The name of the target. Populated from the configuration key; not part of the JSON body.
     [JsonIgnore]

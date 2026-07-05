@@ -1,26 +1,26 @@
 namespace AppCap;
 
-public abstract record AppCapCommand(TargetConfiguration Target);
+public abstract record AppCapCommand;
 
-public sealed record FocusCommand(TargetConfiguration Target) : AppCapCommand(Target);
+public sealed record FocusCommand(TargetApplication Target) : AppCapCommand;
 
-public sealed record ClickCommand(TargetConfiguration Target, int X, int Y) : AppCapCommand(Target);
+public sealed record ClickCommand(TargetApplication Target, int X, int Y) : AppCapCommand;
 
-public sealed record HoverCommand(TargetConfiguration Target, int X, int Y) : AppCapCommand(Target);
+public sealed record HoverCommand(TargetApplication Target, int X, int Y) : AppCapCommand;
 
-public sealed record TypeCommand(TargetConfiguration Target, IReadOnlyList<KeyboardAction> Actions) : AppCapCommand(Target);
+public sealed record TypeCommand(TargetApplication Target, IReadOnlyList<KeyboardAction> Actions) : AppCapCommand;
 
-public sealed record ResizeCommand(TargetConfiguration Target, int Width, int Height) : AppCapCommand(Target);
+public sealed record ResizeCommand(TargetApplication Target, int Width, int Height) : AppCapCommand;
 
-public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool IncludeCursor, string? Caption) : AppCapCommand(Target);
+public sealed record ScreenshotCommand(TargetApplication Target, string OutputPath, bool IncludeCursor, string? Caption) : AppCapCommand;
 
-public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath) : AppCapCommand(Target);
+public sealed record RecordStartCommand(TargetApplication Target, string OutputPath) : AppCapCommand;
 
-public sealed record RecordStopCommand(TargetConfiguration Target) : AppCapCommand(Target);
+public sealed record RecordStopCommand(TargetApplication Target) : AppCapCommand;
 
-public sealed record RecordCancelCommand(TargetConfiguration Target) : AppCapCommand(Target);
+public sealed record RecordCancelCommand(TargetApplication Target) : AppCapCommand;
 
-public sealed record HelpCommand(HelpTopic Topic) : AppCapCommand(TargetConfiguration.None);
+public sealed record HelpCommand(HelpTopic Topic) : AppCapCommand;
 
 public sealed record ParseResult(bool Success, AppCapCommand Command, string? ErrorMessage)
 {

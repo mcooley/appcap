@@ -4,10 +4,10 @@ public sealed class CliApplicationTests
 {
     private static readonly TargetCatalog Catalog = new(
     [
-        new AppCapTargetConfig { Name = "bedrock", Id = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!Game" },
-        new AppCapTargetConfig { Name = "bedrockpreview", Id = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game" },
-        new AppCapTargetConfig { Name = "education", Id = "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition" },
-        new AppCapTargetConfig { Name = "testapp", Id = "AppCap.E2ETestApp_6tt0djjd38yk4!App" },
+        new TargetApplication { Name = "bedrock", Id = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!Game" },
+        new TargetApplication { Name = "bedrockpreview", Id = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game" },
+        new TargetApplication { Name = "education", Id = "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition" },
+        new TargetApplication { Name = "testapp", Id = "AppCap.E2ETestApp_6tt0djjd38yk4!App" },
     ]);
 
     [Fact]
@@ -20,8 +20,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
-        Assert.Equal("default", command.Target.Name);
-        Assert.Equal(["bedrock", "bedrockpreview", "education", "testapp"], command.Target.Applications.Select(application => application.Name));
+        Assert.Equal("bedrock", command.Target.Name);
     }
 
     [Fact]
@@ -39,7 +38,6 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         ClickCommand command = Assert.IsType<ClickCommand>(runner.Command);
         Assert.Equal("bedrock", command.Target.Name);
-        Assert.Single(command.Target.Applications);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
     }
@@ -55,7 +53,6 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
         Assert.Equal("education", command.Target.Name);
-        Assert.Single(command.Target.Applications);
     }
 
     [Fact]
@@ -125,7 +122,6 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
         Assert.Equal(targetValue, command.Target.Name);
-        Assert.Single(command.Target.Applications);
     }
 
     [Fact]

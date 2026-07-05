@@ -33,13 +33,12 @@ public sealed class ConfigLoaderTests : IDisposable
 
         TargetCatalog catalog = ConfigLoader.Load(directory);
 
-        Assert.True(catalog.TryParse("calculator", out TargetConfiguration target));
-        AppCapTargetConfig application = Assert.Single(target.Applications);
+        Assert.True(catalog.TryParse("calculator", out TargetApplication application));
         Assert.Equal("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", application.Id);
     }
 
     [Fact]
-    public void DefaultIncludesEveryConfiguredTarget()
+    public void DefaultIsFirstConfiguredTarget()
     {
         WriteConfig("""
             {
@@ -52,7 +51,7 @@ public sealed class ConfigLoaderTests : IDisposable
 
         TargetCatalog catalog = ConfigLoader.Load(directory);
 
-        Assert.Equal(["one", "two"], catalog.Default.Applications.Select(application => application.Name));
+        Assert.Equal("one", catalog.Default.Name);
     }
 
     [Fact]

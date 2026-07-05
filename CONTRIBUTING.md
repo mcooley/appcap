@@ -74,7 +74,7 @@ Concrete Windows-specific implementations of those interfaces live under `src/Ap
 
 ## Target Configuration
 
-Targets are represented by `TargetConfiguration`, which holds one or more `AppCapTargetConfig` applications. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. Each configured target supplies an `id`; the package family name is computed from the AUMID at runtime.
+Targets are represented by `TargetApplication`, which pairs a target name with an application `id`. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. When `--target` is omitted, the first configured target is used.
 
 In the future, we may generalize this further to support unpackaged applications and other platforms.
 

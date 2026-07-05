@@ -5,12 +5,12 @@ namespace AppCap.Windows;
 
 public interface ITargetLauncher
 {
-    void Launch(AppCapTargetConfig target);
+    void Launch(TargetApplication target);
 }
 
 public sealed class TargetLauncher : ITargetLauncher
 {
-    public void Launch(AppCapTargetConfig target)
+    public void Launch(TargetApplication target)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(target.Id);

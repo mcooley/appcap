@@ -2,8 +2,7 @@ namespace AppCap.Tests;
 
 public sealed class CommandRunnerTests
 {
-    private static readonly AppCapTargetConfig Application = new() { Name = "target", Id = "Package_family!App" };
-    private static readonly TargetConfiguration Target = new("target", [Application]);
+    private static readonly TargetApplication Target = new() { Name = "target", Id = "Package_family!App" };
 
     [Fact]
     public async Task FocusResolvesTargetAndBringsWindowToForeground()
@@ -155,7 +154,7 @@ public sealed class CommandRunnerTests
 
     private sealed class TestServices
     {
-        public TargetWindow Window { get; } = new(Target, Application, 123);
+        public TargetWindow Window { get; } = new(Target, 123);
 
         public WindowBounds Bounds { get; init; } = new(0, 0, 640, 480);
 
@@ -205,9 +204,9 @@ public sealed class CommandRunnerTests
             this.window = window;
         }
 
-        public TargetConfiguration? RequestedTarget { get; private set; }
+        public TargetApplication? RequestedTarget { get; private set; }
 
-        public Task<TargetWindow> ResolveAsync(TargetConfiguration target, CancellationToken cancellationToken)
+        public Task<TargetWindow> ResolveAsync(TargetApplication target, CancellationToken cancellationToken)
         {
             RequestedTarget = target;
             return Task.FromResult(window);
@@ -329,9 +328,9 @@ public sealed class CommandRunnerTests
 
         public string? OutputPath { get; private set; }
 
-        public TargetConfiguration? StopTarget { get; private set; }
+        public TargetApplication? StopTarget { get; private set; }
 
-        public TargetConfiguration? CancelTarget { get; private set; }
+        public TargetApplication? CancelTarget { get; private set; }
 
         public Task StartAsync(TargetWindow window, string outputPath, CancellationToken cancellationToken)
         {
@@ -340,13 +339,13 @@ public sealed class CommandRunnerTests
             return Task.CompletedTask;
         }
 
-        public Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
+        public Task StopAsync(TargetApplication target, CancellationToken cancellationToken)
         {
             StopTarget = target;
             return Task.CompletedTask;
         }
 
-        public Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
+        public Task CancelAsync(TargetApplication target, CancellationToken cancellationToken)
         {
             CancelTarget = target;
             return Task.CompletedTask;

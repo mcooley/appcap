@@ -28,7 +28,7 @@ public static class CommandParser
         }
 
         string? targetValue = result.GetValue(model.TargetOption);
-        TargetConfiguration target = catalog.Default;
+        TargetApplication target = catalog.Default;
         if (targetValue is not null && !catalog.TryParse(targetValue, out target))
         {
             return ParseResult.Failure($"Unknown target '{targetValue}'.");

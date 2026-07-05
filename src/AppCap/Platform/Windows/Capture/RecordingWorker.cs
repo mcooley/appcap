@@ -58,7 +58,7 @@ internal sealed class RecordingWorker : IDisposable
         bool stopAcknowledged = false;
         using CancellationTokenSource captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using CancellationTokenSource listenerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Target.Name);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Application.Name);
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(listenerCancellation.Token);
         Task encode = EncodeAsync(captureCancellation.Token);
         try
@@ -372,9 +372,8 @@ internal sealed class RecordingWorker : IDisposable
     private static RecordingWorker Create(IReadOnlyList<string> args)
     {
         Dictionary<string, string> options = ParseOptions(args.Skip(1));
-        AppCapTargetConfig application = new() { Name = options["application-name"], Id = options["aumid"] };
-        TargetConfiguration target = new(options["target-name"], [application]);
-        TargetWindow window = new(target, application, nint.Parse(options["window-handle"], CultureInfo.InvariantCulture));
+        TargetApplication application = new() { Name = options["application-name"], Id = options["aumid"] };
+        TargetWindow window = new(application, nint.Parse(options["window-handle"], CultureInfo.InvariantCulture));
         return new RecordingWorker(window, options["output"]);
     }
 
@@ -393,7 +392,7 @@ internal sealed class RecordingWorker : IDisposable
             options[key[2..]] = enumerator.Current;
         }
 
-        foreach (string required in new[] { "target-name", "application-name", "aumid", "window-handle", "output" })
+        foreach (string required in new[] { "application-name", "aumid", "window-handle", "output" })
         {
             if (!options.ContainsKey(required))
             {

@@ -17,39 +17,34 @@ public sealed class TargetResolver : ITargetResolver
         this.targetLauncher = targetLauncher;
     }
 
-    public async Task<TargetWindow> ResolveAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    public async Task<TargetWindow> ResolveAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
-        foreach (AppCapTargetConfig application in target.Applications)
+
+        TargetWindow? runningWindow = windowFinder.TryFindWindow(target);
+        if (runningWindow is not null)
         {
-            TargetWindow? runningWindow = windowFinder.TryFindWindow(target, application);
-            if (runningWindow is not null)
-            {
-                return runningWindow;
-            }
+            return runningWindow;
         }
 
-        foreach (AppCapTargetConfig application in target.Applications)
+        TargetWindow? launchedWindow = await ResolveInstalledAsync(target, cancellationToken).ConfigureAwait(false);
+        if (launchedWindow is not null)
         {
-            TargetWindow? window = await ResolveInstalledAsync(target, application, cancellationToken).ConfigureAwait(false);
-            if (window is not null)
-            {
-                return window;
-            }
+            return launchedWindow;
         }
 
         throw new AppCapException($"Window was not found for target '{TargetFormatter.Format(target)}'.");
     }
 
-    private async Task<TargetWindow?> ResolveInstalledAsync(TargetConfiguration target, AppCapTargetConfig application, CancellationToken cancellationToken)
+    private async Task<TargetWindow?> ResolveInstalledAsync(TargetApplication target, CancellationToken cancellationToken)
     {
-        targetLauncher.Launch(application);
+        targetLauncher.Launch(target);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         while (stopwatch.Elapsed < LaunchTimeout)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            TargetWindow? runningWindow = windowFinder.TryFindWindow(target, application);
+            TargetWindow? runningWindow = windowFinder.TryFindWindow(target);
             if (runningWindow is not null)
             {
                 return runningWindow;
