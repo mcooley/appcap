@@ -22,13 +22,13 @@ public sealed class WorkerScreenshotClient : IScreenshotCapture
         // directory than this client, and it is the worker that writes the file.
         ScreenshotRequest request = new()
         {
-            TargetName = window.Target.Name,
+            TargetName = window.Application.Name,
             OutputPath = Path.GetFullPath(outputPath),
             IncludeCursor = includeCursor,
             Caption = caption,
         };
 
-        string targetName = window.Target.Name;
+        string targetName = window.Application.Name;
         if (await RecordingIpc.IsRecordingAsync(targetName, cancellationToken).ConfigureAwait(false))
         {
             if (await RecordingIpc.CaptureScreenshotAsync(targetName, request, cancellationToken).ConfigureAwait(false))

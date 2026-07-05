@@ -252,8 +252,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
 
     private static TargetWindow BuildWindow(RecordingStartRequest request)
     {
-        AppCapTargetConfig application = new() { Name = request.ApplicationName, Id = request.ApplicationId };
-        TargetConfiguration target = new(request.TargetName, [application]);
-        return new TargetWindow(target, application, (nint)request.WindowHandle);
+        TargetApplication application = new() { Name = request.ApplicationName, Id = request.ApplicationId };
+        return new TargetWindow(application, (nint)request.WindowHandle);
     }
 }

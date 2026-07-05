@@ -1,8 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AppCap;
 
-public static class ConfigLoader
+public static partial class ConfigLoader
 {
     public const string FileName = "appcap.config.json";
 
@@ -37,10 +38,10 @@ public static class ConfigLoader
             throw new AppCapException($"Configuration file '{path}' could not be read: {exception.Message}", exception, ExitCodes.UsageError);
         }
 
-        AppCapConfig? config;
+        ConfigDocument? config;
         try
         {
-            config = JsonSerializer.Deserialize(json, AppCapConfigJsonContext.Default.AppCapConfig);
+            config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.ConfigDocument);
         }
         catch (JsonException exception)
         {
@@ -54,8 +55,8 @@ public static class ConfigLoader
                 ExitCodes.UsageError);
         }
 
-        List<AppCapTargetConfig> applications = new(config.Targets.Count);
-        foreach ((string name, AppCapTargetConfig? target) in config.Targets)
+        List<TargetApplication> applications = new(config.Targets.Count);
+        foreach ((string name, TargetApplication? target) in config.Targets)
         {
             if (target is null || string.IsNullOrWhiteSpace(target.Id))
             {
@@ -77,4 +78,16 @@ public static class ConfigLoader
 
         return new TargetCatalog(applications);
     }
+
+    private sealed class ConfigDocument
+    {
+        public Dictionary<string, TargetApplication>? Targets { get; set; }
+    }
+
+    [JsonSourceGenerationOptions(
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true)]
+    [JsonSerializable(typeof(ConfigDocument))]
+    private sealed partial class ConfigJsonContext : JsonSerializerContext;
 }

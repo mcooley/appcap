@@ -35,7 +35,7 @@ public sealed class RecordingController : IRecordingController
 
         RecordingStartRequest request = new()
         {
-            TargetName = window.Target.Name,
+            TargetName = window.Application.Name,
             ApplicationName = window.Application.Name,
             ApplicationId = window.Application.Id,
             WindowHandle = window.Handle,
@@ -49,7 +49,7 @@ public sealed class RecordingController : IRecordingController
         await RecordingIpc.StartRecordingAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task StopAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    public async Task StopAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
@@ -60,7 +60,7 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
-    public async Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
+    public async Task CancelAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
@@ -71,7 +71,7 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
-    public async Task AddCaptionAsync(TargetConfiguration target, string caption, CancellationToken cancellationToken)
+    public async Task AddCaptionAsync(TargetApplication target, string caption, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(caption);
