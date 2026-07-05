@@ -1,5 +1,6 @@
 using AppCap;
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using global::Windows.Win32;
 using global::Windows.Win32.Foundation;
 
@@ -17,24 +18,55 @@ public sealed class WindowFinder : IWindowFinder
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(application);
 
-        foreach (Process process in Process.GetProcesses())
+        FindWindowState state = new(application.Id);
+        GCHandle stateHandle = GCHandle.Alloc(state);
+        try
         {
-            using (process)
+            unsafe
             {
-                if (!ProcessPackage.TryGetApplicationUserModelId(process.Id, out string? processApplicationUserModelId) ||
-                    !application.Id.Equals(processApplicationUserModelId, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                nint windowHandle = process.MainWindowHandle;
-                if (windowHandle != 0 && PInvoke.IsWindowVisible(new HWND(windowHandle)))
-                {
-                    return new TargetWindow(target, application, windowHandle);
-                }
+                PInvoke.EnumWindows(&EnumWindowCallback, new LPARAM(GCHandle.ToIntPtr(stateHandle)));
             }
         }
+        finally
+        {
+            stateHandle.Free();
+        }
 
-        return null;
+        return state.FoundWindow.IsNull ? null : new TargetWindow(target, application, state.FoundWindow);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static BOOL EnumWindowCallback(HWND windowHandle, LPARAM lParam)
+    {
+        if (GCHandle.FromIntPtr(lParam.Value).Target is not FindWindowState state)
+        {
+            return true;
+        }
+
+        if (!PInvoke.IsWindowVisible(windowHandle))
+        {
+            return true;
+        }
+
+        if (PInvoke.GetWindowThreadProcessId(windowHandle, out uint processId) == 0 || processId == 0)
+        {
+            return true;
+        }
+
+        if (ProcessPackage.TryGetApplicationUserModelId((int)processId, out string? processApplicationUserModelId) &&
+            state.ApplicationId.Equals(processApplicationUserModelId, StringComparison.Ordinal))
+        {
+            state.FoundWindow = windowHandle;
+            return false;
+        }
+
+        return true;
+    }
+
+    private sealed class FindWindowState(string applicationId)
+    {
+        public string ApplicationId { get; } = applicationId;
+
+        public HWND FoundWindow { get; set; }
     }
 }
