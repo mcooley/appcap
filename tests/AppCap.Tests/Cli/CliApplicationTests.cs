@@ -7,7 +7,7 @@ public sealed class CliApplicationTests
         new AppCapTargetConfig { Name = "bedrock", Id = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!Game" },
         new AppCapTargetConfig { Name = "bedrockpreview", Id = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game" },
         new AppCapTargetConfig { Name = "education", Id = "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition" },
-        new AppCapTargetConfig { Name = "testapp", Id = "AppCap.E2ETestApp_87ehf5vpf4evy!App" },
+        new AppCapTargetConfig { Name = "testapp", Id = "AppCap.E2ETestApp_6tt0djjd38yk4!App" },
     ]);
 
     [Fact]

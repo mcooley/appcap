@@ -15,7 +15,9 @@ Use `--target` to choose a configured target. If the target is already running, 
 
 ### Configuration file
 
-Each entry under `targets` maps a target name to an application. For now the only supported setting is `id`, the application's AUMID (Application User Model ID). The package family name is computed from the AUMID automatically.
+In `appcap.config.json`, each entry under `targets` maps a target name to an application.
+
+On Windows, run `Get-StartApps` to find the ID (AppUserModelID) of the application you wish to target and put that in the `id` property.
 
 ```json
 {
@@ -127,5 +129,3 @@ Starts or stops a recording session for the target.
 appcap --target calculator record start --output recording.mp4
 appcap --target calculator record stop
 ```
-
-Recording start/stop currently tracks recording lifecycle state for the target. MP4 encoding is planned separately.

@@ -6,9 +6,9 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 - Include a notion of "device" in the target configuration, to support targeting applications on remote devices
 - Add the ability to target unpackaged executables--match by executable path or PID
+- Support AUMIDs for unpackaged applications
 - Add graceful handling for game bootstrapper windows and child sign-in/pop-up windows. Capture any child windows separately and composite them into screenshots and recordings. Perhaps add a command to center/resize child windows as needed so they fully overlap the parent window.
 - Add the ability to target a monitor or the entire desktop
-- Add a "target list" command to make it easier to find an app's aumid or other targeting info
 
 ## Input
 
