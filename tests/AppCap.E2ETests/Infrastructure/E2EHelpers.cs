@@ -10,16 +10,7 @@ internal static class E2EHelpers
 {
     public static E2EContext CreateContext()
     {
-        if (!IsEnabled(Environment.GetEnvironmentVariable("APPCAP_E2E")))
-        {
-            throw new InvalidOperationException("Set APPCAP_E2E=1 to run end-to-end tests.");
-        }
-
-        string? executablePath = Environment.GetEnvironmentVariable("APPCAP_E2E_EXECUTABLE");
-        if (string.IsNullOrWhiteSpace(executablePath))
-        {
-            throw new InvalidOperationException("Set APPCAP_E2E_EXECUTABLE to a previously-built AppCap.exe path.");
-        }
+        string executablePath = GetRequiredExecutablePath();
 
         string fullExecutablePath = Path.GetFullPath(executablePath);
         if (!File.Exists(fullExecutablePath))
@@ -27,27 +18,51 @@ internal static class E2EHelpers
             throw new InvalidOperationException($"APPCAP_E2E_EXECUTABLE does not exist: {fullExecutablePath}");
         }
 
-        DeployConfig(fullExecutablePath);
+        string deployedExecutablePath = DeployExecutable(fullExecutablePath);
 
         string outputDirectory = Path.Combine(Path.GetTempPath(), "appcap-e2e", Guid.NewGuid().ToString("N"));
-        return new E2EContext("testapp", fullExecutablePath, outputDirectory);
+        return new E2EContext("testapp", deployedExecutablePath, outputDirectory);
     }
 
-    private static void DeployConfig(string executablePath)
+    internal static string? GetExecutablePathEnvironmentVariable() =>
+        Environment.GetEnvironmentVariable("APPCAP_E2E_EXECUTABLE");
+
+    internal static string GetRequiredExecutablePath()
     {
-        string source = Path.Combine(AppContext.BaseDirectory, "appcap.config.json");
-        if (!File.Exists(source))
+        string? executablePath = GetExecutablePathEnvironmentVariable();
+        if (string.IsNullOrWhiteSpace(executablePath))
         {
-            throw new InvalidOperationException($"E2E configuration file was not found: {source}");
+            throw new InvalidOperationException("Set APPCAP_E2E_EXECUTABLE to a previously-built AppCap.exe path to run end-to-end tests.");
         }
 
-        string? executableDirectory = Path.GetDirectoryName(executablePath);
-        if (string.IsNullOrEmpty(executableDirectory))
+        return executablePath;
+    }
+
+    private static string DeployExecutable(string executablePath)
+    {
+        string? sourceDirectory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrEmpty(sourceDirectory))
         {
             throw new InvalidOperationException($"Could not determine the directory for APPCAP_E2E_EXECUTABLE: {executablePath}");
         }
 
-        File.Copy(source, Path.Combine(executableDirectory, "appcap.config.json"), overwrite: true);
+        string configSource = Path.Combine(AppContext.BaseDirectory, "appcap.config.json");
+        if (!File.Exists(configSource))
+        {
+            throw new InvalidOperationException($"E2E configuration file was not found: {configSource}");
+        }
+
+        string deployDirectory = Path.Combine(Path.GetTempPath(), "appcap-e2e-bin", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(deployDirectory);
+
+        foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
+        {
+            File.Copy(filePath, Path.Combine(deployDirectory, Path.GetFileName(filePath)), overwrite: true);
+        }
+
+        File.Copy(configSource, Path.Combine(deployDirectory, "appcap.config.json"), overwrite: true);
+
+        return Path.Combine(deployDirectory, Path.GetFileName(executablePath));
     }
 
     public static async Task<ImageInfo> ReadImageInfoAsync(string path)
@@ -103,11 +118,6 @@ internal static class E2EHelpers
 
         return new ShellProperties(title, comments);
     }
-
-    public static bool IsEnabled(string? value) =>
-        string.Equals(value, "1", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
 
     public static void CloseTestAppProcesses()
     {

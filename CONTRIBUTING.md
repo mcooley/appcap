@@ -45,18 +45,16 @@ $publishDirectory = Join-Path $PWD 'publish/win-x64'
 dotnet publish src/AppCap/AppCap.csproj -c Release -r win-x64 -o $publishDirectory
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 
-$env:APPCAP_E2E = '1'
 $env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'AppCap.exe'
 try {
 	dotnet test tests/AppCap.E2ETests/AppCap.E2ETests.csproj
 }
 finally {
-	Remove-Item Env:\APPCAP_E2E -ErrorAction SilentlyContinue
 	Remove-Item Env:\APPCAP_E2E_EXECUTABLE -ErrorAction SilentlyContinue
 }
 ```
 
-`APPCAP_E2E_EXECUTABLE` can point to any previously-built `AppCap.exe`. E2E tests always invoke `appcap --target testapp`. The test harness deploys its own `appcap.config.json` (defining the `testapp` target) next to the executable before running.
+`APPCAP_E2E_EXECUTABLE` can point to any previously-built `AppCap.exe`; setting it is the only requirement to enable the E2E tests. E2E tests always invoke `appcap --target testapp`. Before running, the test harness copies the executable (and its published output directory) to a fresh temporary directory alongside its own `appcap.config.json` (defining the `testapp` target), so the original publish directory is left untouched.
 
 ### Purpose-Built Test App
 
