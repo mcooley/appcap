@@ -23,8 +23,8 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 ## Video Capture
 
 - Gracefully handle resize while recording is running
-- Limit recordings to 30 minutes (and have the recording background process gracefully save and exit), but add a time-limit option to start which can be used if a longer recording is needed
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
+- Add recording speed commands--set speed to 0.25x or 4x, for example
 - Reuse screenshot caption rendering infrastructure for video captions.
 - Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation

@@ -125,7 +125,7 @@ public sealed class CommandRunner : ICommandRunner
     private async Task RecordStartAsync(RecordStartCommand command, CancellationToken cancellationToken)
     {
         TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await recordingController.StartAsync(window, command.OutputPath, cancellationToken).ConfigureAwait(false);
+        await recordingController.StartAsync(window, command.OutputPath, command.TimeLimit, cancellationToken).ConfigureAwait(false);
     }
 
     private Task RecordStopAsync(RecordStopCommand command, CancellationToken cancellationToken) =>

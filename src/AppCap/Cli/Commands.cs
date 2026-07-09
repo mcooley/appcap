@@ -14,7 +14,7 @@ public sealed record ResizeCommand(TargetConfiguration Target, int Width, int He
 
 public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool IncludeCursor, string? Caption) : AppCapCommand(Target);
 
-public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath) : AppCapCommand(Target);
+public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath, TimeSpan TimeLimit) : AppCapCommand(Target);
 
 public sealed record RecordStopCommand(TargetConfiguration Target) : AppCapCommand(Target);
 
@@ -39,4 +39,3 @@ public enum HelpTopic
     Screenshot,
     Record,
 }
-

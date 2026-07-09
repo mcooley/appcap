@@ -25,6 +25,8 @@ internal sealed class RecordingSession : IDisposable
     private readonly BlockingCollection<Direct3D11CaptureFrame> frames = new(new ConcurrentQueue<Direct3D11CaptureFrame>());
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource captureCancellation;
+    private readonly CancellationTokenSource timeLimitCancellation = new();
+    private readonly TimeSpan timeLimit;
     private Task encodeTask = Task.CompletedTask;
     private Task completion = Task.CompletedTask;
     private Direct3D11CaptureFrame? startFrame;
@@ -32,10 +34,11 @@ internal sealed class RecordingSession : IDisposable
     private int stopDiscard;
     private bool disposed;
 
-    public RecordingSession(TargetWindow window, string outputPath, CancellationToken cancellationToken)
+    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
     {
         this.window = window;
         this.outputPath = Path.GetFullPath(outputPath);
+        this.timeLimit = timeLimit;
         recordingTarget = new RecordingCaptureTarget(window);
         captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
@@ -65,6 +68,7 @@ internal sealed class RecordingSession : IDisposable
         }
 
         completion = FinalizeWhenDoneAsync();
+        _ = StopAtTimeLimitAsync();
     }
 
     // Requests the recording stop (saving, or discarding when discard is true) and awaits
@@ -74,8 +78,7 @@ internal sealed class RecordingSession : IDisposable
     {
         if (Interlocked.CompareExchange(ref stopRequested, 1, 0) == 0)
         {
-            Volatile.Write(ref stopDiscard, discard ? 1 : 0);
-            SignalStop(discard);
+            RequestStop(discard);
         }
 
         await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -143,9 +146,45 @@ internal sealed class RecordingSession : IDisposable
         }
 
         disposed = true;
+        CancelTimeLimit();
+        timeLimitCancellation.Dispose();
         captureCancellation.Dispose();
         DisposeQueuedFrames();
         frames.Dispose();
+    }
+
+    private async Task StopAtTimeLimitAsync()
+    {
+        try
+        {
+            await Task.Delay(timeLimit, timeLimitCancellation.Token).ConfigureAwait(false);
+            if (Interlocked.CompareExchange(ref stopRequested, 1, 0) == 0)
+            {
+                RequestStop(discard: false);
+            }
+        }
+        catch (OperationCanceledException) when (timeLimitCancellation.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void RequestStop(bool discard)
+    {
+        Volatile.Write(ref stopDiscard, discard ? 1 : 0);
+        CancelTimeLimit();
+        SignalStop(discard);
+    }
+
+    private void CancelTimeLimit()
+    {
+        try
+        {
+            timeLimitCancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A concurrent completion may already have disposed the timer.
+        }
     }
 
     private async Task EncodeAsync(CancellationToken cancellationToken)

@@ -75,7 +75,12 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(request);
         MarkActivity();
 
-        RecordingSession session = new(BuildWindow(request), request.OutputPath, shutdown.Token);
+        if (request.TimeLimitSeconds <= 0)
+        {
+            throw new AppCapException("Recording time limit must be greater than zero.");
+        }
+
+        RecordingSession session = new(BuildWindow(request), request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), shutdown.Token);
         if (!sessions.TryAdd(request.TargetName, session))
         {
             session.Dispose();

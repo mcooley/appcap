@@ -68,6 +68,9 @@ internal sealed class RecordingStartRequest
 
     [JsonPropertyName("outputPath")]
     public string OutputPath { get; set; } = string.Empty;
+
+    [JsonPropertyName("timeLimitSeconds")]
+    public int TimeLimitSeconds { get; set; }
 }
 
 // Parameters for a call that operates on a single target's recording (status/stop/cancel).

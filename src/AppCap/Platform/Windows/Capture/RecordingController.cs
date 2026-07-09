@@ -13,10 +13,15 @@ public sealed class RecordingController : IRecordingController
 {
     private static readonly TimeSpan WorkerLaunchTimeout = TimeSpan.FromSeconds(10);
 
-    public async Task StartAsync(TargetWindow window, string outputPath, CancellationToken cancellationToken)
+    public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        if (timeLimit <= TimeSpan.Zero || timeLimit.TotalSeconds > int.MaxValue)
+        {
+            throw new AppCapException("Recording time limit must be between 1 second and 24,855 days.", ExitCodes.UsageError);
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         string fullOutputPath = Path.GetFullPath(outputPath);
@@ -35,6 +40,7 @@ public sealed class RecordingController : IRecordingController
             ApplicationId = window.Application.Id,
             WindowHandle = window.Handle,
             OutputPath = fullOutputPath,
+            TimeLimitSeconds = checked((int)timeLimit.TotalSeconds),
         };
 
         // The worker serializes concurrent starts for the same target and answers with a

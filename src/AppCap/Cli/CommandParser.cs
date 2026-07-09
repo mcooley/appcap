@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
+using System.Globalization;
 
 namespace AppCap;
 
@@ -88,7 +89,8 @@ public static class CommandParser
         {
             return ParseResult.Valid(new RecordStartCommand(
                 target,
-                result.GetRequiredValue(model.RecordOutputOption)));
+                result.GetRequiredValue(model.RecordOutputOption),
+                TimeSpan.FromMinutes(result.GetValue(model.RecordTimeLimitOption))));
         }
 
         if (command == model.RecordStopCommand)
@@ -167,6 +169,20 @@ public static class CommandParser
         return parsed;
     }
 
+    private static double ParseTimeLimitMinutes(ArgumentResult result)
+    {
+        string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double minutes) ||
+            minutes < (1d / 60d) ||
+            minutes > (int.MaxValue / 60d))
+        {
+            result.AddError("Invalid value for --time-limit.");
+            return 0;
+        }
+
+        return minutes;
+    }
+
     private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     private sealed class CommandLineModel
@@ -193,7 +209,8 @@ public static class CommandParser
             Command recordStartCommand,
             Command recordStopCommand,
             Command recordCancelCommand,
-            Option<string> recordOutputOption)
+            Option<string> recordOutputOption,
+            Option<double> recordTimeLimitOption)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
@@ -217,6 +234,7 @@ public static class CommandParser
             RecordStopCommand = recordStopCommand;
             RecordCancelCommand = recordCancelCommand;
             RecordOutputOption = recordOutputOption;
+            RecordTimeLimitOption = recordTimeLimitOption;
         }
 
         public RootCommand RootCommand { get; }
@@ -262,6 +280,8 @@ public static class CommandParser
         public Command RecordCancelCommand { get; }
 
         public Option<string> RecordOutputOption { get; }
+
+        public Option<double> RecordTimeLimitOption { get; }
 
         public static CommandLineModel Create()
         {
@@ -342,7 +362,13 @@ public static class CommandParser
                 return value;
             };
             Command recordStartCommand = new("start", "Starts recording the target window.");
+            Option<double> recordTimeLimitOption = new("--time-limit")
+            {
+                DefaultValueFactory = _ => 30,
+            };
+            recordTimeLimitOption.CustomParser = ParseTimeLimitMinutes;
             recordStartCommand.Add(recordOutputOption);
+            recordStartCommand.Add(recordTimeLimitOption);
             Command recordStopCommand = new("stop", "Stops recording the target window.");
             Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
             Command recordCommand = new("record", "Starts, stops, or cancels recording the target window.");
@@ -382,7 +408,8 @@ public static class CommandParser
                 recordStartCommand,
                 recordStopCommand,
                 recordCancelCommand,
-                recordOutputOption);
+                recordOutputOption,
+                recordTimeLimitOption);
         }
     }
 }

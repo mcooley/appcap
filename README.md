@@ -129,3 +129,10 @@ Starts or stops a recording session for the target.
 appcap --target calculator record start --output recording.mp4
 appcap --target calculator record stop
 ```
+
+Recordings automatically save and stop after 30 minutes. To allow a longer recording, set
+the limit in minutes (fractional minutes are supported):
+
+```powershell
+appcap --target calculator record start --output recording.mp4 --time-limit 90
+```

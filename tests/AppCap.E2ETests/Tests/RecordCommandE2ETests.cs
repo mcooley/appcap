@@ -68,6 +68,23 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task RecordTimeLimitSavesMp4File()
+    {
+        string path = Context.NewOutputPath("time-limited.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", path, "--time-limit", "0.05").AssertSuccess();
+        await Task.Delay(TimeSpan.FromSeconds(10));
+
+        CommandResult stopResult = Context.Run("record", "stop");
+        Assert.NotEqual(0, stopResult.ExitCode);
+        Assert.Contains("No recording is running", stopResult.StandardError, StringComparison.Ordinal);
+
+        await WaitForMp4FileAsync(path);
+        AssertMp4FileWasWritten(path);
+    }
+
+    [E2EFact]
     public async Task ClosingWindowWhileRecordingWritesMp4File()
     {
         string path = Context.NewOutputPath("closed-window.mp4");

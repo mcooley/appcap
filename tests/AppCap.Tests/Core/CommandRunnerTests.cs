@@ -122,11 +122,12 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4"), CancellationToken.None);
+        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45)), CancellationToken.None);
 
         Assert.Equal(Target, services.TargetResolver.RequestedTarget);
         Assert.Equal(services.Window, services.RecordingController.StartWindow);
         Assert.Equal("recording.mp4", services.RecordingController.OutputPath);
+        Assert.Equal(TimeSpan.FromMinutes(45), services.RecordingController.TimeLimit);
     }
 
     [Fact]
@@ -329,14 +330,17 @@ public sealed class CommandRunnerTests
 
         public string? OutputPath { get; private set; }
 
+        public TimeSpan? TimeLimit { get; private set; }
+
         public TargetConfiguration? StopTarget { get; private set; }
 
         public TargetConfiguration? CancelTarget { get; private set; }
 
-        public Task StartAsync(TargetWindow window, string outputPath, CancellationToken cancellationToken)
+        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
         {
             StartWindow = window;
             OutputPath = outputPath;
+            TimeLimit = timeLimit;
             return Task.CompletedTask;
         }
 

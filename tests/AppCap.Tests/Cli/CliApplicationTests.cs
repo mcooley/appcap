@@ -248,6 +248,44 @@ public sealed class CliApplicationTests
         RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
         Assert.Equal("testapp", command.Target.Name);
         Assert.Equal("recording.mp4", command.OutputPath);
+        Assert.Equal(TimeSpan.FromMinutes(30), command.TimeLimit);
+    }
+
+    [Fact]
+    public async Task RecordStartParsesFractionalTimeLimit()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--time-limit", "0.05"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
+        Assert.Equal(TimeSpan.FromSeconds(3), command.TimeLimit);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("nope")]
+    public async Task RecordStartRejectsInvalidTimeLimit(string timeLimit)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--time-limit", timeLimit],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Invalid value for --time-limit.", console.ErrorText, StringComparison.Ordinal);
     }
 
     [Fact]
