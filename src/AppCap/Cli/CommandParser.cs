@@ -81,7 +81,7 @@ public static class CommandParser
             return ParseResult.Valid(new ScreenshotCommand(
                 target,
                 result.GetRequiredValue(model.ScreenshotOutputOption),
-                result.GetValue(model.ScreenshotIncludeCursorOption),
+                result.GetValue(model.ScreenshotExcludeCursorOption),
                 NormalizeOptionalText(result.GetValue(model.ScreenshotCaptionOption))));
         }
 
@@ -90,7 +90,8 @@ public static class CommandParser
             return ParseResult.Valid(new RecordStartCommand(
                 target,
                 result.GetRequiredValue(model.RecordOutputOption),
-                TimeSpan.FromMinutes(result.GetValue(model.RecordTimeLimitOption))));
+                TimeSpan.FromMinutes(result.GetValue(model.RecordTimeLimitOption)),
+                result.GetValue(model.RecordExcludeCursorOption)));
         }
 
         if (command == model.RecordStopCommand)
@@ -203,14 +204,15 @@ public static class CommandParser
             Option<int> resizeHeightOption,
             Command screenshotCommand,
             Option<string> screenshotOutputOption,
-            Option<bool> screenshotIncludeCursorOption,
+            Option<bool> screenshotExcludeCursorOption,
             Option<string?> screenshotCaptionOption,
             Command recordCommand,
             Command recordStartCommand,
             Command recordStopCommand,
             Command recordCancelCommand,
             Option<string> recordOutputOption,
-            Option<double> recordTimeLimitOption)
+            Option<double> recordTimeLimitOption,
+            Option<bool> recordExcludeCursorOption)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
@@ -227,7 +229,7 @@ public static class CommandParser
             ResizeHeightOption = resizeHeightOption;
             ScreenshotCommand = screenshotCommand;
             ScreenshotOutputOption = screenshotOutputOption;
-            ScreenshotIncludeCursorOption = screenshotIncludeCursorOption;
+            ScreenshotExcludeCursorOption = screenshotExcludeCursorOption;
             ScreenshotCaptionOption = screenshotCaptionOption;
             RecordCommand = recordCommand;
             RecordStartCommand = recordStartCommand;
@@ -235,6 +237,7 @@ public static class CommandParser
             RecordCancelCommand = recordCancelCommand;
             RecordOutputOption = recordOutputOption;
             RecordTimeLimitOption = recordTimeLimitOption;
+            RecordExcludeCursorOption = recordExcludeCursorOption;
         }
 
         public RootCommand RootCommand { get; }
@@ -267,7 +270,7 @@ public static class CommandParser
 
         public Option<string> ScreenshotOutputOption { get; }
 
-        public Option<bool> ScreenshotIncludeCursorOption { get; }
+        public Option<bool> ScreenshotExcludeCursorOption { get; }
 
         public Option<string?> ScreenshotCaptionOption { get; }
 
@@ -282,6 +285,8 @@ public static class CommandParser
         public Option<string> RecordOutputOption { get; }
 
         public Option<double> RecordTimeLimitOption { get; }
+
+        public Option<bool> RecordExcludeCursorOption { get; }
 
         public static CommandLineModel Create()
         {
@@ -334,10 +339,10 @@ public static class CommandParser
                 return value;
             };
             Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the target window.");
-            Option<bool> screenshotIncludeCursorOption = new("--include-cursor");
+            Option<bool> screenshotExcludeCursorOption = new("--exclude-cursor");
             Option<string?> screenshotCaptionOption = new("--caption");
             screenshotCommand.Add(screenshotOutputOption);
-            screenshotCommand.Add(screenshotIncludeCursorOption);
+            screenshotCommand.Add(screenshotExcludeCursorOption);
             screenshotCommand.Add(screenshotCaptionOption);
 
             Option<string> recordOutputOption = new("--output")
@@ -367,8 +372,10 @@ public static class CommandParser
                 DefaultValueFactory = _ => 30,
             };
             recordTimeLimitOption.CustomParser = ParseTimeLimitMinutes;
+            Option<bool> recordExcludeCursorOption = new("--exclude-cursor");
             recordStartCommand.Add(recordOutputOption);
             recordStartCommand.Add(recordTimeLimitOption);
+            recordStartCommand.Add(recordExcludeCursorOption);
             Command recordStopCommand = new("stop", "Stops recording the target window.");
             Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
             Command recordCommand = new("record", "Starts, stops, or cancels recording the target window.");
@@ -402,14 +409,15 @@ public static class CommandParser
                 resizeHeightOption,
                 screenshotCommand,
                 screenshotOutputOption,
-                screenshotIncludeCursorOption,
+                screenshotExcludeCursorOption,
                 screenshotCaptionOption,
                 recordCommand,
                 recordStartCommand,
                 recordStopCommand,
                 recordCancelCommand,
                 recordOutputOption,
-                recordTimeLimitOption);
+                recordTimeLimitOption,
+                recordExcludeCursorOption);
         }
     }
 }

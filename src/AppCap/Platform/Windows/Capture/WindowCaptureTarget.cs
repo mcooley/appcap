@@ -1,6 +1,5 @@
 using AppCap;
 using AppCap.Protocol.Target;
-using System.Runtime.InteropServices;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
 using global::Windows.Graphics.DirectX.Direct3D11;
@@ -12,8 +11,7 @@ namespace AppCap.Windows;
 
 // Target that captures a single frame from a window in-process, used when no recording
 // is running for the target. It starts its own short-lived capture session, honours the
-// cursor request fully (the captured cursor plus an overlay marker), and returns the raw
-// frame pixels.
+// cursor request through the system compositor, and returns the raw frame pixels.
 internal sealed class WindowCaptureTarget : ITarget
 {
     private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
@@ -50,52 +48,7 @@ internal sealed class WindowCaptureTarget : ITarget
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
         using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, includeCursor, cancellationToken).ConfigureAwait(false);
 
-        if (includeCursor && TryGetCursorLocation(window, out float cursorX, out float cursorY))
-        {
-            using CursorRenderer cursorRenderer = new(cursorX, cursorY);
-            IDirect3DSurface cursorSurface = cursorRenderer.Render(frame.Surface);
-            try
-            {
-                return await FramePixels.ReadAsync(cursorSurface, capturedFrom, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                (cursorSurface as IDisposable)?.Dispose();
-            }
-        }
-
         return await FramePixels.ReadAsync(frame.Surface, capturedFrom, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static bool TryGetCursorLocation(TargetWindow window, out float x, out float y)
-    {
-        x = 0;
-        y = 0;
-        if (!PInvoke.GetCursorPos(out System.Drawing.Point cursorPosition))
-        {
-            return false;
-        }
-
-        int result = GetDwmExtendedFrameBounds(new HWND(window.Handle), out RECT bounds);
-        if (result is not 0)
-        {
-            return false;
-        }
-
-        x = cursorPosition.X - bounds.left;
-        y = cursorPosition.Y - bounds.top;
-        return x >= 0 && y >= 0 && x < bounds.Width && y < bounds.Height;
-    }
-
-    private static unsafe int GetDwmExtendedFrameBounds(HWND windowHandle, out RECT rect)
-    {
-        rect = default;
-        Span<byte> rectBytes = MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref rect, 1));
-        int result = PInvoke.DwmGetWindowAttribute(
-            windowHandle,
-            global::Windows.Win32.Graphics.Dwm.DWMWINDOWATTRIBUTE.DWMWA_EXTENDED_FRAME_BOUNDS,
-            rectBytes).Value;
-        return result;
     }
 
     private static async Task<Direct3D11CaptureFrame> CaptureFrameAsync(

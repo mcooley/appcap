@@ -28,7 +28,6 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 - Reuse screenshot caption rendering infrastructure for video captions.
 - Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation
-- Add an option to include/exclude cursor, just like screenshots. Consider including cursor by default
 - Double check that RedrawWindow is necessary and matches what reference screen capture tools do
 
 ## Audio Capture

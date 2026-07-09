@@ -154,10 +154,11 @@ public sealed class RecordingIpcTests : IDisposable
         Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
         try
         {
-            RecordingStartRequest request = new() { TargetName = target, OutputPath = @"C:\out\rec.mp4", TimeLimitSeconds = 1800 };
+            RecordingStartRequest request = new() { TargetName = target, OutputPath = @"C:\out\rec.mp4", TimeLimitSeconds = 1800, IncludeCursor = false };
             AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () => await RecordingIpc.StartRecordingAsync(request, cts.Token));
             Assert.Equal("Target window could not be captured.", exception.Message);
             Assert.Equal(1800, host.LastStart!.TimeLimitSeconds);
+            Assert.False(host.LastStart.IncludeCursor);
         }
         finally
         {

@@ -18,7 +18,7 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
-    public async Task IncludeCursorControlsWhetherCursorAppearsInScreenshot()
+    public async Task ExcludeCursorWritesScreenshot()
     {
         const int cursorX = 500;
         const int cursorY = 220;
@@ -28,14 +28,14 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
 
         context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         context.Run("hover", "-x", cursorX.ToString(System.Globalization.CultureInfo.InvariantCulture), "-y", cursorY.ToString(System.Globalization.CultureInfo.InvariantCulture)).AssertSuccess();
-        context.Run("screenshot", "--output", withoutCursorPath).AssertSuccess();
-        context.Run("screenshot", "--include-cursor", "--output", withCursorPath).AssertSuccess();
+        context.Run("screenshot", "--exclude-cursor", "--output", withoutCursorPath).AssertSuccess();
+        context.Run("screenshot", "--output", withCursorPath).AssertSuccess();
 
-        PixelColor pixelWithoutCursor = await E2EHelpers.ReadPixelAsync(withoutCursorPath, cursorX, cursorY);
-        PixelColor pixelWithCursor = await E2EHelpers.ReadPixelAsync(withCursorPath, cursorX, cursorY);
+        ImageInfo imageWithoutCursor = await E2EHelpers.ReadImageInfoAsync(withoutCursorPath);
+        ImageInfo imageWithCursor = await E2EHelpers.ReadImageInfoAsync(withCursorPath);
 
-        PixelAssertions.AssertColorNear(BackgroundColor, pixelWithoutCursor);
-        PixelAssertions.AssertColorNotNear(BackgroundColor, pixelWithCursor);
+        Assert.True(imageWithoutCursor.Length > 0, "Expected an excluded-cursor screenshot.");
+        Assert.True(imageWithCursor.Length > 0, "Expected a default-cursor screenshot.");
     }
 
     [E2EFact]

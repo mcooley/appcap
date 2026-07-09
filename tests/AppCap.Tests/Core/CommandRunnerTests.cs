@@ -109,7 +109,7 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ScreenshotCommand(Target, "test.png", IncludeCursor: true, Caption: "Test caption"), CancellationToken.None);
+        await runner.RunAsync(new ScreenshotCommand(Target, "test.png", ExcludeCursor: false, Caption: "Test caption"), CancellationToken.None);
 
         Assert.Equal("test.png", services.ScreenshotCapture.OutputPath);
         Assert.True(services.ScreenshotCapture.IncludeCursor);
@@ -122,12 +122,13 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45)), CancellationToken.None);
+        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45), ExcludeCursor: false), CancellationToken.None);
 
         Assert.Equal(Target, services.TargetResolver.RequestedTarget);
         Assert.Equal(services.Window, services.RecordingController.StartWindow);
         Assert.Equal("recording.mp4", services.RecordingController.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(45), services.RecordingController.TimeLimit);
+        Assert.True(services.RecordingController.IncludeCursor);
     }
 
     [Fact]
@@ -332,15 +333,18 @@ public sealed class CommandRunnerTests
 
         public TimeSpan? TimeLimit { get; private set; }
 
+        public bool? IncludeCursor { get; private set; }
+
         public TargetConfiguration? StopTarget { get; private set; }
 
         public TargetConfiguration? CancelTarget { get; private set; }
 
-        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
+        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
         {
             StartWindow = window;
             OutputPath = outputPath;
             TimeLimit = timeLimit;
+            IncludeCursor = includeCursor;
             return Task.CompletedTask;
         }
 

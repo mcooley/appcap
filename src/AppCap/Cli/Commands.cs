@@ -12,9 +12,9 @@ public sealed record TypeCommand(TargetConfiguration Target, IReadOnlyList<Keybo
 
 public sealed record ResizeCommand(TargetConfiguration Target, int Width, int Height) : AppCapCommand(Target);
 
-public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool IncludeCursor, string? Caption) : AppCapCommand(Target);
+public sealed record ScreenshotCommand(TargetConfiguration Target, string OutputPath, bool ExcludeCursor, string? Caption) : AppCapCommand(Target);
 
-public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath, TimeSpan TimeLimit) : AppCapCommand(Target);
+public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath, TimeSpan TimeLimit, bool ExcludeCursor) : AppCapCommand(Target);
 
 public sealed record RecordStopCommand(TargetConfiguration Target) : AppCapCommand(Target);
 

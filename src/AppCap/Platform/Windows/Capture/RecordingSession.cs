@@ -27,6 +27,7 @@ internal sealed class RecordingSession : IDisposable
     private readonly CancellationTokenSource captureCancellation;
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TimeSpan timeLimit;
+    private readonly bool includeCursor;
     private Task encodeTask = Task.CompletedTask;
     private Task completion = Task.CompletedTask;
     private Direct3D11CaptureFrame? startFrame;
@@ -34,11 +35,12 @@ internal sealed class RecordingSession : IDisposable
     private int stopDiscard;
     private bool disposed;
 
-    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
+    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
     {
         this.window = window;
         this.outputPath = Path.GetFullPath(outputPath);
         this.timeLimit = timeLimit;
+        this.includeCursor = includeCursor;
         recordingTarget = new RecordingCaptureTarget(window);
         captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
@@ -246,7 +248,7 @@ internal sealed class RecordingSession : IDisposable
         item.Closed += OnClosed;
         try
         {
-            session.IsCursorCaptureEnabled = false;
+            session.IsCursorCaptureEnabled = includeCursor;
             session.StartCapture();
             await WaitForFirstFrameAsync(cancellationToken).ConfigureAwait(false);
             await EncodeCaptureFramesAsync(item.Size.Width, item.Size.Height, cancellationToken).ConfigureAwait(false);

@@ -10,10 +10,8 @@ namespace AppCap.Windows;
 
 // Target that serves frames from a recording's live capture session, used by the
 // recording worker so a screenshot taken while recording never starts a second capture
-// session. It reads the pixels of the next frame the recording produces. The cursor
-// request is ignored on this path: the recording session captures with the cursor
-// disabled, and reading the frame on the capture callback thread avoids racing the
-// encoder for the shared Direct3D context.
+// session. It reads the pixels of the next frame the recording produces. Reading on the
+// capture callback thread avoids racing the encoder for the shared Direct3D context.
 internal sealed class RecordingCaptureTarget : ITarget
 {
     private static readonly TimeSpan ScreenshotTimeout = TimeSpan.FromSeconds(10);

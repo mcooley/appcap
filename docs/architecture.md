@@ -188,5 +188,5 @@ further restructuring.
 | Shared protocol primitives | `src/AppCap/Protocol` (`JsonRpc`, `JsonRpcCodec`, `DuplexStream`, `InProcDuplexTransport`) |
 | Client↔Worker protocol | `src/AppCap/Protocol` (`WorkerProtocol`), `RecordingIpc` |
 | Worker↔Target protocol | `src/AppCap/Protocol` (`TargetProtocol`, `TargetServer`, `ITarget`), documented in `docs/target-protocol.md` |
-| Worker (encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`WorkerHost`, `RecordingSession`, `ScreenshotWriter`, `CaptionRenderer`, `CursorRenderer`) |
+| Worker (encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`WorkerHost`, `RecordingSession`, `ScreenshotWriter`, `CaptionRenderer`) |
 | Target (OS capture + input) | `src/AppCap/Platform/Windows/Capture` (`WindowCaptureTarget`, `RecordingCaptureTarget`, Graphics Capture / D3D helpers), `src/AppCap/Platform/Windows/Input` |

@@ -198,21 +198,38 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
-    public async Task ScreenshotParsesIncludeCursor()
+    public async Task ScreenshotIncludesCursorByDefault()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["screenshot", "--include-cursor", "--output", "shot.png"],
+            ["screenshot", "--output", "shot.png"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         ScreenshotCommand command = Assert.IsType<ScreenshotCommand>(runner.Command);
-        Assert.True(command.IncludeCursor);
+        Assert.False(command.ExcludeCursor);
         Assert.Equal("shot.png", command.OutputPath);
+    }
+
+    [Fact]
+    public async Task ScreenshotParsesExcludeCursor()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["screenshot", "--exclude-cursor", "--output", "shot.png"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        ScreenshotCommand command = Assert.IsType<ScreenshotCommand>(runner.Command);
+        Assert.True(command.ExcludeCursor);
     }
 
     [Fact]
@@ -249,6 +266,24 @@ public sealed class CliApplicationTests
         Assert.Equal("testapp", command.Target.Name);
         Assert.Equal("recording.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(30), command.TimeLimit);
+        Assert.False(command.ExcludeCursor);
+    }
+
+    [Fact]
+    public async Task RecordStartParsesExcludeCursor()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--exclude-cursor"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
+        Assert.True(command.ExcludeCursor);
     }
 
     [Fact]

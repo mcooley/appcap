@@ -107,11 +107,7 @@ Captures the target window as a PNG.
 appcap --target calculator screenshot --output shot.png
 ```
 
-Optional cursor capture:
-
-```powershell
-appcap --target calculator screenshot --include-cursor --output shot.png
-```
+Use `--exclude-cursor` to omit the cursor from a screenshot.
 
 Optional caption overlay:
 
@@ -136,3 +132,5 @@ the limit in minutes (fractional minutes are supported):
 ```powershell
 appcap --target calculator record start --output recording.mp4 --time-limit 90
 ```
+
+Use `--exclude-cursor` with `record start` to omit the cursor from a recording.

@@ -71,6 +71,9 @@ internal sealed class RecordingStartRequest
 
     [JsonPropertyName("timeLimitSeconds")]
     public int TimeLimitSeconds { get; set; }
+
+    [JsonPropertyName("includeCursor")]
+    public bool IncludeCursor { get; set; } = true;
 }
 
 // Parameters for a call that operates on a single target's recording (status/stop/cancel).

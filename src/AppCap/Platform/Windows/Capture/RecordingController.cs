@@ -13,7 +13,7 @@ public sealed class RecordingController : IRecordingController
 {
     private static readonly TimeSpan WorkerLaunchTimeout = TimeSpan.FromSeconds(10);
 
-    public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, CancellationToken cancellationToken)
+    public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -41,6 +41,7 @@ public sealed class RecordingController : IRecordingController
             WindowHandle = window.Handle,
             OutputPath = fullOutputPath,
             TimeLimitSeconds = checked((int)timeLimit.TotalSeconds),
+            IncludeCursor = includeCursor,
         };
 
         // The worker serializes concurrent starts for the same target and answers with a

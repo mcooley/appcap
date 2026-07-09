@@ -68,6 +68,27 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task ExcludeCursorWritesRecording()
+    {
+        string withCursorPath = Context.NewOutputPath("with-cursor.mp4");
+        string withoutCursorPath = Context.NewOutputPath("without-cursor.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", withCursorPath).AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(withCursorPath);
+
+        Context.Run("record", "start", "--output", withoutCursorPath, "--exclude-cursor").AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(withoutCursorPath);
+
+        AssertMp4FileWasWritten(withCursorPath);
+        AssertMp4FileWasWritten(withoutCursorPath);
+    }
+
+    [E2EFact]
     public async Task RecordTimeLimitSavesMp4File()
     {
         string path = Context.NewOutputPath("time-limited.mp4");
