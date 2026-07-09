@@ -22,15 +22,14 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Video Capture
 
-- Ensure that only one recording is happening at a time
-  - But it is acceptable to have multiple recordings targeting different applications
 - Gracefully handle resize while recording is running
 - Limit recordings to 30 minutes (and have the recording background process gracefully save and exit), but add a time-limit option to start which can be used if a longer recording is needed
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
 - Reuse screenshot caption rendering infrastructure for video captions.
 - Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation
-- Add an option to include/exclude cursor, just like screenshots
+- Add an option to include/exclude cursor, just like screenshots. Consider including cursor by default
+- Double check that RedrawWindow is necessary and matches what reference screen capture tools do
 
 ## Audio Capture
 - Capture loopback audio from the targeted process and include it in the video
@@ -43,7 +42,6 @@ See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔
 - Build out **remote targets** end-to-end: configuring a remote target in the config file, discovering/authenticating its endpoint, a concrete remote transport binding (for example TCP or WebSocket), and a `RemoteTarget : ITarget` client.
 - Define the optimized frame-streaming binding of the target protocol for remote **video** capture (in-proc uses direct GPU surface handoff today).
 - Negotiate/validate `TargetProtocol.Version` between worker and target so mismatches are rejected cleanly.
-- Consolidate to a single machine-wide worker that services multiple targets/recordings concurrently (still launched just-in-time and self-terminating), instead of one worker process per recording.
 
 ## Platform Support
 

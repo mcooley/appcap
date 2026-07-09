@@ -40,13 +40,14 @@ Lifecycle:
 
 - The worker is **launched just-in-time** by a client when one is needed. It is **not**
   a persistent daemon.
-- The worker **exits when its work is complete**. Every long-running operation has a
-  **timeout** (for example, a recording has a maximum duration) so a worker never runs
-  indefinitely, even if a client goes away without stopping it.
-- There is conceptually **one worker per machine**, and a worker can **service multiple
-  targets**. (Today a worker is spawned per recording; consolidating to a single
-  machine-wide worker that multiplexes targets is a TODO — see
-  [Not yet built](#not-yet-built).)
+- There is **one worker per machine (per user)**, and that single worker **multiplexes
+  multiple targets/recordings concurrently**. A client that needs a worker first pings
+  the well-known per-user pipe; if no worker answers it takes a launch lock, starts one
+  worker process, and waits for it to become reachable. Subsequent clients reuse the same
+  worker. Each recording runs as an independent `RecordingSession` keyed by target name.
+- The worker **self-terminates when idle**. When it has no active sessions for an idle
+  interval it exits, so a worker never runs indefinitely even if clients go away without
+  stopping their recordings.
 
 When no long-running background work is required (for example, taking a single
 screenshot while nothing is recording), the client **hosts the worker in its own
@@ -81,8 +82,8 @@ protocols.
   `recording.cancel`, and `screenshot` (capture a frame, render an optional caption, and
   save the file). The worker does the work and returns a small acknowledgement.
 - **Code:** `WorkerProtocol` / `WorkerMethods` under `src/AppCap/Protocol`, driven by the
-  client through `RecordingIpc` and served by the worker (the recording worker over its
-  pipe, or the in-proc worker host).
+  client through `RecordingIpc` and served by the worker (`WorkerHost` over its pipe, or
+  the in-proc `InProcScreenshotHost`).
 
 ### Worker ↔ Target
 
@@ -152,15 +153,17 @@ caption and writes the output file.
 
 ### `appcap record start` / `stop`
 
-1. **Client** launches a **worker** process just-in-time and waits until it confirms it
-   is recording, then exits.
-2. The **worker** runs an in-proc **`RecordingCaptureTarget`**, feeds its surfaces
-   directly into the media encoder (the optimized in-proc frame handoff), and serves
-   `recording.status` / `recording.stop` / `recording.cancel` / `screenshot` over its
-   pipe.
+1. **Client** ensures the machine-wide **worker** is running (ping the per-user pipe;
+   launch one under a lock if none answers), then sends `recording.start` for its target
+   and exits once the worker confirms the recording is live.
+2. The **worker** creates a `RecordingSession` for that target, running an in-proc
+   **`RecordingCaptureTarget`** whose surfaces feed directly into the media encoder (the
+   optimized in-proc frame handoff). One worker can host many such sessions at once; it
+   serves `recording.status` / `recording.stop` / `recording.cancel` / `screenshot`
+   (each keyed by target name) over its pipe.
 3. A later **client** (`record stop`) connects over the pipe and asks the worker to
-   finalize and save. The worker also self-terminates on its recording timeout if no one
-   stops it.
+   finalize (or discard) that target's recording. When the worker has no active sessions
+   for its idle interval it self-terminates.
 
 ## Not yet built (TODO)
 
@@ -174,9 +177,6 @@ further restructuring.
 - **Input injection and window control under the target protocol:** these are target
   responsibilities but currently run as direct in-proc OS calls. They will be moved
   behind `ITarget` / the target protocol so they are remotable too.
-- **A single machine-wide worker multiplexing targets:** today a worker is spawned per
-  recording. A consolidated worker that services multiple targets/recordings
-  concurrently (still just-in-time and self-terminating) is future work.
 - **Protocol version negotiation:** `TargetProtocol.Version` is published but not yet
   negotiated/validated between worker and target.
 
@@ -188,5 +188,5 @@ further restructuring.
 | Shared protocol primitives | `src/AppCap/Protocol` (`JsonRpc`, `JsonRpcCodec`, `DuplexStream`, `InProcDuplexTransport`) |
 | Client↔Worker protocol | `src/AppCap/Protocol` (`WorkerProtocol`), `RecordingIpc` |
 | Worker↔Target protocol | `src/AppCap/Protocol` (`TargetProtocol`, `TargetServer`, `ITarget`), documented in `docs/target-protocol.md` |
-| Worker (encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`RecordingWorker`, `ScreenshotWriter`, `CaptionRenderer`, `CursorRenderer`) |
+| Worker (encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`WorkerHost`, `RecordingSession`, `ScreenshotWriter`, `CaptionRenderer`, `CursorRenderer`) |
 | Target (OS capture + input) | `src/AppCap/Platform/Windows/Capture` (`WindowCaptureTarget`, `RecordingCaptureTarget`, Graphics Capture / D3D helpers), `src/AppCap/Platform/Windows/Input` |

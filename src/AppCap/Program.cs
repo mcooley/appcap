@@ -7,9 +7,9 @@ using WinRT;
 _ = PInvoke.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 ComWrappersSupport.InitializeComWrappers();
 
-if (RecordingWorker.IsWorkerInvocation(args))
+if (WorkerHost.IsWorkerInvocation(args))
 {
-	return await RecordingWorker.RunAsync(args, CancellationToken.None).ConfigureAwait(false);
+	return await WorkerHost.RunAsync(args, CancellationToken.None).ConfigureAwait(false);
 }
 
 SystemConsole console = new();

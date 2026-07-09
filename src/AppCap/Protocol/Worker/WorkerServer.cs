@@ -2,91 +2,143 @@ using System.Text.Json;
 
 namespace AppCap.Protocol.Worker;
 
-// Server side of the **worker protocol** (client <-> worker). Handles the request kinds a
-// worker answers immediately (recording.status and screenshot) by delegating to an
-// IWorkerService, and owns the JSON-RPC framing so that a worker hosted in-proc over a
-// DuplexStream and a recording worker over a named pipe speak an identical wire protocol.
-// Recording lifecycle methods (stop/cancel) are not handled here: only the recording
-// worker implements them, because it defers their response until the recording is
-// finalized.
+// Server side of the **worker protocol** (client <-> worker). Dispatches every worker
+// method to an IWorkerHost and owns the JSON-RPC framing, so that the machine-wide worker
+// over a named pipe and a worker hosted in-proc over a DuplexStream speak an identical wire
+// protocol. Because the host awaits real work before returning, the responses for
+// recording.start/stop/cancel are naturally deferred until the recording is confirmed or
+// finalized — no special transfer mechanism is needed.
 internal static class WorkerServer
 {
     // Reads worker-protocol requests from the stream and answers them until the peer
     // closes the connection. Used by workers (such as the in-proc worker host) that serve
-    // status and screenshot requests only.
-    public static async Task ServeAsync(Stream stream, IWorkerService service, CancellationToken cancellationToken)
+    // a short sequence of requests over a single duplex stream.
+    public static async Task ServeAsync(Stream stream, IWorkerHost host, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            JsonRpcRequest? request;
-            try
-            {
-                request = await JsonRpcCodec.ReadRequestAsync(stream, cancellationToken).ConfigureAwait(false);
-            }
-            catch (JsonException)
-            {
-                await JsonRpcCodec.WriteResponseAsync(
-                    stream,
-                    JsonRpcCodec.CreateError(null, JsonRpcErrorCodes.ParseError, "Invalid JSON-RPC request."),
-                    cancellationToken).ConfigureAwait(false);
-                continue;
-            }
-
-            if (request is null)
+            if (!await HandleConnectionAsync(stream, host, cancellationToken).ConfigureAwait(false))
             {
                 return;
             }
-
-            await HandleAsync(stream, request, service, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    // Answers a single status, screenshot, or unknown-method request by writing its
-    // JSON-RPC response to the stream. Returns false for methods this dispatcher does not
-    // own (stop/cancel), leaving the caller to handle them.
-    public static async Task<bool> HandleAsync(Stream stream, JsonRpcRequest request, IWorkerService service, CancellationToken cancellationToken)
+    // Reads and answers a single worker-protocol request from the stream. Returns false
+    // when the peer closed the stream without sending a request (nothing more to serve),
+    // true after a request was answered.
+    public static async Task<bool> HandleConnectionAsync(Stream stream, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        JsonRpcRequest? request;
+        try
+        {
+            request = await JsonRpcCodec.ReadRequestAsync(stream, cancellationToken).ConfigureAwait(false);
+        }
+        catch (JsonException)
+        {
+            await JsonRpcCodec.WriteResponseAsync(
+                stream,
+                JsonRpcCodec.CreateError(null, JsonRpcErrorCodes.ParseError, "Invalid JSON-RPC request."),
+                cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        if (request is null)
+        {
+            return false;
+        }
+
+        JsonRpcResponse response = await DispatchAsync(request, host, cancellationToken).ConfigureAwait(false);
+        await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task<JsonRpcResponse> DispatchAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
     {
         switch (request.Method)
         {
-            case WorkerMethods.RecordingStatus:
-                await JsonRpcCodec.WriteResponseAsync(
-                    stream,
-                    JsonRpcCodec.CreateSuccess(request.Id, new RecordingStatusResult { Recording = service.IsRecording }, WorkerProtocolJsonContext.Default.RecordingStatusResult),
-                    cancellationToken).ConfigureAwait(false);
-                return true;
+            case WorkerMethods.Ping:
+                host.Ping();
+                return JsonRpcCodec.CreateSuccess(request.Id, new PingResult { Ok = true }, WorkerProtocolJsonContext.Default.PingResult);
 
-            case WorkerMethods.Screenshot:
-                await HandleScreenshotAsync(stream, request, service, cancellationToken).ConfigureAwait(false);
-                return true;
+            case WorkerMethods.RecordingStart:
+                return await StartAsync(request, host, cancellationToken).ConfigureAwait(false);
+
+            case WorkerMethods.RecordingStatus:
+            {
+                TargetRequest parameters = ReadTarget(request);
+                return JsonRpcCodec.CreateSuccess(
+                    request.Id,
+                    new RecordingStatusResult { Recording = host.IsRecording(parameters.TargetName) },
+                    WorkerProtocolJsonContext.Default.RecordingStatusResult);
+            }
 
             case WorkerMethods.RecordingStop:
+                return await StopAsync(request, host, discard: false, cancellationToken).ConfigureAwait(false);
+
             case WorkerMethods.RecordingCancel:
-                return false;
+                return await StopAsync(request, host, discard: true, cancellationToken).ConfigureAwait(false);
+
+            case WorkerMethods.Screenshot:
+                return await ScreenshotAsync(request, host, cancellationToken).ConfigureAwait(false);
 
             default:
-                await JsonRpcCodec.WriteResponseAsync(
-                    stream,
-                    JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Unknown method '{request.Method}'."),
-                    cancellationToken).ConfigureAwait(false);
-                return true;
+                return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Unknown method '{request.Method}'.");
         }
     }
 
-    private static async Task HandleScreenshotAsync(Stream stream, JsonRpcRequest request, IWorkerService service, CancellationToken cancellationToken)
+    private static async Task<JsonRpcResponse> StartAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
     {
-        ScreenshotRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.ScreenshotRequest) ?? new ScreenshotRequest();
-
-        JsonRpcResponse response;
+        RecordingStartRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.RecordingStartRequest) ?? new RecordingStartRequest();
         try
         {
-            await service.CaptureScreenshotAsync(parameters, cancellationToken).ConfigureAwait(false);
-            response = JsonRpcCodec.CreateSuccess(request.Id, new ScreenshotResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.ScreenshotResult);
+            await host.StartRecordingAsync(parameters, cancellationToken).ConfigureAwait(false);
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            response = JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.CaptureFailed, exception.Message);
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.RecordingFailed, exception.Message);
         }
-
-        await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
     }
+
+    private static async Task<JsonRpcResponse> StopAsync(JsonRpcRequest request, IWorkerHost host, bool discard, CancellationToken cancellationToken)
+    {
+        TargetRequest parameters = ReadTarget(request);
+        try
+        {
+            bool stopped = await host.StopRecordingAsync(parameters.TargetName, discard, cancellationToken).ConfigureAwait(false);
+            if (!stopped)
+            {
+                return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.NotRecording, $"No recording is running for target '{parameters.TargetName}'.");
+            }
+
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.RecordingFailed, exception.Message);
+        }
+    }
+
+    private static async Task<JsonRpcResponse> ScreenshotAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        ScreenshotRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.ScreenshotRequest) ?? new ScreenshotRequest();
+        try
+        {
+            bool captured = await host.CaptureScreenshotAsync(parameters, cancellationToken).ConfigureAwait(false);
+            if (!captured)
+            {
+                return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.NotRecording, $"No recording is running for target '{parameters.TargetName}'.");
+            }
+
+            return JsonRpcCodec.CreateSuccess(request.Id, new ScreenshotResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.ScreenshotResult);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.CaptureFailed, exception.Message);
+        }
+    }
+
+    private static TargetRequest ReadTarget(JsonRpcRequest request) =>
+        JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.TargetRequest) ?? new TargetRequest();
 }

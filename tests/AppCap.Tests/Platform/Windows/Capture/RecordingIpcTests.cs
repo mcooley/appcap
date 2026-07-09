@@ -1,3 +1,4 @@
+using AppCap.Protocol.Worker;
 using AppCap.Windows;
 using System.IO.Pipes;
 using System.Security.AccessControl;
@@ -5,16 +6,25 @@ using System.Security.Principal;
 
 namespace AppCap.Tests;
 
-public sealed class RecordingIpcTests
+// Exercises the client and server halves of the worker IPC over the real named-pipe
+// transport, against a fake worker host. Uses a unique pipe name per test (via the
+// test-only override) and runs serialized in the WorkerPipe collection so tests never
+// contend for the same machine-wide pipe.
+[Collection(WorkerPipeSerialization.Name)]
+public sealed class RecordingIpcTests : IDisposable
 {
     private static readonly TimeSpan ShortLockTimeout = TimeSpan.FromMilliseconds(200);
+
+    public RecordingIpcTests() => RecordingIpc.PipeNameOverride = "appcap-test-" + Guid.NewGuid().ToString("N");
+
+    public void Dispose() => RecordingIpc.PipeNameOverride = null;
 
     [Fact]
     public void ServerPipeIsRestrictedToCurrentUser()
     {
         string pipeName = "appcap-test-" + Guid.NewGuid().ToString("N");
 
-        using NamedPipeServerStream pipe = RecordingIpc.CreateServerStream(pipeName);
+        using NamedPipeServerStream pipe = RecordingIpc.CreateServerStream(pipeName, firstInstance: true);
 
         PipeSecurity security = pipe.GetAccessControl();
         AuthorizationRuleCollection rules = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier));
@@ -27,31 +37,19 @@ public sealed class RecordingIpcTests
     }
 
     [Fact]
-    public async Task StartLockIsExclusiveUntilReleased()
+    public async Task LaunchLockIsExclusiveUntilReleased()
     {
-        string target = Guid.NewGuid().ToString();
-
-        RecordingStartLock? first = await RecordingIpc.TryAcquireStartLockAsync(target, ShortLockTimeout, CancellationToken.None);
+        WorkerLaunchLock? first = await RecordingIpc.TryAcquireLaunchLockAsync(ShortLockTimeout, CancellationToken.None);
         Assert.NotNull(first);
 
-        RecordingStartLock? second = await RecordingIpc.TryAcquireStartLockAsync(target, ShortLockTimeout, CancellationToken.None);
+        WorkerLaunchLock? second = await RecordingIpc.TryAcquireLaunchLockAsync(ShortLockTimeout, CancellationToken.None);
         Assert.Null(second);
 
         first!.Dispose();
 
-        RecordingStartLock? third = await RecordingIpc.TryAcquireStartLockAsync(target, ShortLockTimeout, CancellationToken.None);
+        WorkerLaunchLock? third = await RecordingIpc.TryAcquireLaunchLockAsync(ShortLockTimeout, CancellationToken.None);
         Assert.NotNull(third);
         third!.Dispose();
-    }
-
-    [Fact]
-    public async Task StartLockIsNotSharedAcrossTargets()
-    {
-        using RecordingStartLock? first = await RecordingIpc.TryAcquireStartLockAsync(Guid.NewGuid().ToString(), ShortLockTimeout, CancellationToken.None);
-        using RecordingStartLock? second = await RecordingIpc.TryAcquireStartLockAsync(Guid.NewGuid().ToString(), ShortLockTimeout, CancellationToken.None);
-
-        Assert.NotNull(first);
-        Assert.NotNull(second);
     }
 
     [Fact]
@@ -63,120 +61,172 @@ public sealed class RecordingIpcTests
     }
 
     [Fact]
-    public async Task ClientReachesListenerForTheSameTarget()
+    public async Task PingReturnsFalseWhenNoWorkerIsRunning()
     {
-        string target = Guid.NewGuid().ToString();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
-
-        // A status check for the same target finds the running listener.
-        Assert.True(await RecordingIpc.IsRecordingAsync(target, cts.Token));
-
-        // A stop for the same target is delivered to that listener and acknowledged.
-        Task<bool> stopClient = RecordingIpc.SendStopAsync(target, cts.Token);
-        using RecordingIpc.RecordingStopRequest stopRequest = await waitForStop;
-        Assert.Equal(RecordingIpc.RecordingStopMode.Save, stopRequest.Mode);
-        await stopRequest.AcknowledgeAsync(cts.Token);
-
-        Assert.True(await stopClient);
+        Assert.False(await RecordingIpc.PingAsync(CancellationToken.None));
     }
 
     [Fact]
-    public async Task CancelReachesListenerAsDiscardRequest()
+    public async Task ClientReachesWorkerForTarget()
     {
         string target = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [target]);
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            Assert.True(await RecordingIpc.PingAsync(cts.Token));
+            Assert.True(await RecordingIpc.IsRecordingAsync(target, cts.Token));
 
-        // A cancel for the same target is delivered to that listener as a discard request.
-        Task<bool> cancelClient = RecordingIpc.SendCancelAsync(target, cts.Token);
-        using RecordingIpc.RecordingStopRequest cancelRequest = await waitForStop;
-        Assert.Equal(RecordingIpc.RecordingStopMode.Discard, cancelRequest.Mode);
-        await cancelRequest.AcknowledgeAsync(cts.Token);
-
-        Assert.True(await cancelClient);
+            Assert.True(await RecordingIpc.SendStopAsync(target, cts.Token));
+            Assert.False(host.IsRecording(target));
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
     }
 
     [Fact]
-    public async Task ListenerReportsCancelFailureToClient()
+    public async Task CancelIsDeliveredAsDiscard()
     {
         string target = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [target]);
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
-
-        Task<bool> cancelClient = RecordingIpc.SendCancelAsync(target, cts.Token);
-        using RecordingIpc.RecordingStopRequest cancelRequest = await waitForStop;
-        await cancelRequest.FailAsync("cancel failed", cts.Token);
-
-        AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () => await cancelClient);
-        Assert.Equal("cancel failed", exception.Message);
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            Assert.True(await RecordingIpc.SendCancelAsync(target, cts.Token));
+            Assert.True(host.LastStopDiscard);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
     }
 
     [Fact]
-    public async Task ListenerForOneTargetIsNotVisibleToOtherTargets()
+    public async Task StopForUnknownTargetReturnsFalse()
     {
-        string listeningTarget = Guid.NewGuid().ToString();
+        string recordingTarget = Guid.NewGuid().ToString();
         string otherTarget = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [recordingTarget]);
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(listeningTarget, new FakeWorkerService(isRecording: true));
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            Assert.True(await RecordingIpc.IsRecordingAsync(recordingTarget, cts.Token));
+            Assert.False(await RecordingIpc.IsRecordingAsync(otherTarget, cts.Token));
 
-        Assert.True(await RecordingIpc.IsRecordingAsync(listeningTarget, cts.Token));
-        Assert.False(await RecordingIpc.IsRecordingAsync(otherTarget, cts.Token));
-
-        // Stop the listener so its waiting task completes.
-        Task<bool> stopClient = RecordingIpc.SendStopAsync(listeningTarget, cts.Token);
-        using RecordingIpc.RecordingStopRequest stopRequest = await waitForStop;
-        await stopRequest.AcknowledgeAsync(cts.Token);
-        Assert.True(await stopClient);
+            // A stop for a target the worker is not recording is "nothing to stop", not a failure.
+            Assert.False(await RecordingIpc.SendStopAsync(otherTarget, cts.Token));
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
     }
 
     [Fact]
-    public async Task ListenerReportsStopFailureToClient()
+    public async Task WorkerReportsStopFailureToClient()
     {
         string target = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [target]) { StopFailWith = "capture failed" };
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
-
-        Task<bool> stopClient = RecordingIpc.SendStopAsync(target, cts.Token);
-        using RecordingIpc.RecordingStopRequest stopRequest = await waitForStop;
-        await stopRequest.FailAsync("capture failed", cts.Token);
-
-        AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () => await stopClient);
-        Assert.Equal("capture failed", exception.Message);
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () => await RecordingIpc.SendStopAsync(target, cts.Token));
+            Assert.Equal("capture failed", exception.Message);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
     }
 
     [Fact]
-    public async Task CancellingListenerReleasesItsPipe()
+    public async Task WorkerReportsStartFailureToClient()
     {
         string target = Guid.NewGuid().ToString();
-        using CancellationTokenSource probe = new(TimeSpan.FromSeconds(15));
+        FakeWorkerHost host = new() { StartFailWith = "Target window could not be captured." };
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            RecordingStartRequest request = new() { TargetName = target, OutputPath = @"C:\out\rec.mp4" };
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () => await RecordingIpc.StartRecordingAsync(request, cts.Token));
+            Assert.Equal("Target window could not be captured.", exception.Message);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
 
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        using CancellationTokenSource firstWait = new();
-        Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(firstWait.Token);
+    [Fact]
+    public async Task ConcurrentRequestsAreNotBlockedByASlowStop()
+    {
+        string slowTarget = Guid.NewGuid().ToString();
+        string otherTarget = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [slowTarget, otherTarget]) { BlockStopForTarget = slowTarget };
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            // Begin a stop that blocks inside the worker until we release it.
+            Task<bool> slowStop = RecordingIpc.SendStopAsync(slowTarget, cts.Token);
 
-        // The listener is up and answering status pings.
-        Assert.True(await RecordingIpc.IsRecordingAsync(target, probe.Token));
+            // While that stop is in flight, other requests must still be served promptly,
+            // proving the accept loop handles connections concurrently.
+            Assert.True(await RecordingIpc.PingAsync(cts.Token));
+            Assert.True(await RecordingIpc.IsRecordingAsync(otherTarget, cts.Token));
 
-        // Cancelling the wait tears the listener down instead of leaking the pipe.
-        await firstWait.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await waitForStop);
+            Assert.False(slowStop.IsCompleted);
+            host.StopBlock.SetResult();
+            Assert.True(await slowStop);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
 
-        // The pipe instance was released: a brand-new listener can bind the same
-        // well-known name (it uses FirstPipeInstance, which fails if one is leaked)
-        // and once again answers status pings for the target.
-        RecordingIpc.RecordingCommandListener replacement = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
-        using CancellationTokenSource secondWait = new();
-        Task<RecordingIpc.RecordingStopRequest> rebound = replacement.WaitForStopAsync(secondWait.Token);
+    [Fact]
+    public async Task ServerReleasesPipeWhenCancelled()
+    {
+        string target = Guid.NewGuid().ToString();
 
-        Assert.True(await RecordingIpc.IsRecordingAsync(target, probe.Token));
+        using (CancellationTokenSource firstCts = new(TimeSpan.FromSeconds(15)))
+        {
+            Task<bool> server = RecordingIpc.RunServerAsync(new FakeWorkerHost(recording: [target]), firstCts.Token);
+            Assert.True(await RecordingIpc.IsRecordingAsync(target, firstCts.Token));
+            await ShutdownAsync(firstCts, server);
+        }
 
-        await secondWait.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await rebound);
+        // A brand-new server can bind the same well-known name (FirstPipeInstance would
+        // fail if the previous one leaked its pipe) and once again answers.
+        using CancellationTokenSource secondCts = new(TimeSpan.FromSeconds(15));
+        Task<bool> replacement = RecordingIpc.RunServerAsync(new FakeWorkerHost(recording: [target]), secondCts.Token);
+        try
+        {
+            Assert.True(await RecordingIpc.IsRecordingAsync(target, secondCts.Token));
+        }
+        finally
+        {
+            await ShutdownAsync(secondCts, replacement);
+        }
+    }
+
+    private static async Task ShutdownAsync(CancellationTokenSource cts, Task<bool> server)
+    {
+        await cts.CancelAsync();
+        try
+        {
+            await server;
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 }

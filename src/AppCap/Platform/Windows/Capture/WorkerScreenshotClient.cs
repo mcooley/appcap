@@ -22,6 +22,7 @@ public sealed class WorkerScreenshotClient : IScreenshotCapture
         // directory than this client, and it is the worker that writes the file.
         ScreenshotRequest request = new()
         {
+            TargetName = window.Target.Name,
             OutputPath = Path.GetFullPath(outputPath),
             IncludeCursor = includeCursor,
             Caption = caption,
@@ -50,7 +51,7 @@ public sealed class WorkerScreenshotClient : IScreenshotCapture
     {
         (Stream client, Stream server) = InProcDuplexTransport.CreatePair();
         using CancellationTokenSource hostCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        WorkerService worker = new(new WindowCaptureTarget(window), isRecording: false);
+        InProcScreenshotHost worker = new(new WindowCaptureTarget(window));
         Task serve = WorkerServer.ServeAsync(server, worker, hostCancellation.Token);
         try
         {

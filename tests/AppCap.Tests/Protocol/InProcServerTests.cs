@@ -14,31 +14,35 @@ public sealed class InProcServerTests
     public async Task WorkerServerHandlesStatusAndScreenshotInProcess()
     {
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        FakeWorkerService service = new(isRecording: false);
+        FakeWorkerHost host = new(recording: ["cam"]);
 
         (Stream client, Stream server) = InProcDuplexTransport.CreatePair();
-        Task serve = WorkerServer.ServeAsync(server, service, cts.Token);
+        Task serve = WorkerServer.ServeAsync(server, host, cts.Token);
         try
         {
-            JsonRpcRequest statusRequest = JsonRpcCodec.CreateRequest(WorkerMethods.RecordingStatus, 1);
+            JsonRpcRequest statusRequest = JsonRpcCodec.CreateRequest(
+                WorkerMethods.RecordingStatus,
+                1,
+                new TargetRequest { TargetName = "cam" },
+                WorkerProtocolJsonContext.Default.TargetRequest);
             await JsonRpcCodec.WriteRequestAsync(client, statusRequest, cts.Token);
             JsonRpcResponse? statusResponse = await JsonRpcCodec.ReadResponseAsync(client, cts.Token);
             RecordingStatusResult? status = JsonRpcCodec.ReadResult(statusResponse!.Result!.Value, WorkerProtocolJsonContext.Default.RecordingStatusResult);
-            Assert.False(status!.Recording);
+            Assert.True(status!.Recording);
 
             JsonRpcRequest screenshotRequest = JsonRpcCodec.CreateRequest(
                 WorkerMethods.Screenshot,
                 2,
-                new ScreenshotRequest { OutputPath = @"C:\shots\a.png", IncludeCursor = true, Caption = "hi" },
+                new ScreenshotRequest { TargetName = "cam", OutputPath = @"C:\shots\a.png", IncludeCursor = true, Caption = "hi" },
                 WorkerProtocolJsonContext.Default.ScreenshotRequest);
             await JsonRpcCodec.WriteRequestAsync(client, screenshotRequest, cts.Token);
             JsonRpcResponse? screenshotResponse = await JsonRpcCodec.ReadResponseAsync(client, cts.Token);
             ScreenshotResult? ack = JsonRpcCodec.ReadResult(screenshotResponse!.Result!.Value, WorkerProtocolJsonContext.Default.ScreenshotResult);
 
             Assert.True(ack!.Acknowledged);
-            Assert.Equal(@"C:\shots\a.png", service.LastScreenshot!.OutputPath);
-            Assert.True(service.LastScreenshot.IncludeCursor);
-            Assert.Equal("hi", service.LastScreenshot.Caption);
+            Assert.Equal(@"C:\shots\a.png", host.LastScreenshot!.OutputPath);
+            Assert.True(host.LastScreenshot.IncludeCursor);
+            Assert.Equal("hi", host.LastScreenshot.Caption);
         }
         finally
         {

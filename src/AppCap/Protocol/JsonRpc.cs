@@ -37,6 +37,11 @@ internal static class JsonRpcErrorCodes
     // A frame capture or screenshot failed (for example, the target window could not
     // be captured). The human-readable reason is carried in the error "message".
     public const int CaptureFailed = -32001;
+
+    // No recording is running for the requested target, so a stop/cancel/screenshot
+    // could not be served. This is distinct from a failure: the client treats it as
+    // "nothing to stop" or as a cue to fall back to an in-process capture.
+    public const int NotRecording = -32002;
 }
 
 // A JSON-RPC 2.0 request object. "id" and "params" are stored as raw JSON so the

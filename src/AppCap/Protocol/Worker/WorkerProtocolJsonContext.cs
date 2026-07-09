@@ -10,6 +10,9 @@ namespace AppCap.Protocol.Worker;
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(RecordingStatusResult))]
 [JsonSerializable(typeof(RecordingCommandResult))]
+[JsonSerializable(typeof(RecordingStartRequest))]
+[JsonSerializable(typeof(TargetRequest))]
+[JsonSerializable(typeof(PingResult))]
 [JsonSerializable(typeof(ScreenshotRequest))]
 [JsonSerializable(typeof(ScreenshotResult))]
 internal sealed partial class WorkerProtocolJsonContext : JsonSerializerContext;
