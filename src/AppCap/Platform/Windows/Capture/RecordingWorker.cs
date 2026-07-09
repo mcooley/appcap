@@ -19,6 +19,7 @@ internal sealed class RecordingWorker : IDisposable
 
     private readonly TargetWindow window;
     private readonly string outputPath;
+    private readonly RecordingCaptureTarget recordingTarget;
     private readonly BlockingCollection<Direct3D11CaptureFrame> frames = new(new ConcurrentQueue<Direct3D11CaptureFrame>());
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Direct3D11CaptureFrame? startFrame;
@@ -28,6 +29,7 @@ internal sealed class RecordingWorker : IDisposable
     {
         this.window = window;
         this.outputPath = outputPath;
+        recordingTarget = new RecordingCaptureTarget(window);
     }
 
     public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == WorkerCommand;
@@ -58,7 +60,7 @@ internal sealed class RecordingWorker : IDisposable
         bool stopAcknowledged = false;
         using CancellationTokenSource captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using CancellationTokenSource listenerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Target.Name);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(window.Target.Name, new WorkerService(recordingTarget, isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(listenerCancellation.Token);
         Task encode = EncodeAsync(captureCancellation.Token);
         try
@@ -182,6 +184,10 @@ internal sealed class RecordingWorker : IDisposable
             {
                 return;
             }
+
+            // Serve any pending screenshot from this live frame before handing it to the
+            // encoder, so a screenshot taken while recording reuses this capture session.
+            recordingTarget.OfferFrame(frame);
 
             try
             {

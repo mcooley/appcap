@@ -24,7 +24,6 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 - Ensure that only one recording is happening at a time
   - But it is acceptable to have multiple recordings targeting different applications
-- Ensure that you can take a screenshot while a recording is running, and doing so does not initiate a new capture session (may require delegating screenshot to the same background process that is recording)
 - Gracefully handle resize while recording is running
 - Limit recordings to 30 minutes (and have the recording background process gracefully save and exit), but add a time-limit option to start which can be used if a longer recording is needed
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
@@ -35,6 +34,16 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Audio Capture
 - Capture loopback audio from the targeted process and include it in the video
+
+## Architecture / Protocols
+
+See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔ target design.
+
+- Move input injection and window control behind the `ITarget` seam / target protocol so they become remotable, not just frame capture. See `docs/target-protocol.md`.
+- Build out **remote targets** end-to-end: configuring a remote target in the config file, discovering/authenticating its endpoint, a concrete remote transport binding (for example TCP or WebSocket), and a `RemoteTarget : ITarget` client.
+- Define the optimized frame-streaming binding of the target protocol for remote **video** capture (in-proc uses direct GPU surface handoff today).
+- Negotiate/validate `TargetProtocol.Version` between worker and target so mismatches are rejected cleanly.
+- Consolidate to a single machine-wide worker that services multiple targets/recordings concurrently (still launched just-in-time and self-terminating), instead of one worker process per recording.
 
 ## Platform Support
 

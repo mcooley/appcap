@@ -67,7 +67,7 @@ public sealed class RecordingIpcTests
     {
         string target = Guid.NewGuid().ToString();
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
 
         // A status check for the same target finds the running listener.
@@ -87,7 +87,7 @@ public sealed class RecordingIpcTests
     {
         string target = Guid.NewGuid().ToString();
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
 
         // A cancel for the same target is delivered to that listener as a discard request.
@@ -104,7 +104,7 @@ public sealed class RecordingIpcTests
     {
         string target = Guid.NewGuid().ToString();
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
 
         Task<bool> cancelClient = RecordingIpc.SendCancelAsync(target, cts.Token);
@@ -121,7 +121,7 @@ public sealed class RecordingIpcTests
         string listeningTarget = Guid.NewGuid().ToString();
         string otherTarget = Guid.NewGuid().ToString();
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(listeningTarget);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(listeningTarget, new FakeWorkerService(isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
 
         Assert.True(await RecordingIpc.IsRecordingAsync(listeningTarget, cts.Token));
@@ -139,7 +139,7 @@ public sealed class RecordingIpcTests
     {
         string target = Guid.NewGuid().ToString();
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(cts.Token);
 
         Task<bool> stopClient = RecordingIpc.SendStopAsync(target, cts.Token);
@@ -156,7 +156,7 @@ public sealed class RecordingIpcTests
         string target = Guid.NewGuid().ToString();
         using CancellationTokenSource probe = new(TimeSpan.FromSeconds(15));
 
-        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener listener = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         using CancellationTokenSource firstWait = new();
         Task<RecordingIpc.RecordingStopRequest> waitForStop = listener.WaitForStopAsync(firstWait.Token);
 
@@ -170,7 +170,7 @@ public sealed class RecordingIpcTests
         // The pipe instance was released: a brand-new listener can bind the same
         // well-known name (it uses FirstPipeInstance, which fails if one is leaked)
         // and once again answers status pings for the target.
-        RecordingIpc.RecordingCommandListener replacement = RecordingIpc.CreateCommandListener(target);
+        RecordingIpc.RecordingCommandListener replacement = RecordingIpc.CreateCommandListener(target, new FakeWorkerService(isRecording: true));
         using CancellationTokenSource secondWait = new();
         Task<RecordingIpc.RecordingStopRequest> rebound = replacement.WaitForStopAsync(secondWait.Token);
 
