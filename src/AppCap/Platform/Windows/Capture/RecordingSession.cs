@@ -1,6 +1,7 @@
 using AppCap;
 using AppCap.Protocol.Target;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
 using global::Windows.Graphics.DirectX.Direct3D11;
@@ -28,9 +29,20 @@ internal sealed class RecordingSession : IDisposable
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TimeSpan timeLimit;
     private readonly bool includeCursor;
+    private readonly object captionGate = new();
     private Task encodeTask = Task.CompletedTask;
     private Task completion = Task.CompletedTask;
     private Direct3D11CaptureFrame? startFrame;
+    private CaptionRenderer? captionRenderer;
+    private IDirect3DSurface? latestSurface;
+    private int latestSurfaceWidth;
+    private int latestSurfaceHeight;
+    private TimeSpan captionStartTime;
+    private long captionStartTimestamp;
+    private TimeSpan lastSampleTime;
+    private string? pendingCaption;
+    private int captionVersion;
+    private int renderedCaptionVersion = -1;
     private int stopRequested;
     private int stopDiscard;
     private bool disposed;
@@ -52,6 +64,17 @@ internal sealed class RecordingSession : IDisposable
     // Completes when the recording has fully finished and its output has been finalized
     // (saved and validated, or discarded). Faults if saving the output failed.
     public Task Completion => completion;
+
+    public void AddCaption(string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        lock (captionGate)
+        {
+            pendingCaption = text;
+            captionVersion++;
+        }
+
+    }
 
     // Starts capturing and encoding, returning once the recording is confirmed running (its
     // first frame has been captured). Throws AppCapException if the target cannot be
@@ -151,6 +174,8 @@ internal sealed class RecordingSession : IDisposable
         CancelTimeLimit();
         timeLimitCancellation.Dispose();
         captureCancellation.Dispose();
+        (latestSurface as IDisposable)?.Dispose();
+        latestSurface = null;
         DisposeQueuedFrames();
         frames.Dispose();
     }
@@ -291,7 +316,15 @@ internal sealed class RecordingSession : IDisposable
             throw new AppCapException("Recording encoding failed.");
         }
 
-        await prepareResult.TranscodeAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await prepareResult.TranscodeAsync().AsTask(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            captionRenderer?.Dispose();
+            captionRenderer = null;
+        }
     }
 
     private async Task<IRandomAccessStream> CreateOutputStreamAsync(CancellationToken cancellationToken)
@@ -332,6 +365,8 @@ internal sealed class RecordingSession : IDisposable
         // emitted as the first sample. A static window may produce only this one frame,
         // so discarding it here would leave the encoder with no samples at all.
         startFrame = TakeNextFrame();
+        captionStartTime = startFrame?.SystemRelativeTime ?? TimeSpan.Zero;
+        lastSampleTime = captionStartTime;
         args.Request.SetActualStartPosition(startFrame?.SystemRelativeTime ?? TimeSpan.Zero);
     }
 
@@ -341,35 +376,169 @@ internal sealed class RecordingSession : IDisposable
         // (or until capture stops). This paces the encoder to the capture rate without
         // busy-waiting. Starting and SampleRequested are serialized by the
         // MediaStreamSource, so reading startFrame here needs no synchronization.
-        Direct3D11CaptureFrame? frame = startFrame ?? TakeNextFrame();
+        Direct3D11CaptureFrame? frame = startFrame;
         startFrame = null;
+        while (frame is null)
+        {
+            frame = TakeNextFrame(GetCaptionSampleInterval());
+            if (frame is not null)
+            {
+                break;
+            }
+
+            MediaStreamSample? captionSample = CreateCaptionSample();
+            if (captionSample is not null)
+            {
+                args.Request.Sample = captionSample;
+                return;
+            }
+
+            if (frames.IsCompleted)
+            {
+                args.Request.Sample = null;
+                return;
+            }
+        }
+
         if (frame is null)
         {
-            args.Request.Sample = null;
             return;
         }
 
         // Use the frame's real capture time as the sample timestamp; the encoder
         // derives frame durations from the spacing between consecutive timestamps.
-        MediaStreamSample sample = MediaStreamSample.CreateFromDirect3D11Surface(frame.Surface, frame.SystemRelativeTime);
-
-        // Keep the frame (and its pooled surface) alive until the encoder has finished
-        // with the sample, then dispose it to return the surface to the capture pool.
-        sample.Processed += (_, _) => frame.Dispose();
-        args.Request.Sample = sample;
+        (latestSurface as IDisposable)?.Dispose();
+        latestSurface = CaptionRenderer.Copy(frame.Surface);
+        latestSurfaceWidth = frame.ContentSize.Width;
+        latestSurfaceHeight = frame.ContentSize.Height;
+        lastSampleTime = frame.SystemRelativeTime;
+        ApplyPendingCaption(frame.SystemRelativeTime, frame.ContentSize.Width, frame.ContentSize.Height);
+        float captionOpacity = GetCaptionOpacity(frame.SystemRelativeTime);
+        args.Request.Sample = CreateSample(latestSurface, frame.SystemRelativeTime, captionOpacity);
+        frame.Dispose();
     }
 
-    private Direct3D11CaptureFrame? TakeNextFrame()
+    private Direct3D11CaptureFrame? TakeNextFrame(TimeSpan? timeout = null)
     {
         try
         {
-            return frames.Take();
+            return timeout is { } value
+                ? frames.TryTake(out Direct3D11CaptureFrame? frame, value) ? frame : null
+                : frames.Take();
         }
         catch (InvalidOperationException)
         {
             // The capture queue has been marked complete and fully drained.
             return null;
         }
+    }
+
+    private float GetCaptionOpacity(TimeSpan frameTime)
+    {
+        if (captionRenderer is null)
+        {
+            return 0;
+        }
+
+        TimeSpan elapsed = frameTime - captionStartTime;
+        TimeSpan visibleDuration = TimeSpan.FromSeconds(3);
+        TimeSpan fadeDuration = TimeSpan.FromMilliseconds(500);
+        if (elapsed <= visibleDuration)
+        {
+            return 1;
+        }
+
+        if (elapsed >= visibleDuration + fadeDuration)
+        {
+            return 0;
+        }
+
+        return (float)((visibleDuration + fadeDuration - elapsed).TotalMilliseconds / fadeDuration.TotalMilliseconds);
+    }
+
+    private static TimeSpan GetCaptionSampleInterval() => TimeSpan.FromMilliseconds(100);
+
+    private MediaStreamSample? CreateCaptionSample()
+    {
+        if (latestSurface is null)
+        {
+            return null;
+        }
+
+        int version;
+        lock (captionGate)
+        {
+            version = captionVersion;
+        }
+
+        if (captionRenderer is null && version == renderedCaptionVersion)
+        {
+            return null;
+        }
+
+        TimeSpan timestamp = captionRenderer is null
+            ? lastSampleTime + GetCaptionSampleInterval()
+            : captionStartTime + Stopwatch.GetElapsedTime(captionStartTimestamp);
+        if (timestamp <= lastSampleTime)
+        {
+            timestamp = lastSampleTime + GetCaptionSampleInterval();
+        }
+
+        ApplyPendingCaption(timestamp, latestSurfaceWidth, latestSurfaceHeight);
+        if (captionRenderer is null)
+        {
+            return null;
+        }
+
+        float opacity = GetCaptionOpacity(timestamp);
+        if (opacity == 0)
+        {
+            captionRenderer.Dispose();
+            captionRenderer = null;
+        }
+
+        lastSampleTime = timestamp;
+        return CreateSample(latestSurface, timestamp, opacity);
+    }
+
+    private MediaStreamSample CreateSample(IDirect3DSurface sourceSurface, TimeSpan timestamp, float captionOpacity)
+    {
+        IDirect3DSurface outputSurface = captionRenderer is null
+            ? CaptionRenderer.Copy(sourceSurface)
+            : captionRenderer.Render(sourceSurface, captionOpacity);
+        try
+        {
+            MediaStreamSample sample = MediaStreamSample.CreateFromDirect3D11Surface(outputSurface, timestamp);
+            sample.Processed += (_, _) => (outputSurface as IDisposable)?.Dispose();
+            return sample;
+        }
+        catch
+        {
+            (outputSurface as IDisposable)?.Dispose();
+            throw;
+        }
+    }
+
+    private void ApplyPendingCaption(TimeSpan frameTime, int width, int height)
+    {
+        string? text;
+        int version;
+        lock (captionGate)
+        {
+            text = pendingCaption;
+            version = captionVersion;
+        }
+
+        if (version == renderedCaptionVersion)
+        {
+            return;
+        }
+
+        captionRenderer?.Dispose();
+        captionRenderer = string.IsNullOrWhiteSpace(text) ? null : new((uint)width, (uint)height, text);
+        renderedCaptionVersion = version;
+        captionStartTime = frameTime;
+        captionStartTimestamp = Stopwatch.GetTimestamp();
     }
 
     private async Task WaitForFirstFrameAsync(CancellationToken cancellationToken)

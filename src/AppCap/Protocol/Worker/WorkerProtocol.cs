@@ -40,6 +40,8 @@ internal static class WorkerMethods
     // or JsonRpcErrorCodes.RecordingFailed if the worker cannot cancel cleanly.
     public const string RecordingCancel = "recording.cancel";
 
+    public const string RecordingCaption = "recording.caption";
+
     // Captures a single frame for a target, renders an optional caption, and saves it to
     // the requested path. The worker owns the file I/O and rendering; the client only
     // supplies the destination and options. Serving this never starts a second capture
@@ -74,13 +76,20 @@ internal sealed class RecordingStartRequest
 
     [JsonPropertyName("includeCursor")]
     public bool IncludeCursor { get; set; } = true;
+
 }
 
 // Parameters for a call that operates on a single target's recording (status/stop/cancel).
-internal sealed class TargetRequest
+internal class TargetRequest
 {
     [JsonPropertyName("targetName")]
     public string TargetName { get; set; } = string.Empty;
+}
+
+internal sealed class CaptionRequest : TargetRequest
+{
+    [JsonPropertyName("caption")]
+    public string Caption { get; set; } = string.Empty;
 }
 
 // Parameters for a screenshot call. The worker resolves the frame from the target's live
@@ -150,6 +159,8 @@ internal interface IWorkerHost
     // true if a recording was stopped, false if no recording is running for the target.
     // Throws when the worker reports a failure while finalizing.
     Task<bool> StopRecordingAsync(string targetName, bool discard, CancellationToken cancellationToken);
+
+    Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken);
 
     // Reports whether a recording is currently running for the target.
     bool IsRecording(string targetName);

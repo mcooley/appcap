@@ -134,3 +134,11 @@ appcap --target calculator record start --output recording.mp4 --time-limit 90
 ```
 
 Use `--exclude-cursor` with `record start` to omit the cursor from a recording.
+
+Add a caption overlay to an active recording with `record caption`:
+
+```powershell
+appcap --target calculator record caption "Before clearing the display"
+```
+
+Captions appear immediately, remain visible for 3 seconds, then fade out. You can add captions repeatedly.

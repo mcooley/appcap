@@ -77,9 +77,11 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         textLayout.Get()->SetMaxHeight(maxHeight).ThrowOnFailure();
     }
 
-    public IDirect3DSurface Render(IDirect3DSurface sourceSurface)
+    public IDirect3DSurface Render(IDirect3DSurface sourceSurface, float opacity = 1)
     {
         ArgumentNullException.ThrowIfNull(sourceSurface);
+        ArgumentOutOfRangeException.ThrowIfLessThan(opacity, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(opacity, 1);
 
         using ComPtr<ID3D11Texture2D> sourceTexture = GetTexture(sourceSurface);
         sourceTexture.Get()->GetDesc(out D3D11_TEXTURE2D_DESC textureDescription);
@@ -88,7 +90,7 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         using ComPtr<ID3D11Texture2D> renderedTexture = CreateRenderableCopy(device.Get(), context.Get(), sourceTexture.Get(), textureDescription);
         using ComPtr<IDXGISurface> renderedDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)renderedTexture.Get());
 
-        RenderCaption(renderedDxgiSurface.Get(), textureDescription.Format);
+        RenderCaption(renderedDxgiSurface.Get(), textureDescription.Format, opacity);
 
         global::Windows.Win32.System.WinRT.IInspectable* renderedInspectable = null;
         PInvoke.CreateDirect3D11SurfaceFromDXGISurface(renderedDxgiSurface.Get(), &renderedInspectable).ThrowOnFailure();
@@ -102,6 +104,29 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         }
     }
 
+    public static IDirect3DSurface Copy(IDirect3DSurface sourceSurface)
+    {
+        ArgumentNullException.ThrowIfNull(sourceSurface);
+
+        using ComPtr<ID3D11Texture2D> sourceTexture = GetTexture(sourceSurface);
+        sourceTexture.Get()->GetDesc(out D3D11_TEXTURE2D_DESC textureDescription);
+        using ComPtr<ID3D11Device> device = GetDevice(sourceTexture.Get());
+        using ComPtr<ID3D11DeviceContext> context = GetImmediateContext(device.Get());
+        using ComPtr<ID3D11Texture2D> copiedTexture = CreateRenderableCopy(device.Get(), context.Get(), sourceTexture.Get(), textureDescription);
+        using ComPtr<IDXGISurface> copiedDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)copiedTexture.Get());
+
+        global::Windows.Win32.System.WinRT.IInspectable* copiedInspectable = null;
+        PInvoke.CreateDirect3D11SurfaceFromDXGISurface(copiedDxgiSurface.Get(), &copiedInspectable).ThrowOnFailure();
+        try
+        {
+            return MarshalInterface<IDirect3DSurface>.FromAbi((nint)copiedInspectable);
+        }
+        finally
+        {
+            copiedInspectable->Release();
+        }
+    }
+
     public void Dispose()
     {
         textLayout.Dispose();
@@ -111,7 +136,7 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         d2dFactory.Dispose();
     }
 
-    private void RenderCaption(IDXGISurface* dxgiSurface, DXGI_FORMAT format)
+    private void RenderCaption(IDXGISurface* dxgiSurface, DXGI_FORMAT format, float opacity)
     {
         D2D1_RENDER_TARGET_PROPERTIES renderTargetProperties = new()
         {
@@ -135,14 +160,14 @@ internal sealed unsafe class CaptionRenderer : IDisposable
             r = 0,
             g = 0,
             b = 0,
-            a = 0.75f,
+            a = 0.75f * opacity,
         };
         D2D1_COLOR_F white = new()
         {
             r = 1,
             g = 1,
             b = 1,
-            a = 1,
+            a = opacity,
         };
         ID2D1SolidColorBrush* shadowBrushPointer = null;
         renderTarget.Get()->CreateSolidColorBrush(shadow, null, &shadowBrushPointer).ThrowOnFailure();

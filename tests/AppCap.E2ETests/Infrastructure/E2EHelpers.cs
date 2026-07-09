@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
+using Windows.Media.Editing;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
@@ -77,6 +78,33 @@ internal static class E2EHelpers
     {
         ImagePixels image = await ReadPixelsAsync(path).ConfigureAwait(false);
         return image.GetPixel(x, y);
+    }
+
+    public static async Task<PixelColor> ReadVideoPixelAsync(string path, TimeSpan position, int x, int y)
+    {
+        StorageFile file = await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
+        MediaClip clip = await MediaClip.CreateFromFileAsync(file).AsTask().ConfigureAwait(false);
+        MediaComposition composition = new();
+        composition.Clips.Add(clip);
+        using IRandomAccessStream stream = await composition.GetThumbnailAsync(position, 640, 480, VideoFramePrecision.NearestFrame).AsTask().ConfigureAwait(false);
+        BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream).AsTask().ConfigureAwait(false);
+        PixelDataProvider data = await decoder.GetPixelDataAsync(
+            BitmapPixelFormat.Bgra8,
+            BitmapAlphaMode.Premultiplied,
+            new BitmapTransform(),
+            ExifOrientationMode.IgnoreExifOrientation,
+            ColorManagementMode.DoNotColorManage).AsTask().ConfigureAwait(false);
+        ImagePixels pixels = new((int)decoder.PixelWidth, (int)decoder.PixelHeight, data.DetachPixelData());
+        return pixels.GetPixel(x, y);
+    }
+
+    public static async Task<TimeSpan> ReadVideoDurationAsync(string path)
+    {
+        StorageFile file = await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
+        MediaClip clip = await MediaClip.CreateFromFileAsync(file).AsTask().ConfigureAwait(false);
+        MediaComposition composition = new();
+        composition.Clips.Add(clip);
+        return composition.Duration;
     }
 
     public static async Task<ImagePixels> ReadPixelsAsync(string path)

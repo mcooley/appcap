@@ -2,6 +2,8 @@ namespace AppCap.E2ETests;
 
 public sealed class RecordCommandE2ETests : E2ETestBase
 {
+    private static readonly PixelColor BackgroundColor = new(10, 90, 140);
+
     [E2EFact]
     public void RecordStopBeforeStartFails()
     {
@@ -65,6 +67,30 @@ public sealed class RecordCommandE2ETests : E2ETestBase
         await WaitForMp4FileAsync(path);
 
         AssertMp4FileWasWritten(path);
+    }
+
+    [E2EFact]
+    public async Task RecordCaptionsAppearThenFadeFromRecording()
+    {
+        const int captionX = 266;
+        const int captionY = 435;
+        string path = Context.NewOutputPath("captions.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", path).AssertSuccess();
+        Context.Run("record", "caption", "First caption").AssertSuccess();
+        await Task.Delay(750);
+        Context.Run("record", "caption", "E2E caption").AssertSuccess();
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        PixelColor captioned = await E2EHelpers.ReadVideoPixelAsync(path, TimeSpan.FromSeconds(1.5), captionX, captionY);
+        TimeSpan duration = await E2EHelpers.ReadVideoDurationAsync(path);
+        PixelColor faded = await E2EHelpers.ReadVideoPixelAsync(path, duration - TimeSpan.FromMilliseconds(100), captionX, captionY);
+
+        PixelAssertions.AssertColorNotNear(BackgroundColor, captioned);
+        PixelAssertions.AssertColorNear(BackgroundColor, faded);
     }
 
     [E2EFact]

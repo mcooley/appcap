@@ -71,6 +71,18 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
+    public async Task AddCaptionAsync(TargetConfiguration target, string caption, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(caption);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!await RecordingIpc.SendCaptionAsync(target.Name, caption, cancellationToken).ConfigureAwait(false))
+        {
+            throw new AppCapException($"No recording is running for target '{TargetFormatter.Format(target)}'.");
+        }
+    }
+
     // Ensures a machine worker is reachable, launching one just-in-time if not. A
     // cross-process lock serializes launches so two clients that both find no worker cannot
     // spawn competing workers; the winner launches the worker and the others reuse it.

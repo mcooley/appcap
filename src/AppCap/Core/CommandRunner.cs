@@ -60,6 +60,9 @@ public sealed class CommandRunner : ICommandRunner
             case RecordCancelCommand recordCancel:
                 await RecordCancelAsync(recordCancel, cancellationToken).ConfigureAwait(false);
                 break;
+            case RecordCaptionCommand recordCaption:
+                await RecordCaptionAsync(recordCaption, cancellationToken).ConfigureAwait(false);
+                break;
             default:
                 throw new AppCapException("Unsupported command.", ExitCodes.UsageError);
         }
@@ -133,4 +136,7 @@ public sealed class CommandRunner : ICommandRunner
 
     private Task RecordCancelAsync(RecordCancelCommand command, CancellationToken cancellationToken) =>
         recordingController.CancelAsync(command.Target, cancellationToken);
+
+    private Task RecordCaptionAsync(RecordCaptionCommand command, CancellationToken cancellationToken) =>
+        recordingController.AddCaptionAsync(command.Target, command.Caption, cancellationToken);
 }

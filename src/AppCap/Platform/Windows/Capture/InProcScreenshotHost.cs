@@ -23,6 +23,9 @@ internal sealed class InProcScreenshotHost : IWorkerHost
     public Task<bool> StopRecordingAsync(string targetName, bool discard, CancellationToken cancellationToken) =>
         Task.FromResult(false);
 
+    public Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
+
     public bool IsRecording(string targetName) => false;
 
     public async Task<bool> CaptureScreenshotAsync(ScreenshotRequest request, CancellationToken cancellationToken)

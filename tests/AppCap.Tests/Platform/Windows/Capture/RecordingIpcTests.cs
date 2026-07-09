@@ -167,6 +167,25 @@ public sealed class RecordingIpcTests : IDisposable
     }
 
     [Fact]
+    public async Task CaptionIsDeliveredToActiveRecording()
+    {
+        string target = Guid.NewGuid().ToString();
+        FakeWorkerHost host = new(recording: [target]);
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            Assert.True(await RecordingIpc.SendCaptionAsync(target, "Test caption", cts.Token));
+            Assert.Equal(target, host.LastCaption!.TargetName);
+            Assert.Equal("Test caption", host.LastCaption.Caption);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
     public async Task ConcurrentRequestsAreNotBlockedByASlowStop()
     {
         string slowTarget = Guid.NewGuid().ToString();

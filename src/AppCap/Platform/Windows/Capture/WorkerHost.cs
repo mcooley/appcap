@@ -134,6 +134,20 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         return sessions.ContainsKey(targetName);
     }
 
+    public Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(caption);
+        cancellationToken.ThrowIfCancellationRequested();
+        MarkActivity();
+        if (!sessions.TryGetValue(targetName, out RecordingSession? session))
+        {
+            return Task.FromResult(false);
+        }
+
+        session.AddCaption(caption);
+        return Task.FromResult(true);
+    }
+
     public async Task<bool> CaptureScreenshotAsync(ScreenshotRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

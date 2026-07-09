@@ -16,6 +16,8 @@ public sealed record ScreenshotCommand(TargetConfiguration Target, string Output
 
 public sealed record RecordStartCommand(TargetConfiguration Target, string OutputPath, TimeSpan TimeLimit, bool ExcludeCursor) : AppCapCommand(Target);
 
+public sealed record RecordCaptionCommand(TargetConfiguration Target, string Caption) : AppCapCommand(Target);
+
 public sealed record RecordStopCommand(TargetConfiguration Target) : AppCapCommand(Target);
 
 public sealed record RecordCancelCommand(TargetConfiguration Target) : AppCapCommand(Target);

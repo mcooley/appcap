@@ -9,6 +9,7 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 - Support AUMIDs for unpackaged applications
 - Add graceful handling for game bootstrapper windows and child sign-in/pop-up windows. Capture any child windows separately and composite them into screenshots and recordings. Perhaps add a command to center/resize child windows as needed so they fully overlap the parent window.
 - Add the ability to target a monitor or the entire desktop
+- Include more robust support for capturing UWP app windows (like Calculator)
 
 ## Input
 
@@ -25,8 +26,6 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 - Gracefully handle resize while recording is running
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
 - Add recording speed commands--set speed to 0.25x or 4x, for example
-- Reuse screenshot caption rendering infrastructure for video captions.
-- Add caption timing for recordings--fade out captions after 3 seconds.
 - Add "captured from" metadata to mp4 files, similar to existing screenshot implementation
 - Double check that RedrawWindow is necessary and matches what reference screen capture tools do
 

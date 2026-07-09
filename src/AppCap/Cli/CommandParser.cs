@@ -104,6 +104,14 @@ public static class CommandParser
             return ParseResult.Valid(new RecordCancelCommand(target));
         }
 
+        if (command == model.RecordCaptionCommand)
+        {
+            string? caption = NormalizeOptionalText(result.GetRequiredValue(model.RecordCaptionArgument));
+            return caption is null
+                ? ParseResult.Failure("Caption text must not be empty.")
+                : ParseResult.Valid(new RecordCaptionCommand(target, caption));
+        }
+
         return ParseResult.Failure($"Unknown command '{command.Name}'.");
     }
 
@@ -210,9 +218,11 @@ public static class CommandParser
             Command recordStartCommand,
             Command recordStopCommand,
             Command recordCancelCommand,
+            Command recordCaptionCommand,
             Option<string> recordOutputOption,
             Option<double> recordTimeLimitOption,
-            Option<bool> recordExcludeCursorOption)
+            Option<bool> recordExcludeCursorOption,
+            Argument<string> recordCaptionArgument)
         {
             RootCommand = rootCommand;
             TargetOption = targetOption;
@@ -235,9 +245,11 @@ public static class CommandParser
             RecordStartCommand = recordStartCommand;
             RecordStopCommand = recordStopCommand;
             RecordCancelCommand = recordCancelCommand;
+            RecordCaptionCommand = recordCaptionCommand;
             RecordOutputOption = recordOutputOption;
             RecordTimeLimitOption = recordTimeLimitOption;
             RecordExcludeCursorOption = recordExcludeCursorOption;
+            RecordCaptionArgument = recordCaptionArgument;
         }
 
         public RootCommand RootCommand { get; }
@@ -282,11 +294,15 @@ public static class CommandParser
 
         public Command RecordCancelCommand { get; }
 
+        public Command RecordCaptionCommand { get; }
+
         public Option<string> RecordOutputOption { get; }
 
         public Option<double> RecordTimeLimitOption { get; }
 
         public Option<bool> RecordExcludeCursorOption { get; }
+
+        public Argument<string> RecordCaptionArgument { get; }
 
         public static CommandLineModel Create()
         {
@@ -378,10 +394,14 @@ public static class CommandParser
             recordStartCommand.Add(recordExcludeCursorOption);
             Command recordStopCommand = new("stop", "Stops recording the target window.");
             Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
+            Argument<string> recordCaptionArgument = new("text");
+            Command recordCaptionCommand = new("caption", "Shows a caption in the recording for three seconds.");
+            recordCaptionCommand.Add(recordCaptionArgument);
             Command recordCommand = new("record", "Starts, stops, or cancels recording the target window.");
             recordCommand.Add(recordStartCommand);
             recordCommand.Add(recordStopCommand);
             recordCommand.Add(recordCancelCommand);
+            recordCommand.Add(recordCaptionCommand);
 
             RootCommand rootCommand = new("Automates interactions with a configured target application.");
             rootCommand.SetAction(_ => { });
@@ -415,9 +435,11 @@ public static class CommandParser
                 recordStartCommand,
                 recordStopCommand,
                 recordCancelCommand,
+                recordCaptionCommand,
                 recordOutputOption,
                 recordTimeLimitOption,
-                recordExcludeCursorOption);
+                recordExcludeCursorOption,
+                recordCaptionArgument);
         }
     }
 }

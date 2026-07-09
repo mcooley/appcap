@@ -287,6 +287,41 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task RecordCaptionParsesTextAndTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "testapp", "record", "caption", "Test caption"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordCaptionCommand command = Assert.IsType<RecordCaptionCommand>(runner.Command);
+        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("Test caption", command.Caption);
+    }
+
+    [Fact]
+    public async Task RecordCaptionRejectsWhitespaceText()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "caption", "   "],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Caption text must not be empty.", console.ErrorText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RecordStartParsesFractionalTimeLimit()
     {
         RecordingRunner runner = new();

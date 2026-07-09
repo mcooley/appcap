@@ -132,6 +132,19 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public async Task RecordCaptionAddsCaptionWithoutResolvingWindow()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new RecordCaptionCommand(Target, "Test caption"), CancellationToken.None);
+
+        Assert.Null(services.TargetResolver.RequestedTarget);
+        Assert.Equal(Target, services.RecordingController.CaptionTarget);
+        Assert.Equal("Test caption", services.RecordingController.Caption);
+    }
+
+    [Fact]
     public async Task RecordStopStopsTargetRecordingWithoutResolvingWindow()
     {
         TestServices services = new();
@@ -339,6 +352,10 @@ public sealed class CommandRunnerTests
 
         public TargetConfiguration? CancelTarget { get; private set; }
 
+        public TargetConfiguration? CaptionTarget { get; private set; }
+
+        public string? Caption { get; private set; }
+
         public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
         {
             StartWindow = window;
@@ -357,6 +374,13 @@ public sealed class CommandRunnerTests
         public Task CancelAsync(TargetConfiguration target, CancellationToken cancellationToken)
         {
             CancelTarget = target;
+            return Task.CompletedTask;
+        }
+
+        public Task AddCaptionAsync(TargetConfiguration target, string caption, CancellationToken cancellationToken)
+        {
+            CaptionTarget = target;
+            Caption = caption;
             return Task.CompletedTask;
         }
     }

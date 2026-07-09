@@ -29,6 +29,8 @@ internal sealed class FakeWorkerHost : IWorkerHost
 
     public bool? LastStopDiscard { get; private set; }
 
+    public CaptionRequest? LastCaption { get; private set; }
+
     public string? StartFailWith { get; set; }
 
     public string? StopFailWith { get; set; }
@@ -77,6 +79,12 @@ internal sealed class FakeWorkerHost : IWorkerHost
     }
 
     public bool IsRecording(string targetName) => recordings.ContainsKey(targetName);
+
+    public Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken)
+    {
+        LastCaption = new CaptionRequest { TargetName = targetName, Caption = caption };
+        return Task.FromResult(recordings.ContainsKey(targetName));
+    }
 
     public Task<bool> CaptureScreenshotAsync(ScreenshotRequest request, CancellationToken cancellationToken)
     {

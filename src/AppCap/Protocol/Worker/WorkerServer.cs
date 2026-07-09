@@ -79,6 +79,9 @@ internal static class WorkerServer
             case WorkerMethods.RecordingCancel:
                 return await StopAsync(request, host, discard: true, cancellationToken).ConfigureAwait(false);
 
+            case WorkerMethods.RecordingCaption:
+                return await CaptionAsync(request, host, cancellationToken).ConfigureAwait(false);
+
             case WorkerMethods.Screenshot:
                 return await ScreenshotAsync(request, host, cancellationToken).ConfigureAwait(false);
 
@@ -108,6 +111,25 @@ internal static class WorkerServer
         {
             bool stopped = await host.StopRecordingAsync(parameters.TargetName, discard, cancellationToken).ConfigureAwait(false);
             if (!stopped)
+            {
+                return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.NotRecording, $"No recording is running for target '{parameters.TargetName}'.");
+            }
+
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.RecordingFailed, exception.Message);
+        }
+    }
+
+    private static async Task<JsonRpcResponse> CaptionAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        CaptionRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.CaptionRequest) ?? new CaptionRequest();
+        try
+        {
+            bool captioned = await host.AddCaptionAsync(parameters.TargetName, parameters.Caption, cancellationToken).ConfigureAwait(false);
+            if (!captioned)
             {
                 return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.NotRecording, $"No recording is running for target '{parameters.TargetName}'.");
             }

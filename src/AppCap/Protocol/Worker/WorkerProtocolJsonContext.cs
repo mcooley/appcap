@@ -12,6 +12,7 @@ namespace AppCap.Protocol.Worker;
 [JsonSerializable(typeof(RecordingCommandResult))]
 [JsonSerializable(typeof(RecordingStartRequest))]
 [JsonSerializable(typeof(TargetRequest))]
+[JsonSerializable(typeof(CaptionRequest))]
 [JsonSerializable(typeof(PingResult))]
 [JsonSerializable(typeof(ScreenshotRequest))]
 [JsonSerializable(typeof(ScreenshotResult))]

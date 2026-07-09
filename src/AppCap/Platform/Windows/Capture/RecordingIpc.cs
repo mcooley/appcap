@@ -128,6 +128,9 @@ internal static class RecordingIpc
     public static Task<bool> SendCancelAsync(string targetName, CancellationToken cancellationToken) =>
         SendTerminationAsync(targetName, WorkerMethods.RecordingCancel, cancellationToken);
 
+    public static Task<bool> SendCaptionAsync(string targetName, string caption, CancellationToken cancellationToken) =>
+        SendCaptionAsync(new CaptionRequest { TargetName = targetName, Caption = caption }, cancellationToken);
+
     // Asks the worker to capture a screenshot from the target's live capture session,
     // render any caption, and save it to the requested path. Returns true if the worker
     // acknowledged the screenshot, or false if the target is no longer recording (for
@@ -336,6 +339,7 @@ internal static class RecordingIpc
         {
             response = await SendTargetRequestAsync(method, targetName, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
         }
+
         catch (TimeoutException)
         {
             return false;
@@ -368,6 +372,44 @@ internal static class RecordingIpc
         }
 
         return response.Result is not null;
+    }
+
+    private static async Task<bool> SendCaptionAsync(CaptionRequest caption, CancellationToken cancellationToken)
+    {
+        JsonRpcResponse? response;
+        try
+        {
+            JsonRpcRequest request = JsonRpcCodec.CreateRequest(
+                WorkerMethods.RecordingCaption,
+                Interlocked.Increment(ref nextRequestId),
+                caption,
+                WorkerProtocolJsonContext.Default.CaptionRequest);
+            response = await SendRequestAsync(request, TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (response?.Error is { } error)
+        {
+            if (error.Code == JsonRpcErrorCodes.NotRecording)
+            {
+                return false;
+            }
+
+            throw new AppCapException(error.Message);
+        }
+
+        return response?.Result is not null;
     }
 
     private static async Task<JsonRpcResponse?> SendTargetRequestAsync(string method, string targetName, TimeSpan timeout, CancellationToken cancellationToken)

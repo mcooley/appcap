@@ -37,7 +37,7 @@ internal sealed class RecordingCaptureTarget : ITarget
 
         // A recording only produces frames when the window changes, so nudge the window
         // to repaint. This guarantees a frame arrives even for an otherwise idle window.
-        NudgeWindow();
+        RequestFrame();
 
         using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(ScreenshotTimeout);
@@ -98,7 +98,7 @@ internal sealed class RecordingCaptureTarget : ITarget
         }
     }
 
-    private void NudgeWindow()
+    public void RequestFrame()
     {
         _ = PInvoke.RedrawWindow(
             new HWND(window.Handle),
