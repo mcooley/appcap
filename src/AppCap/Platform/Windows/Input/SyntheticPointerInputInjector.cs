@@ -117,7 +117,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         _ = PInvoke.GetWindowThreadProcessId(pointWindow, out uint processId);
         bool sameApplication = processId != 0 &&
             ProcessPackage.TryGetApplicationUserModelId((int)processId, out string? applicationUserModelId) &&
-            window.Application.Id.Equals(applicationUserModelId, StringComparison.Ordinal);
+            window.Application.Id.Equals(applicationUserModelId, StringComparison.OrdinalIgnoreCase);
         return sameApplication;
     }
 }

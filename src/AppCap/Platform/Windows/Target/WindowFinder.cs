@@ -37,23 +37,16 @@ public sealed class WindowFinder : IWindowFinder
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static BOOL EnumWindowCallback(HWND windowHandle, LPARAM lParam)
     {
-        if (GCHandle.FromIntPtr(lParam.Value).Target is not FindWindowState state)
-        {
-            return true;
-        }
-
-        if (!PInvoke.IsWindowVisible(windowHandle))
-        {
-            return true;
-        }
-
-        if (PInvoke.GetWindowThreadProcessId(windowHandle, out uint processId) == 0 || processId == 0)
+        if (GCHandle.FromIntPtr(lParam.Value).Target is not FindWindowState state ||
+            !PInvoke.IsWindowVisible(windowHandle) ||
+            PInvoke.GetWindowThreadProcessId(windowHandle, out uint processId) == 0 ||
+            processId == 0)
         {
             return true;
         }
 
         if (ProcessPackage.TryGetApplicationUserModelId((int)processId, out string? processApplicationUserModelId) &&
-            state.ApplicationId.Equals(processApplicationUserModelId, StringComparison.Ordinal))
+            state.ApplicationId.Equals(processApplicationUserModelId, StringComparison.OrdinalIgnoreCase))
         {
             state.FoundWindow = windowHandle;
             return false;

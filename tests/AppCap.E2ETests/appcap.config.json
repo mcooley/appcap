@@ -1,7 +1,7 @@
 {
     "targets": {
         "testapp": {
-            "id": "AppCap.E2ETestApp_6tt0djjd38yk4!App"
+            "id": "appcap.e2etestapp_6tt0djjd38yk4!app"
         }
     }
 }
