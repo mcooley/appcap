@@ -331,9 +331,11 @@ internal sealed class RecordingSession : IDisposable
     {
         string directory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
         Directory.CreateDirectory(directory);
-        StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(directory).AsTask(cancellationToken).ConfigureAwait(false);
-        StorageFile file = await folder.CreateFileAsync(Path.GetFileName(outputPath), CreationCollisionOption.ReplaceExisting).AsTask(cancellationToken).ConfigureAwait(false);
-        return await file.OpenAsync(FileAccessMode.ReadWrite).AsTask(cancellationToken).ConfigureAwait(false);
+        return await FileRandomAccessStream.OpenAsync(
+            outputPath,
+            FileAccessMode.ReadWrite,
+            StorageOpenOptions.None,
+            FileOpenDisposition.CreateAlways).AsTask(cancellationToken).ConfigureAwait(false);
     }
 
     private void EnsureOutputFileExists()
@@ -343,6 +345,7 @@ internal sealed class RecordingSession : IDisposable
         {
             throw new AppCapException($"Recording did not produce an output file at '{outputPath}'.");
         }
+
     }
 
     private void DeleteOutputFile()

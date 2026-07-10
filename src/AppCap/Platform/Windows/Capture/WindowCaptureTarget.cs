@@ -37,8 +37,6 @@ internal sealed class WindowCaptureTarget : ITarget
             throw new AppCapException("Target window could not be captured.");
         }
 
-        string? capturedFrom = ScreenshotMetadata.TryCreate(window)?.CapturedFrom;
-
         using Direct3DDeviceLease deviceLease = Direct3DDeviceFactory.CreateDevice();
         using Direct3D11CaptureFramePool framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             deviceLease.Device,
@@ -48,7 +46,7 @@ internal sealed class WindowCaptureTarget : ITarget
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
         using Direct3D11CaptureFrame frame = await CaptureFrameAsync(item, framePool, session, includeCursor, cancellationToken).ConfigureAwait(false);
 
-        return await FramePixels.ReadAsync(frame.Surface, capturedFrom, cancellationToken).ConfigureAwait(false);
+        return await FramePixels.ReadAsync(frame.Surface, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<Direct3D11CaptureFrame> CaptureFrameAsync(

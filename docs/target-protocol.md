@@ -10,7 +10,7 @@ versioned**, because a target may be implemented by a **different tool on a diff
 machine or OS** — for example, a worker on Windows capturing from an Android device. A
 worker drives a target unchanged whether it is in-proc or remote.
 
-- Protocol version: **1.0** (`TargetProtocol.Version`)
+- Protocol version: **2.0** (`TargetProtocol.Version`)
 - Message format: **JSON-RPC 2.0** (<https://www.jsonrpc.org/specification>)
 
 > **In-proc note.** When the target runs in the same process as the worker (the common
@@ -58,16 +58,15 @@ Request:
 Response:
 
 ```json
-{ "jsonrpc": "2.0", "id": 1, "result": { "protocolVersion": "1.0" } }
+{ "jsonrpc": "2.0", "id": 1, "result": { "protocolVersion": "2.0" } }
 ```
 
 ### `target.capture_frame`
 
 Captures a single frame and returns it as **raw image data**. The target returns raw,
-uncompressed **BGRA8 premultiplied** pixels (row-major, top-down) as a base64 string,
-plus the frame dimensions and the metadata it derived from the captured window. The
-**worker** owns any further processing — captioning, encoding, and saving the file; the
-target never writes a file.
+uncompressed **BGRA8 premultiplied** pixels (row-major, top-down) as a base64 string plus
+the frame dimensions. The **worker** owns any further processing — captioning, encoding,
+and saving the file; the target never writes a file.
 
 `params`:
 
@@ -84,11 +83,10 @@ Request:
 Response (`pixelsBase64` truncated for brevity):
 
 ```json
-{ "jsonrpc": "2.0", "id": 2, "result": { "width": 640, "height": 480, "pixelsBase64": "AAAA…", "capturedFrom": "Captured from Example App 1.0.0.0" } }
+{ "jsonrpc": "2.0", "id": 2, "result": { "width": 640, "height": 480, "pixelsBase64": "AAAA…" } }
 ```
 
-`capturedFrom` may be `null` when the target could not derive window metadata. If the
-capture fails, the target returns a `-32001` error with the reason in `message`.
+If the capture fails, the target returns a `-32001` error with the reason in `message`.
 
 > **Performance note.** `target.capture_frame` serializes pixels, which is appropriate
 > for one-off screenshots and for remote targets. Continuous **video** capture is

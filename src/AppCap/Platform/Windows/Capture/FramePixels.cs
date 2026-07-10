@@ -11,7 +11,7 @@ namespace AppCap.Windows;
 // data and leave encoding to the client.
 internal static class FramePixels
 {
-    public static async Task<CapturedFrame> ReadAsync(IDirect3DSurface surface, string? capturedFrom, CancellationToken cancellationToken)
+    public static async Task<CapturedFrame> ReadAsync(IDirect3DSurface surface, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(surface);
 
@@ -26,6 +26,6 @@ internal static class FramePixels
         using DataReader reader = DataReader.FromBuffer(buffer);
         reader.ReadBytes(pixels);
 
-        return new CapturedFrame(width, height, pixels, capturedFrom);
+        return new CapturedFrame(width, height, pixels);
     }
 }

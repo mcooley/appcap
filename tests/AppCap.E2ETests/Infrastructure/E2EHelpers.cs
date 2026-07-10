@@ -121,32 +121,6 @@ internal static class E2EHelpers
         return new ImagePixels((int)decoder.PixelWidth, (int)decoder.PixelHeight, data.DetachPixelData());
     }
 
-    public static ShellProperties ReadShellProperties(string path)
-    {
-        Type shellType = Type.GetTypeFromProgID("Shell.Application") ?? throw new InvalidOperationException("Shell.Application COM object is unavailable.");
-        dynamic shell = Activator.CreateInstance(shellType) ?? throw new InvalidOperationException("Shell.Application COM object could not be created.");
-        dynamic folder = shell.Namespace(Path.GetDirectoryName(path));
-        dynamic item = folder.ParseName(Path.GetFileName(path));
-
-        string title = string.Empty;
-        string comments = string.Empty;
-        for (int index = 0; index <= 320; index++)
-        {
-            string name = folder.GetDetailsOf(null, index);
-            string value = folder.GetDetailsOf(item, index);
-            if (string.Equals(name, "Title", StringComparison.OrdinalIgnoreCase))
-            {
-                title = value;
-            }
-            else if (string.Equals(name, "Comments", StringComparison.OrdinalIgnoreCase))
-            {
-                comments = value;
-            }
-        }
-
-        return new ShellProperties(title, comments);
-    }
-
     public static void CloseTestAppProcesses()
     {
         foreach (Process process in Process.GetProcessesByName("AppCap.TestApp"))

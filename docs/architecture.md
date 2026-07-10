@@ -138,8 +138,7 @@ caption and writes the output file.
    stream), backed by an in-proc **`WindowCaptureTarget`**.
 2. Client sends a `screenshot` request (output path, cursor, caption) over the
    **client↔worker** protocol.
-3. **Worker** asks its **target** for a frame, renders the caption, and writes the PNG
-   (including the target-provided "captured from" metadata).
+3. **Worker** asks its **target** for a frame, renders the caption, and writes the PNG.
 4. Worker returns an acknowledgement; the client exits.
 
 ### `appcap screenshot` while a recording is running

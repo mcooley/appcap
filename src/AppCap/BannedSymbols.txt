@@ -1,0 +1,2 @@
+T:Windows.Storage.StorageFile; Use .NET or Win32 storage APIs instead.
+T:Windows.Storage.StorageFolder; Use .NET or Win32 storage APIs instead.

@@ -13,7 +13,7 @@ internal static class TargetProtocol
 {
     // The version of the AppCap target protocol described by these types. Bump this when
     // the wire contract changes so a worker and target can negotiate or reject mismatches.
-    public const string Version = "1.0";
+    public const string Version = "2.0";
 }
 
 // The JSON-RPC method names understood by a target.
@@ -37,8 +37,7 @@ internal sealed class CaptureFrameParams
 
 // Result of a target.capture_frame call. The image is returned as raw, uncompressed
 // BGRA8 premultiplied pixels (row-major, top-down) so the worker is free to overlay a
-// caption and choose an output encoding. "capturedFrom" is the metadata string the
-// target derived from the captured window, if any.
+// caption and choose an output encoding.
 internal sealed class CaptureFrameResult
 {
     [JsonPropertyName("width")]
@@ -50,8 +49,6 @@ internal sealed class CaptureFrameResult
     [JsonPropertyName("pixelsBase64")]
     public string PixelsBase64 { get; set; } = string.Empty;
 
-    [JsonPropertyName("capturedFrom")]
-    public string? CapturedFrom { get; set; }
 }
 
 // Result of a target.status call.
@@ -61,12 +58,12 @@ internal sealed class TargetStatusResult
     public string ProtocolVersion { get; set; } = TargetProtocol.Version;
 }
 
-// A captured frame in application-facing form: raw BGRA8 premultiplied pixels plus the
-// dimensions and optional capture metadata. This is what a target produces and what the
-// worker consumes; base64 encoding happens only at the wire boundary. An in-proc target
-// may instead hand the worker a GPU surface directly (see the frame-handoff optimization
-// in docs/architecture.md); this serialized form is what a *remote* target uses.
-internal sealed record CapturedFrame(int Width, int Height, byte[] BgraPixels, string? CapturedFrom);
+// A captured frame in application-facing form: raw BGRA8 premultiplied pixels plus its
+// dimensions. This is what a target produces and what the worker consumes; base64 encoding
+// happens only at the wire boundary. An in-proc target may instead hand the worker a GPU
+// surface directly (see the frame-handoff optimization in docs/architecture.md); this
+// serialized form is what a *remote* target uses.
+internal sealed record CapturedFrame(int Width, int Height, byte[] BgraPixels);
 
 // The worker-facing capability a target exposes. In-proc, the worker calls this directly
 // (the optimized path); a remote target places the documented target protocol (served by

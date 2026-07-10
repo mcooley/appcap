@@ -5,19 +5,6 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
     private static readonly PixelColor BackgroundColor = new(10, 90, 140);
 
     [E2EFact]
-    public void ScreenshotWritesCapturedFromComment()
-    {
-        string path = Context.NewOutputPath("metadata.png");
-
-        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
-        Context.Run("screenshot", "--output", path).AssertSuccess();
-
-        ShellProperties properties = E2EHelpers.ReadShellProperties(path);
-        Assert.True(string.IsNullOrEmpty(properties.Title));
-        Assert.Equal("Captured from AppCap E2E Test App 1.0.0.0", properties.Comments);
-    }
-
-    [E2EFact]
     public async Task ExcludeCursorWritesScreenshot()
     {
         const int cursorX = 500;
@@ -77,9 +64,6 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
 
         ImageInfo image = await E2EHelpers.ReadImageInfoAsync(screenshotPath);
         Assert.True(image.Width > 0 && image.Height > 0, "Expected a non-empty screenshot while recording.");
-
-        ShellProperties properties = E2EHelpers.ReadShellProperties(screenshotPath);
-        Assert.Equal("Captured from AppCap E2E Test App 1.0.0.0", properties.Comments);
 
         FileInfo recording = new(recordingPath);
         Assert.True(recording.Exists && recording.Length > 0, "Expected the recording to still be written after the screenshot.");

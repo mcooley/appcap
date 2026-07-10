@@ -120,5 +120,3 @@ internal sealed class ImagePixels
         return new PixelColor(bgraPixels[index + 2], bgraPixels[index + 1], bgraPixels[index]);
     }
 }
-
-internal sealed record ShellProperties(string Title, string Comments);

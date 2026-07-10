@@ -115,8 +115,6 @@ Optional caption overlay:
 appcap --target calculator screenshot --caption "Before clearing the display" --output shot.png
 ```
 
-Screenshots include `Captured from <window title> <version>` as a comment in file metadata.
-
 ### Record
 
 Starts or stops a recording session for the target.

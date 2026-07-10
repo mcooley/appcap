@@ -77,7 +77,6 @@ internal static class TargetServer
                 Width = frame.Width,
                 Height = frame.Height,
                 PixelsBase64 = Convert.ToBase64String(frame.BgraPixels),
-                CapturedFrom = frame.CapturedFrom,
             };
             response = JsonRpcCodec.CreateSuccess(request.Id, result, TargetProtocolJsonContext.Default.CaptureFrameResult);
         }

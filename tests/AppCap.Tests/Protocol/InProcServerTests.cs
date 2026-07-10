@@ -57,7 +57,7 @@ public sealed class InProcServerTests
     {
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
         byte[] pixels = [9, 8, 7, 6, 5, 4, 3, 2];
-        FakeTarget target = new(new CapturedFrame(2, 1, pixels, "Captured from InProc 1.0"));
+        FakeTarget target = new(new CapturedFrame(2, 1, pixels));
 
         (Stream client, Stream server) = InProcDuplexTransport.CreatePair();
         Task serve = TargetServer.ServeAsync(server, target, cts.Token);
@@ -81,7 +81,6 @@ public sealed class InProcServerTests
             Assert.Equal(2, result!.Width);
             Assert.Equal(1, result.Height);
             Assert.Equal(Convert.ToBase64String(pixels), result.PixelsBase64);
-            Assert.Equal("Captured from InProc 1.0", result.CapturedFrom);
             Assert.True(target.LastIncludeCursor);
         }
         finally

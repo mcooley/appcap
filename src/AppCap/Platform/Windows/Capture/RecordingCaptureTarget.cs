@@ -88,8 +88,7 @@ internal sealed class RecordingCaptureTarget : ITarget
 
         try
         {
-            string? capturedFrom = ScreenshotMetadata.TryCreate(window)?.CapturedFrom;
-            CapturedFrame captured = FramePixels.ReadAsync(frame.Surface, capturedFrom, CancellationToken.None).GetAwaiter().GetResult();
+            CapturedFrame captured = FramePixels.ReadAsync(frame.Surface, CancellationToken.None).GetAwaiter().GetResult();
             request.TrySetResult(captured);
         }
         catch (Exception exception)

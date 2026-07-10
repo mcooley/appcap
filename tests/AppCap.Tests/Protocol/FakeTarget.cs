@@ -10,7 +10,7 @@ internal sealed class FakeTarget : ITarget
 
     public FakeTarget(CapturedFrame? frame = null)
     {
-        this.frame = frame ?? new CapturedFrame(2, 1, [1, 2, 3, 4, 5, 6, 7, 8], "Captured from Fake 1.0");
+        this.frame = frame ?? new CapturedFrame(2, 1, [1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
     public bool? LastIncludeCursor { get; private set; }
