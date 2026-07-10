@@ -23,8 +23,7 @@ public static class CliApplication
 
         if (parseResult.Command is HelpCommand helpCommand)
         {
-            console.Output.WriteLine(HelpText.For(helpCommand.Topic));
-            return ExitCodes.Success;
+            return WriteHelp(console, helpCommand.Topic);
         }
 
         try
@@ -37,5 +36,12 @@ public static class CliApplication
             console.ErrorOutput.WriteLine(exception.Message);
             return exception.ExitCode;
         }
+    }
+
+    public static int WriteHelp(ICommandConsole console, HelpTopic topic)
+    {
+        ArgumentNullException.ThrowIfNull(console);
+        console.Output.WriteLine(HelpText.For(topic));
+        return ExitCodes.Success;
     }
 }

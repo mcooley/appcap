@@ -14,6 +14,11 @@ if (WorkerHost.IsWorkerInvocation(args))
 
 SystemConsole console = new();
 
+if (CommandParser.IsVerbLessInvocation(args))
+{
+	return CliApplication.WriteHelp(console, HelpTopic.Root);
+}
+
 TargetCatalog catalog;
 try
 {

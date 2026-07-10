@@ -6,6 +6,15 @@ namespace AppCap;
 
 public static class CommandParser
 {
+    public static bool IsVerbLessInvocation(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        CommandLineModel model = CommandLineModel.Create();
+        System.CommandLine.ParseResult result = model.RootCommand.Parse(args);
+        return result.Errors.Count is 0 && result.CommandResult.Command == model.RootCommand;
+    }
+
     public static ParseResult Parse(IReadOnlyList<string> args, TargetCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -13,7 +22,7 @@ public static class CommandParser
 
         if (args.Count is 0)
         {
-            return ParseResult.Valid(new FocusCommand(catalog.Default));
+            return ParseResult.Valid(new HelpCommand(HelpTopic.Root));
         }
 
         if (TryParseHelp(args, out HelpTopic helpTopic))
@@ -28,17 +37,17 @@ public static class CommandParser
             return ParseResult.Failure(result.Errors[0].Message);
         }
 
+        Command command = result.CommandResult.Command;
+        if (command == model.RootCommand)
+        {
+            return ParseResult.Valid(new HelpCommand(HelpTopic.Root));
+        }
+
         string? targetValue = result.GetValue(model.TargetOption);
         TargetApplication target = catalog.Default;
         if (targetValue is not null && !catalog.TryParse(targetValue, out target))
         {
             return ParseResult.Failure($"Unknown target '{targetValue}'.");
-        }
-
-        Command command = result.CommandResult.Command;
-        if (command == model.RootCommand)
-        {
-            return ParseResult.Valid(new FocusCommand(target));
         }
 
         if (command == model.ClickCommand)

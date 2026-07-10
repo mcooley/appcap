@@ -11,7 +11,7 @@ public sealed class CliApplicationTests
     ]);
 
     [Fact]
-    public async Task EmptyArgsRunsFocusCommandWithDefaultTarget()
+    public async Task EmptyArgsPrintsRootHelp()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
@@ -19,8 +19,8 @@ public sealed class CliApplicationTests
         int exitCode = await CliApplication.RunAsync([], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
-        Assert.Equal("bedrock", command.Target.Name);
+        Assert.Null(runner.Command);
+        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
-    public async Task TargetOnlyArgsRunFocusCommandWithSelectedTarget()
+    public async Task TargetOnlyArgsPrintRootHelp()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
@@ -51,17 +51,52 @@ public sealed class CliApplicationTests
         int exitCode = await CliApplication.RunAsync(["--target", "education"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        FocusCommand command = Assert.IsType<FocusCommand>(runner.Command);
-        Assert.Equal("education", command.Target.Name);
+        Assert.Null(runner.Command);
+        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task UnknownTargetReturnsUsageError()
+    public void EmptyInvocationIsVerbLess()
+    {
+        Assert.True(CommandParser.IsVerbLessInvocation([]));
+    }
+
+    [Fact]
+    public void TargetOnlyInvocationIsVerbLess()
+    {
+        Assert.True(CommandParser.IsVerbLessInvocation(["--target", "education"]));
+    }
+
+    [Fact]
+    public void InvocationWithVerbIsNotVerbLess()
+    {
+        Assert.False(CommandParser.IsVerbLessInvocation(["click", "-x", "1", "-y", "2"]));
+    }
+
+    [Fact]
+    public async Task UnknownTargetWithoutVerbPrintsRootHelp()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(["--target", "nope"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnknownTargetWithVerbReturnsUsageError()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "nope", "click", "-x", "1", "-y", "1"],
+            Catalog,
+            runner,
+            console);
 
         Assert.Equal(ExitCodes.UsageError, exitCode);
         Assert.Null(runner.Command);

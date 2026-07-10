@@ -2,8 +2,6 @@ namespace AppCap;
 
 public abstract record AppCapCommand;
 
-public sealed record FocusCommand(TargetApplication Target) : AppCapCommand;
-
 public sealed record ClickCommand(TargetApplication Target, int X, int Y) : AppCapCommand;
 
 public sealed record HoverCommand(TargetApplication Target, int X, int Y) : AppCapCommand;

@@ -5,18 +5,6 @@ public sealed class CommandRunnerTests
     private static readonly TargetApplication Target = new() { Name = "target", Id = "Package_family!App" };
 
     [Fact]
-    public async Task FocusResolvesTargetAndBringsWindowToForeground()
-    {
-        TestServices services = new();
-        CommandRunner runner = services.CreateRunner();
-
-        await runner.RunAsync(new FocusCommand(Target), CancellationToken.None);
-
-        Assert.Equal(Target, services.TargetResolver.RequestedTarget);
-        Assert.Equal(services.Window, services.WindowController.ForegroundWindow);
-    }
-
-    [Fact]
     public async Task ClickRejectsCoordinatesOutsideWindow()
     {
         TestServices services = new()

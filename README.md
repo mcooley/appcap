@@ -48,14 +48,6 @@ If the configuration file is missing or malformed, `appcap` prints a friendly er
 
 ## Commands
 
-### Focus
-
-Launches or finds the target and brings its window to the foreground.
-
-```powershell
-appcap --target calculator
-```
-
 ### Click
 
 Taps the screen.

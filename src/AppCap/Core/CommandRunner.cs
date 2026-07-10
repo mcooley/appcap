@@ -33,9 +33,6 @@ public sealed class CommandRunner : ICommandRunner
         ArgumentNullException.ThrowIfNull(command);
         switch (command)
         {
-            case FocusCommand focus:
-                await FocusAsync(focus, cancellationToken).ConfigureAwait(false);
-                break;
             case ClickCommand click:
                 await ClickAsync(click, cancellationToken).ConfigureAwait(false);
                 break;
@@ -66,12 +63,6 @@ public sealed class CommandRunner : ICommandRunner
             default:
                 throw new AppCapException("Unsupported command.", ExitCodes.UsageError);
         }
-    }
-
-    private async Task FocusAsync(FocusCommand command, CancellationToken cancellationToken)
-    {
-        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ClickAsync(ClickCommand command, CancellationToken cancellationToken)
