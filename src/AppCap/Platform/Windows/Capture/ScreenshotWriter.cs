@@ -12,7 +12,7 @@ namespace AppCap.Windows;
 // writes the PNG.
 internal static class ScreenshotWriter
 {
-    public static async Task WriteAsync(CapturedFrame frame, string outputPath, string? caption, CancellationToken cancellationToken)
+    public static async Task WriteAsync(CapturedFrame frame, string outputPath, string? caption, CropRectangle? crop, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(frame);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -24,13 +24,17 @@ internal static class ScreenshotWriter
             Directory.CreateDirectory(outputDirectory);
         }
 
+        CapturedFrame outputFrame = crop is { } cropRectangle
+            ? FrameCropper.Crop(frame, cropRectangle)
+            : frame;
+
         if (!string.IsNullOrWhiteSpace(caption))
         {
-            await WriteWithCaptionAsync(frame, fullOutputPath, caption, cancellationToken).ConfigureAwait(false);
+            await WriteWithCaptionAsync(outputFrame, fullOutputPath, caption, cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        using SoftwareBitmap bitmap = CreateBitmap(frame);
+        using SoftwareBitmap bitmap = CreateBitmap(outputFrame);
         await SavePngAsync(bitmap, fullOutputPath, cancellationToken).ConfigureAwait(false);
     }
 

@@ -12,7 +12,7 @@ namespace AppCap.Windows;
 // destination path and options and waits for the acknowledgement.
 public sealed class WorkerScreenshotClient : IScreenshotCapture
 {
-    public async Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
+    public async Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CropRectangle? crop, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -26,6 +26,7 @@ public sealed class WorkerScreenshotClient : IScreenshotCapture
             OutputPath = Path.GetFullPath(outputPath),
             IncludeCursor = includeCursor,
             Caption = caption,
+            Crop = crop,
         };
 
         string targetName = window.Application.Name;

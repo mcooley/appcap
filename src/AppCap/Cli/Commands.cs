@@ -10,9 +10,9 @@ public sealed record TypeCommand(TargetApplication Target, IReadOnlyList<Keyboar
 
 public sealed record ResizeCommand(TargetApplication Target, int Width, int Height) : AppCapCommand;
 
-public sealed record ScreenshotCommand(TargetApplication Target, string OutputPath, bool ExcludeCursor, string? Caption) : AppCapCommand;
+public sealed record ScreenshotCommand(TargetApplication Target, string OutputPath, bool ExcludeCursor, string? Caption, CropRectangle? Crop = null) : AppCapCommand;
 
-public sealed record RecordStartCommand(TargetApplication Target, string OutputPath, TimeSpan TimeLimit, bool ExcludeCursor) : AppCapCommand;
+public sealed record RecordStartCommand(TargetApplication Target, string OutputPath, TimeSpan TimeLimit, bool ExcludeCursor, CropRectangle? Crop = null) : AppCapCommand;
 
 public sealed record RecordCaptionCommand(TargetApplication Target, string Caption) : AppCapCommand;
 

@@ -1,3 +1,4 @@
+using AppCap;
 using System.Text.Json.Serialization;
 
 namespace AppCap.Protocol.Worker;
@@ -77,6 +78,9 @@ internal sealed class RecordingStartRequest
     [JsonPropertyName("includeCursor")]
     public bool IncludeCursor { get; set; } = true;
 
+    [JsonPropertyName("crop")]
+    public CropRectangle? Crop { get; set; }
+
 }
 
 // Parameters for a call that operates on a single target's recording (status/stop/cancel).
@@ -109,6 +113,9 @@ internal sealed class ScreenshotRequest
 
     [JsonPropertyName("caption")]
     public string? Caption { get; set; }
+
+    [JsonPropertyName("crop")]
+    public CropRectangle? Crop { get; set; }
 }
 
 // Result of a worker.ping call. "ok" is always true when the worker answers.

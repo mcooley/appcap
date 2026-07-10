@@ -33,7 +33,7 @@ internal sealed class InProcScreenshotHost : IWorkerHost
         ArgumentNullException.ThrowIfNull(request);
 
         CapturedFrame frame = await target.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
-        await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, cancellationToken).ConfigureAwait(false);
+        await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, request.Crop, cancellationToken).ConfigureAwait(false);
         return true;
     }
 }

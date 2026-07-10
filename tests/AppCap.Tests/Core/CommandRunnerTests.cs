@@ -96,11 +96,12 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ScreenshotCommand(Target, "test.png", ExcludeCursor: false, Caption: "Test caption"), CancellationToken.None);
+        await runner.RunAsync(new ScreenshotCommand(Target, "test.png", ExcludeCursor: false, Caption: "Test caption", Crop: new CropRectangle(10, 20, 300, 200)), CancellationToken.None);
 
         Assert.Equal("test.png", services.ScreenshotCapture.OutputPath);
         Assert.True(services.ScreenshotCapture.IncludeCursor);
         Assert.Equal("Test caption", services.ScreenshotCapture.Caption);
+        Assert.Equal(new CropRectangle(10, 20, 300, 200), services.ScreenshotCapture.Crop);
     }
 
     [Fact]
@@ -109,13 +110,14 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45), ExcludeCursor: false), CancellationToken.None);
+        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45), ExcludeCursor: false, Crop: new CropRectangle(5, 6, 320, 240)), CancellationToken.None);
 
         Assert.Equal(Target, services.TargetResolver.RequestedTarget);
         Assert.Equal(services.Window, services.RecordingController.StartWindow);
         Assert.Equal("recording.mp4", services.RecordingController.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(45), services.RecordingController.TimeLimit);
         Assert.True(services.RecordingController.IncludeCursor);
+        Assert.Equal(new CropRectangle(5, 6, 320, 240), services.RecordingController.Crop);
     }
 
     [Fact]
@@ -316,11 +318,14 @@ public sealed class CommandRunnerTests
 
         public string? Caption { get; private set; }
 
-        public Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CancellationToken cancellationToken)
+        public CropRectangle? Crop { get; private set; }
+
+        public Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CropRectangle? crop, CancellationToken cancellationToken)
         {
             OutputPath = outputPath;
             IncludeCursor = includeCursor;
             Caption = caption;
+            Crop = crop;
             return Task.CompletedTask;
         }
     }
@@ -335,6 +340,8 @@ public sealed class CommandRunnerTests
 
         public bool? IncludeCursor { get; private set; }
 
+        public CropRectangle? Crop { get; private set; }
+
         public TargetApplication? StopTarget { get; private set; }
 
         public TargetApplication? CancelTarget { get; private set; }
@@ -343,12 +350,13 @@ public sealed class CommandRunnerTests
 
         public string? Caption { get; private set; }
 
-        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
+        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
         {
             StartWindow = window;
             OutputPath = outputPath;
             TimeLimit = timeLimit;
             IncludeCursor = includeCursor;
+            Crop = crop;
             return Task.CompletedTask;
         }
 

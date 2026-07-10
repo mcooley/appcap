@@ -110,6 +110,12 @@ public static class CommandParser
         {
             Description = "Excludes the cursor from the captured output.",
         };
+        Option<CropRectangle?> cropOption = new("--crop")
+        {
+            Description = "Captures only the specified rectangle as x,y,width,height.",
+            HelpName = "x,y,width,height",
+        };
+        cropOption.CustomParser = ParseCrop;
 
         Command clickCommand = new("click", "Injects a mouse click into the target window.");
         clickCommand.Add(coordinateXOption);
@@ -198,13 +204,15 @@ public static class CommandParser
         screenshotCommand.Add(screenshotOutputOption);
         screenshotCommand.Add(excludeCursorOption);
         screenshotCommand.Add(screenshotCaptionOption);
+        screenshotCommand.Add(cropOption);
         screenshotCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
                 new ScreenshotCommand(
                     ResolveTarget(parseResult, targetOption, catalog),
                     parseResult.GetRequiredValue(screenshotOutputOption),
                     parseResult.GetValue(excludeCursorOption),
-                    NormalizeOptionalText(parseResult.GetValue(screenshotCaptionOption))),
+                    NormalizeOptionalText(parseResult.GetValue(screenshotCaptionOption)),
+                    parseResult.GetValue(cropOption)),
                 cancellationToken));
 
         Option<string> recordOutputOption = RequiredOutputOption(
@@ -222,13 +230,15 @@ public static class CommandParser
         recordStartCommand.Add(recordOutputOption);
         recordStartCommand.Add(recordTimeLimitOption);
         recordStartCommand.Add(excludeCursorOption);
+        recordStartCommand.Add(cropOption);
         recordStartCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
                 new RecordStartCommand(
                     ResolveTarget(parseResult, targetOption, catalog),
                     parseResult.GetRequiredValue(recordOutputOption),
                     parseResult.GetValue(recordTimeLimitOption),
-                    parseResult.GetValue(excludeCursorOption)),
+                    parseResult.GetValue(excludeCursorOption),
+                    parseResult.GetValue(cropOption)),
                 cancellationToken));
 
         Command recordStopCommand = new("stop", "Stops recording the target window.");
@@ -400,6 +410,23 @@ public static class CommandParser
         }
 
         return TimeSpan.FromMinutes(minutes);
+    }
+
+    private static CropRectangle? ParseCrop(ArgumentResult result)
+    {
+        if (result.Tokens.Count is 0)
+        {
+            return null;
+        }
+
+        string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
+        if (!CropRectangle.TryParse(value, out CropRectangle crop))
+        {
+            result.AddError("Invalid value for --crop. Expected x,y,width,height with nonnegative x/y and positive width/height.");
+            return null;
+        }
+
+        return crop;
     }
 
     private static TargetApplication ResolveTarget(

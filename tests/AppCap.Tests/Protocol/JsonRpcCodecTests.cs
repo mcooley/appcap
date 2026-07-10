@@ -84,7 +84,7 @@ public sealed class JsonRpcCodecTests
         JsonRpcRequest request = JsonRpcCodec.CreateRequest(
             WorkerMethods.Screenshot,
             11,
-            new ScreenshotRequest { OutputPath = @"C:\shots\a.png", IncludeCursor = true },
+            new ScreenshotRequest { OutputPath = @"C:\shots\a.png", IncludeCursor = true, Crop = new CropRectangle(10, 20, 300, 200) },
             WorkerProtocolJsonContext.Default.ScreenshotRequest);
 
         using MemoryStream stream = new();
@@ -98,6 +98,7 @@ public sealed class JsonRpcCodecTests
         Assert.NotNull(parameters);
         Assert.True(parameters!.IncludeCursor);
         Assert.Equal(@"C:\shots\a.png", parameters.OutputPath);
+        Assert.Equal(new CropRectangle(10, 20, 300, 200), parameters.Crop);
     }
 
     [Fact]

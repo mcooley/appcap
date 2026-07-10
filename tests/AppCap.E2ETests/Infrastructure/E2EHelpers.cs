@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Media.Editing;
+using Windows.Storage.FileProperties;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
@@ -82,11 +83,18 @@ internal static class E2EHelpers
 
     public static async Task<PixelColor> ReadVideoPixelAsync(string path, TimeSpan position, int x, int y)
     {
+        ImagePixels pixels = await ReadVideoPixelsAsync(path, position).ConfigureAwait(false);
+        return pixels.GetPixel(x, y);
+    }
+
+    public static async Task<ImagePixels> ReadVideoPixelsAsync(string path, TimeSpan position)
+    {
         StorageFile file = await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
         MediaClip clip = await MediaClip.CreateFromFileAsync(file).AsTask().ConfigureAwait(false);
         MediaComposition composition = new();
         composition.Clips.Add(clip);
-        using IRandomAccessStream stream = await composition.GetThumbnailAsync(position, 640, 480, VideoFramePrecision.NearestFrame).AsTask().ConfigureAwait(false);
+        VideoInfo info = await ReadVideoInfoAsync(path).ConfigureAwait(false);
+        using IRandomAccessStream stream = await composition.GetThumbnailAsync(position, info.Width, info.Height, VideoFramePrecision.NearestFrame).AsTask().ConfigureAwait(false);
         BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream).AsTask().ConfigureAwait(false);
         PixelDataProvider data = await decoder.GetPixelDataAsync(
             BitmapPixelFormat.Bgra8,
@@ -94,8 +102,14 @@ internal static class E2EHelpers
             new BitmapTransform(),
             ExifOrientationMode.IgnoreExifOrientation,
             ColorManagementMode.DoNotColorManage).AsTask().ConfigureAwait(false);
-        ImagePixels pixels = new((int)decoder.PixelWidth, (int)decoder.PixelHeight, data.DetachPixelData());
-        return pixels.GetPixel(x, y);
+        return new ImagePixels((int)decoder.PixelWidth, (int)decoder.PixelHeight, data.DetachPixelData());
+    }
+
+    public static async Task<VideoInfo> ReadVideoInfoAsync(string path)
+    {
+        StorageFile file = await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
+        VideoProperties properties = await file.Properties.GetVideoPropertiesAsync().AsTask().ConfigureAwait(false);
+        return new VideoInfo((int)properties.Width, (int)properties.Height, properties.Duration);
     }
 
     public static async Task<TimeSpan> ReadVideoDurationAsync(string path)

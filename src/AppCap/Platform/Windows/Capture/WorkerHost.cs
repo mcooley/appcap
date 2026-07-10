@@ -80,7 +80,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             throw new AppCapException("Recording time limit must be greater than zero.");
         }
 
-        RecordingSession session = new(BuildWindow(request), request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), request.IncludeCursor, shutdown.Token);
+        RecordingSession session = new(BuildWindow(request), request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), request.IncludeCursor, request.Crop, shutdown.Token);
         if (!sessions.TryAdd(request.TargetName, session))
         {
             session.Dispose();
@@ -159,7 +159,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         }
 
         CapturedFrame frame = await session.Target.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
-        await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, cancellationToken).ConfigureAwait(false);
+        await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, request.Crop, cancellationToken).ConfigureAwait(false);
         MarkActivity();
         return true;
     }

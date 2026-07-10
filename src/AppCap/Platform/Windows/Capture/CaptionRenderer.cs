@@ -113,18 +113,20 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         using ComPtr<ID3D11Device> device = GetDevice(sourceTexture.Get());
         using ComPtr<ID3D11DeviceContext> context = GetImmediateContext(device.Get());
         using ComPtr<ID3D11Texture2D> copiedTexture = CreateRenderableCopy(device.Get(), context.Get(), sourceTexture.Get(), textureDescription);
-        using ComPtr<IDXGISurface> copiedDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)copiedTexture.Get());
+        return CreateSurfaceFromTexture(copiedTexture.Get());
+    }
 
-        global::Windows.Win32.System.WinRT.IInspectable* copiedInspectable = null;
-        PInvoke.CreateDirect3D11SurfaceFromDXGISurface(copiedDxgiSurface.Get(), &copiedInspectable).ThrowOnFailure();
-        try
-        {
-            return MarshalInterface<IDirect3DSurface>.FromAbi((nint)copiedInspectable);
-        }
-        finally
-        {
-            copiedInspectable->Release();
-        }
+    public static IDirect3DSurface Crop(IDirect3DSurface sourceSurface, CropRectangle crop)
+    {
+        ArgumentNullException.ThrowIfNull(sourceSurface);
+
+        using ComPtr<ID3D11Texture2D> sourceTexture = GetTexture(sourceSurface);
+        sourceTexture.Get()->GetDesc(out D3D11_TEXTURE2D_DESC textureDescription);
+        crop.ValidateWithin((int)textureDescription.Width, (int)textureDescription.Height);
+        using ComPtr<ID3D11Device> device = GetDevice(sourceTexture.Get());
+        using ComPtr<ID3D11DeviceContext> context = GetImmediateContext(device.Get());
+        using ComPtr<ID3D11Texture2D> croppedTexture = CreateRenderableCrop(device.Get(), context.Get(), sourceTexture.Get(), textureDescription, crop);
+        return CreateSurfaceFromTexture(croppedTexture.Get());
     }
 
     public void Dispose()
@@ -186,6 +188,44 @@ internal sealed unsafe class CaptionRenderer : IDisposable
 
     private static ComPtr<ID3D11Texture2D> CreateRenderableCopy(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Texture2D* sourceTexture, D3D11_TEXTURE2D_DESC sourceDescription)
     {
+        ComPtr<ID3D11Texture2D> renderedTexture = CreateRenderableTexture(device, sourceDescription, sourceDescription.Width, sourceDescription.Height);
+        context->CopyResource((ID3D11Resource*)renderedTexture.Get(), (ID3D11Resource*)sourceTexture);
+        return renderedTexture;
+    }
+
+    private static ComPtr<ID3D11Texture2D> CreateRenderableCrop(
+        ID3D11Device* device,
+        ID3D11DeviceContext* context,
+        ID3D11Texture2D* sourceTexture,
+        D3D11_TEXTURE2D_DESC sourceDescription,
+        CropRectangle crop)
+    {
+        ComPtr<ID3D11Texture2D> renderedTexture = CreateRenderableTexture(device, sourceDescription, (uint)crop.Width, (uint)crop.Height);
+        D3D11_BOX sourceRegion = new()
+        {
+            left = (uint)crop.X,
+            top = (uint)crop.Y,
+            front = 0,
+            right = (uint)(crop.X + crop.Width),
+            bottom = (uint)(crop.Y + crop.Height),
+            back = 1,
+        };
+        context->CopySubresourceRegion(
+            (ID3D11Resource*)renderedTexture.Get(),
+            0,
+            0,
+            0,
+            0,
+            (ID3D11Resource*)sourceTexture,
+            0,
+            &sourceRegion);
+        return renderedTexture;
+    }
+
+    private static ComPtr<ID3D11Texture2D> CreateRenderableTexture(ID3D11Device* device, D3D11_TEXTURE2D_DESC sourceDescription, uint width, uint height)
+    {
+        sourceDescription.Width = width;
+        sourceDescription.Height = height;
         sourceDescription.BindFlags |= D3D11_BIND_FLAG.D3D11_BIND_RENDER_TARGET;
         sourceDescription.CPUAccessFlags = 0;
         sourceDescription.Usage = D3D11_USAGE.D3D11_USAGE_DEFAULT;
@@ -193,8 +233,22 @@ internal sealed unsafe class CaptionRenderer : IDisposable
 
         ID3D11Texture2D* renderedTexture = null;
         device->CreateTexture2D(sourceDescription, null, &renderedTexture).ThrowOnFailure();
-        context->CopyResource((ID3D11Resource*)renderedTexture, (ID3D11Resource*)sourceTexture);
         return new ComPtr<ID3D11Texture2D>(renderedTexture);
+    }
+
+    private static IDirect3DSurface CreateSurfaceFromTexture(ID3D11Texture2D* texture)
+    {
+        using ComPtr<IDXGISurface> copiedDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)texture);
+        global::Windows.Win32.System.WinRT.IInspectable* copiedInspectable = null;
+        PInvoke.CreateDirect3D11SurfaceFromDXGISurface(copiedDxgiSurface.Get(), &copiedInspectable).ThrowOnFailure();
+        try
+        {
+            return MarshalInterface<IDirect3DSurface>.FromAbi((nint)copiedInspectable);
+        }
+        finally
+        {
+            copiedInspectable->Release();
+        }
     }
 
     private static ComPtr<ID3D11Device> GetDevice(ID3D11Texture2D* texture)

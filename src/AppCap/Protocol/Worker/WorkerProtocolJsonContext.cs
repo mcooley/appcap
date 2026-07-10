@@ -1,3 +1,4 @@
+using AppCap;
 using System.Text.Json.Serialization;
 
 namespace AppCap.Protocol.Worker;
@@ -16,4 +17,5 @@ namespace AppCap.Protocol.Worker;
 [JsonSerializable(typeof(PingResult))]
 [JsonSerializable(typeof(ScreenshotRequest))]
 [JsonSerializable(typeof(ScreenshotResult))]
+[JsonSerializable(typeof(CropRectangle))]
 internal sealed partial class WorkerProtocolJsonContext : JsonSerializerContext;

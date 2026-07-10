@@ -80,7 +80,7 @@ public sealed class WorkerProtocolInteropTests : IDisposable
         {
             string reply = await SendRawAsync(
                 pipeName,
-                "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"screenshot\",\"params\":{\"targetName\":\"cam\",\"outputPath\":\"C:\\\\shots\\\\live.png\",\"includeCursor\":true,\"caption\":\"live\"}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"screenshot\",\"params\":{\"targetName\":\"cam\",\"outputPath\":\"C:\\\\shots\\\\live.png\",\"includeCursor\":true,\"caption\":\"live\",\"crop\":{\"x\":10,\"y\":20,\"width\":300,\"height\":200}}}",
                 cts.Token);
             using (JsonDocument document = JsonDocument.Parse(reply))
             {
@@ -93,6 +93,7 @@ public sealed class WorkerProtocolInteropTests : IDisposable
             Assert.Equal(@"C:\shots\live.png", host.LastScreenshot.OutputPath);
             Assert.True(host.LastScreenshot.IncludeCursor);
             Assert.Equal("live", host.LastScreenshot.Caption);
+            Assert.Equal(new CropRectangle(10, 20, 300, 200), host.LastScreenshot.Crop);
         }
         finally
         {

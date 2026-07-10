@@ -292,6 +292,46 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task ScreenshotParsesCrop()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["screenshot", "--crop", "10,20,300,200", "--output", "shot.png"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        ScreenshotCommand command = Assert.IsType<ScreenshotCommand>(runner.Command);
+        Assert.Equal(new CropRectangle(10, 20, 300, 200), command.Crop);
+    }
+
+    [Theory]
+    [InlineData("-1,0,10,10")]
+    [InlineData("0,-1,10,10")]
+    [InlineData("0,0,0,10")]
+    [InlineData("0,0,10,0")]
+    [InlineData("0,0,10")]
+    [InlineData("nope")]
+    public async Task ScreenshotRejectsInvalidCrop(string crop)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["screenshot", "--crop", crop, "--output", "shot.png"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Invalid value for --crop.", console.ErrorText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RecordStartParsesOutputPathAndTarget()
     {
         RecordingRunner runner = new();
@@ -326,6 +366,23 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
         Assert.True(command.ExcludeCursor);
+    }
+
+    [Fact]
+    public async Task RecordStartParsesCrop()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--crop", "5,6,320,240"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
+        Assert.Equal(new CropRectangle(5, 6, 320, 240), command.Crop);
     }
 
     [Fact]

@@ -113,13 +113,13 @@ public sealed class CommandRunner : ICommandRunner
     private async Task ScreenshotAsync(ScreenshotCommand command, CancellationToken cancellationToken)
     {
         TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await screenshotCapture.CapturePngAsync(window, command.OutputPath, !command.ExcludeCursor, command.Caption, cancellationToken).ConfigureAwait(false);
+        await screenshotCapture.CapturePngAsync(window, command.OutputPath, !command.ExcludeCursor, command.Caption, command.Crop, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RecordStartAsync(RecordStartCommand command, CancellationToken cancellationToken)
     {
         TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await recordingController.StartAsync(window, command.OutputPath, command.TimeLimit, !command.ExcludeCursor, cancellationToken).ConfigureAwait(false);
+        await recordingController.StartAsync(window, command.OutputPath, command.TimeLimit, !command.ExcludeCursor, command.Crop, cancellationToken).ConfigureAwait(false);
     }
 
     private Task RecordStopAsync(RecordStopCommand command, CancellationToken cancellationToken) =>

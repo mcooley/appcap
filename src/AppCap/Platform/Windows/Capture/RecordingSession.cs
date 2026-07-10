@@ -29,6 +29,7 @@ internal sealed class RecordingSession : IDisposable
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TimeSpan timeLimit;
     private readonly bool includeCursor;
+    private readonly CropRectangle? crop;
     private readonly object captionGate = new();
     private Task encodeTask = Task.CompletedTask;
     private Task completion = Task.CompletedTask;
@@ -47,12 +48,13 @@ internal sealed class RecordingSession : IDisposable
     private int stopDiscard;
     private bool disposed;
 
-    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CancellationToken cancellationToken)
+    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
     {
         this.window = window;
         this.outputPath = Path.GetFullPath(outputPath);
         this.timeLimit = timeLimit;
         this.includeCursor = includeCursor;
+        this.crop = crop;
         recordingTarget = new RecordingCaptureTarget(window);
         captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
@@ -234,6 +236,7 @@ internal sealed class RecordingSession : IDisposable
             2,
             item.Size);
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
+        (int outputWidth, int outputHeight) = GetOutputSize(item.Size.Width, item.Size.Height);
 
         void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
         {
@@ -276,7 +279,7 @@ internal sealed class RecordingSession : IDisposable
             session.IsCursorCaptureEnabled = includeCursor;
             session.StartCapture();
             await WaitForFirstFrameAsync(cancellationToken).ConfigureAwait(false);
-            await EncodeCaptureFramesAsync(item.Size.Width, item.Size.Height, cancellationToken).ConfigureAwait(false);
+            await EncodeCaptureFramesAsync(outputWidth, outputHeight, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -411,11 +414,13 @@ internal sealed class RecordingSession : IDisposable
         // Use the frame's real capture time as the sample timestamp; the encoder
         // derives frame durations from the spacing between consecutive timestamps.
         (latestSurface as IDisposable)?.Dispose();
-        latestSurface = CaptionRenderer.Copy(frame.Surface);
-        latestSurfaceWidth = frame.ContentSize.Width;
-        latestSurfaceHeight = frame.ContentSize.Height;
+        latestSurface = crop is { } cropRectangle
+            ? CaptionRenderer.Crop(frame.Surface, cropRectangle)
+            : CaptionRenderer.Copy(frame.Surface);
+        latestSurfaceWidth = crop?.Width ?? frame.ContentSize.Width;
+        latestSurfaceHeight = crop?.Height ?? frame.ContentSize.Height;
         lastSampleTime = frame.SystemRelativeTime;
-        ApplyPendingCaption(frame.SystemRelativeTime, frame.ContentSize.Width, frame.ContentSize.Height);
+        ApplyPendingCaption(frame.SystemRelativeTime, latestSurfaceWidth, latestSurfaceHeight);
         float captionOpacity = GetCaptionOpacity(frame.SystemRelativeTime);
         args.Request.Sample = CreateSample(latestSurface, frame.SystemRelativeTime, captionOpacity);
         frame.Dispose();
@@ -542,6 +547,17 @@ internal sealed class RecordingSession : IDisposable
         renderedCaptionVersion = version;
         captionStartTime = frameTime;
         captionStartTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    private (int Width, int Height) GetOutputSize(int sourceWidth, int sourceHeight)
+    {
+        if (crop is not { } cropRectangle)
+        {
+            return (sourceWidth, sourceHeight);
+        }
+
+        cropRectangle.ValidateWithin(sourceWidth, sourceHeight);
+        return (cropRectangle.Width, cropRectangle.Height);
     }
 
     private async Task WaitForFirstFrameAsync(CancellationToken cancellationToken)

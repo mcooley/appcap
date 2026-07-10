@@ -97,6 +97,8 @@ internal sealed record CommandResult(int ExitCode, string StandardOutput, string
 
 internal sealed record ImageInfo(int Width, int Height, long Length);
 
+internal sealed record VideoInfo(int Width, int Height, TimeSpan Duration);
+
 internal sealed record PixelColor(byte Red, byte Green, byte Blue);
 
 internal sealed class ImagePixels

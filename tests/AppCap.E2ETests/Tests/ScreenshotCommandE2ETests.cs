@@ -46,6 +46,30 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task CropSetsScreenshotDimensionsAndRendersCaptionAfterCrop()
+    {
+        const string crop = "160,200,320,240";
+        const int captionX = 120;
+        const int captionY = 188;
+        E2EContext context = Context;
+        string withoutCaptionPath = context.NewOutputPath("cropped-without-caption.png");
+        string withCaptionPath = context.NewOutputPath("cropped-with-caption.png");
+
+        context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        context.Run("screenshot", "--crop", crop, "--output", withoutCaptionPath).AssertSuccess();
+        context.Run("screenshot", "--crop", crop, "--caption", "CROPPED", "--output", withCaptionPath).AssertSuccess();
+
+        ImageInfo image = await E2EHelpers.ReadImageInfoAsync(withCaptionPath);
+        ImagePixels withoutCaption = await E2EHelpers.ReadPixelsAsync(withoutCaptionPath);
+        ImagePixels withCaption = await E2EHelpers.ReadPixelsAsync(withCaptionPath);
+
+        Assert.Equal(320, image.Width);
+        Assert.Equal(240, image.Height);
+        PixelAssertions.AssertRegionNear(BackgroundColor, withoutCaption, captionX, captionY, 80, 24);
+        PixelAssertions.AssertRegionContainsColorNotNear(BackgroundColor, withCaption, captionX, captionY, 80, 24);
+    }
+
+    [E2EFact]
     public async Task ScreenshotWhileRecordingReusesRecordingSession()
     {
         string recordingPath = Context.NewOutputPath("while-recording.mp4");

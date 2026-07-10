@@ -1,11 +1,18 @@
 using AppCap;
 using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
 using global::Windows.Win32.UI.Input.KeyboardAndMouse;
 
 namespace AppCap.Windows;
 
 public sealed class KeyboardInputInjector : IKeyboardInputInjector
 {
+    private const uint WmChar = 0x0102;
+    private const uint WmKeyDown = 0x0100;
+    private const uint WmKeyUp = 0x0101;
+    private const uint WmSysKeyDown = 0x0104;
+    private const uint WmSysKeyUp = 0x0105;
+
     public Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -18,10 +25,10 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
             switch (action)
             {
                 case TextKeyboardAction text:
-                    SendText(text.Text);
+                    SendText(window, text.Text);
                     break;
                 case KeyPressKeyboardAction keyPress:
-                    SendKeyPress(keyPress);
+                    SendKeyPress(window, keyPress);
                     break;
                 default:
                     throw new AppCapException("Unsupported keyboard action.");
@@ -31,18 +38,23 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
         return Task.CompletedTask;
     }
 
-    private static void SendText(string text)
+    private static void SendText(TargetWindow window, string text)
     {
         foreach (char character in text)
         {
-            SendInputs([
+            if (TrySendInputs([
                 UnicodeInput(character, isKeyUp: false),
                 UnicodeInput(character, isKeyUp: true),
-            ]);
+            ]))
+            {
+                continue;
+            }
+
+            SendCharMessage(window, character);
         }
     }
 
-    private static void SendKeyPress(KeyPressKeyboardAction keyPress)
+    private static void SendKeyPress(TargetWindow window, KeyPressKeyboardAction keyPress)
     {
         List<INPUT> inputs = [];
         foreach (KeyboardModifier modifier in keyPress.Modifiers)
@@ -59,21 +71,57 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
             inputs.Add(VirtualKeyInput(VirtualKeyFor(keyPress.Modifiers[index]), isKeyUp: true));
         }
 
-        SendInputs([.. inputs]);
-    }
-
-    private static void SendInputs(INPUT[] inputs)
-    {
-        if (inputs.Length == 0)
+        if (TrySendInputs([.. inputs]))
         {
             return;
         }
 
-        uint sent = PInvoke.SendInput(inputs, System.Runtime.InteropServices.Marshal.SizeOf<INPUT>());
-        if (sent != inputs.Length)
+        SendKeyPressMessages(window, keyPress);
+    }
+
+    private static bool TrySendInputs(INPUT[] inputs)
+    {
+        if (inputs.Length == 0)
         {
-            throw new AppCapException("Keyboard input injection failed.");
+            return true;
         }
+
+        uint sent = PInvoke.SendInput(inputs, System.Runtime.InteropServices.Marshal.SizeOf<INPUT>());
+        return sent == inputs.Length;
+    }
+
+    private static void SendCharMessage(TargetWindow window, char character)
+    {
+        HWND hwnd = new(window.Handle);
+        _ = PInvoke.SendMessage(hwnd, WmChar, new WPARAM((nuint)character), new LPARAM(0));
+    }
+
+    private static void SendKeyPressMessages(TargetWindow window, KeyPressKeyboardAction keyPress)
+    {
+        HWND hwnd = new(window.Handle);
+        bool isSystemKey = keyPress.Modifiers.Contains(KeyboardModifier.Alt);
+        foreach (KeyboardModifier modifier in keyPress.Modifiers)
+        {
+            SendKeyMessage(hwnd, VirtualKeyFor(modifier), isKeyUp: false, isSystemKey: modifier == KeyboardModifier.Alt);
+        }
+
+        VIRTUAL_KEY key = VirtualKeyFor(keyPress.Key);
+        SendKeyMessage(hwnd, key, isKeyUp: false, isSystemKey);
+        SendKeyMessage(hwnd, key, isKeyUp: true, isSystemKey);
+
+        for (int index = keyPress.Modifiers.Count - 1; index >= 0; index--)
+        {
+            SendKeyMessage(hwnd, VirtualKeyFor(keyPress.Modifiers[index]), isKeyUp: true, isSystemKey: keyPress.Modifiers[index] == KeyboardModifier.Alt);
+        }
+    }
+
+    private static void SendKeyMessage(HWND hwnd, VIRTUAL_KEY key, bool isKeyUp, bool isSystemKey)
+    {
+        uint message = isSystemKey
+            ? (isKeyUp ? WmSysKeyUp : WmSysKeyDown)
+            : (isKeyUp ? WmKeyUp : WmKeyDown);
+        LPARAM lParam = new((nint)(isKeyUp ? 0xC0000001u : 0x00000001u));
+        _ = PInvoke.SendMessage(hwnd, message, new WPARAM((nuint)key), lParam);
     }
 
     private static INPUT UnicodeInput(char character, bool isKeyUp) => new()

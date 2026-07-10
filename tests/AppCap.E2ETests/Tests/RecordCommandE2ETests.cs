@@ -115,6 +115,30 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task CropSetsRecordingDimensionsAndRendersCaptionAfterCrop()
+    {
+        const string crop = "160,200,320,240";
+        const int captionX = 120;
+        const int captionY = 188;
+        string path = Context.NewOutputPath("cropped-recording.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", path, "--crop", crop).AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("record", "caption", "CROPPED").AssertSuccess();
+        await Task.Delay(1000);
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        VideoInfo video = await E2EHelpers.ReadVideoInfoAsync(path);
+        ImagePixels captioned = await E2EHelpers.ReadVideoPixelsAsync(path, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(320, video.Width);
+        Assert.Equal(240, video.Height);
+        PixelAssertions.AssertRegionContainsColorNotNear(BackgroundColor, captioned, captionX, captionY, 80, 24);
+    }
+
+    [E2EFact]
     public async Task RecordTimeLimitSavesMp4File()
     {
         string path = Context.NewOutputPath("time-limited.mp4");

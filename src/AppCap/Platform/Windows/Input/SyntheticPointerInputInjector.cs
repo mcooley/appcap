@@ -9,6 +9,10 @@ namespace AppCap.Windows;
 
 public sealed class SyntheticPointerInputInjector : IInputInjector
 {
+    private const uint WmMouseMove = 0x0200;
+    private const uint WmLButtonDown = 0x0201;
+    private const uint WmLButtonUp = 0x0202;
+
     public Task ClickAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -24,48 +28,52 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
             POINTER_INPUT_TYPE.PT_TOUCH,
             1,
             POINTER_FEEDBACK_MODE.POINTER_FEEDBACK_NONE);
-        if (device.IsInvalid)
+        if (!device.IsInvalid)
+        {
+            POINTER_TYPE_INFO[] down = [SyntheticTouchInput(
+                hwnd,
+                screenX,
+                screenY,
+                POINTER_FLAGS.POINTER_FLAG_NEW | POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_DOWN,
+                POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_FIRSTBUTTON_DOWN)];
+            if (PInvoke.InjectSyntheticPointerInput(device, down))
+            {
+                Thread.Sleep(100);
+
+                POINTER_TYPE_INFO[] update = [SyntheticTouchInput(
+                    hwnd,
+                    screenX,
+                    screenY,
+                    POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_UPDATE,
+                    POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_NONE)];
+                if (PInvoke.InjectSyntheticPointerInput(device, update))
+                {
+                    Thread.Sleep(50);
+
+                    POINTER_TYPE_INFO[] up = [SyntheticTouchInput(
+                        hwnd,
+                        screenX,
+                        screenY,
+                        POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_UP,
+                        POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_FIRSTBUTTON_UP)];
+                    if (PInvoke.InjectSyntheticPointerInput(device, up))
+                    {
+                        return Task.CompletedTask;
+                    }
+                }
+            }
+        }
+
+        Point clientPoint = new(screenX, screenY);
+        if (!PInvoke.ScreenToClient(hwnd, ref clientPoint))
         {
             throw new AppCapException("Click input injection failed.");
         }
 
-        POINTER_TYPE_INFO[] down = [SyntheticTouchInput(
-            hwnd,
-            screenX,
-            screenY,
-            POINTER_FLAGS.POINTER_FLAG_NEW | POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_DOWN,
-            POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_FIRSTBUTTON_DOWN)];
-        if (!PInvoke.InjectSyntheticPointerInput(device, down))
-        {
-            throw new AppCapException("Click input injection failed.");
-        }
-
-        Thread.Sleep(100);
-
-        POINTER_TYPE_INFO[] update = [SyntheticTouchInput(
-            hwnd,
-            screenX,
-            screenY,
-            POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_INCONTACT | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_UPDATE,
-            POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_NONE)];
-        if (!PInvoke.InjectSyntheticPointerInput(device, update))
-        {
-            throw new AppCapException("Click input injection failed.");
-        }
-
-        Thread.Sleep(50);
-
-        POINTER_TYPE_INFO[] up = [SyntheticTouchInput(
-            hwnd,
-            screenX,
-            screenY,
-            POINTER_FLAGS.POINTER_FLAG_INRANGE | POINTER_FLAGS.POINTER_FLAG_PRIMARY | POINTER_FLAGS.POINTER_FLAG_UP,
-            POINTER_BUTTON_CHANGE_TYPE.POINTER_CHANGE_FIRSTBUTTON_UP)];
-        if (!PInvoke.InjectSyntheticPointerInput(device, up))
-        {
-            throw new AppCapException("Click input injection failed.");
-        }
-
+        LPARAM lParam = new((clientPoint.X & 0xffff) | ((clientPoint.Y & 0xffff) << 16));
+        _ = PInvoke.SendMessage(hwnd, WmMouseMove, new WPARAM(0), lParam);
+        _ = PInvoke.SendMessage(hwnd, WmLButtonDown, new WPARAM(0x0001), lParam);
+        _ = PInvoke.SendMessage(hwnd, WmLButtonUp, new WPARAM(0), lParam);
         return Task.CompletedTask;
     }
 

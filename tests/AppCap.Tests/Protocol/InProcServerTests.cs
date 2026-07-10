@@ -33,7 +33,7 @@ public sealed class InProcServerTests
             JsonRpcRequest screenshotRequest = JsonRpcCodec.CreateRequest(
                 WorkerMethods.Screenshot,
                 2,
-                new ScreenshotRequest { TargetName = "cam", OutputPath = @"C:\shots\a.png", IncludeCursor = true, Caption = "hi" },
+                new ScreenshotRequest { TargetName = "cam", OutputPath = @"C:\shots\a.png", IncludeCursor = true, Caption = "hi", Crop = new CropRectangle(10, 20, 300, 200) },
                 WorkerProtocolJsonContext.Default.ScreenshotRequest);
             await JsonRpcCodec.WriteRequestAsync(client, screenshotRequest, cts.Token);
             JsonRpcResponse? screenshotResponse = await JsonRpcCodec.ReadResponseAsync(client, cts.Token);
@@ -43,6 +43,7 @@ public sealed class InProcServerTests
             Assert.Equal(@"C:\shots\a.png", host.LastScreenshot!.OutputPath);
             Assert.True(host.LastScreenshot.IncludeCursor);
             Assert.Equal("hi", host.LastScreenshot.Caption);
+            Assert.Equal(new CropRectangle(10, 20, 300, 200), host.LastScreenshot.Crop);
         }
         finally
         {
