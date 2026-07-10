@@ -1,3 +1,6 @@
+using System.CommandLine;
+using System.CommandLine.Invocation;
+
 namespace AppCap;
 
 public static class CliApplication
@@ -14,34 +17,50 @@ public static class CliApplication
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(console);
 
-        ParseResult parseResult = CommandParser.Parse(args, catalog);
-        if (!parseResult.Success)
+        if (CommandParser.CanInvokeWithoutConfiguration(args) && !CommandParser.StartsWithDirective(args))
         {
-            console.ErrorOutput.WriteLine(parseResult.ErrorMessage);
-            return ExitCodes.UsageError;
+            return await RunWithoutConfigurationAsync(args, console, cancellationToken).ConfigureAwait(false);
         }
 
-        if (parseResult.Command is HelpCommand helpCommand)
+        RootCommand rootCommand = CommandParser.CreateRootCommand(catalog, runner);
+        return await InvokeAsync(rootCommand, args, console, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task<int> RunWithoutConfigurationAsync(
+        string[] args,
+        ICommandConsole console,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(console);
+
+        RootCommand rootCommand = CommandParser.CreateRootCommandForConfigurationlessInvocation();
+        return await InvokeAsync(rootCommand, args, console, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<int> InvokeAsync(
+        RootCommand rootCommand,
+        IReadOnlyList<string> args,
+        ICommandConsole console,
+        CancellationToken cancellationToken)
+    {
+        System.CommandLine.ParseResult parseResult = rootCommand.Parse(args);
+        InvocationConfiguration configuration = new()
         {
-            return WriteHelp(console, helpCommand.Topic);
-        }
+            EnableDefaultExceptionHandler = false,
+            Output = console.Output,
+            Error = console.ErrorOutput,
+        };
 
         try
         {
-            await runner.RunAsync(parseResult.Command, cancellationToken).ConfigureAwait(false);
-            return ExitCodes.Success;
+            int exitCode = await parseResult.InvokeAsync(configuration, cancellationToken).ConfigureAwait(false);
+            return parseResult.Errors.Count > 0 ? ExitCodes.UsageError : exitCode;
         }
         catch (AppCapException exception)
         {
             console.ErrorOutput.WriteLine(exception.Message);
             return exception.ExitCode;
         }
-    }
-
-    public static int WriteHelp(ICommandConsole console, HelpTopic topic)
-    {
-        ArgumentNullException.ThrowIfNull(console);
-        console.Output.WriteLine(HelpText.For(topic));
-        return ExitCodes.Success;
     }
 }

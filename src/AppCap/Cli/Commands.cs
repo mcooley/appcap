@@ -19,23 +19,3 @@ public sealed record RecordCaptionCommand(TargetApplication Target, string Capti
 public sealed record RecordStopCommand(TargetApplication Target) : AppCapCommand;
 
 public sealed record RecordCancelCommand(TargetApplication Target) : AppCapCommand;
-
-public sealed record HelpCommand(HelpTopic Topic) : AppCapCommand;
-
-public sealed record ParseResult(bool Success, AppCapCommand Command, string? ErrorMessage)
-{
-    public static ParseResult Valid(AppCapCommand command) => new(true, command, null);
-
-    public static ParseResult Failure(string errorMessage) => new(false, new HelpCommand(HelpTopic.Root), errorMessage);
-}
-
-public enum HelpTopic
-{
-    Root,
-    Click,
-    Hover,
-    Type,
-    Resize,
-    Screenshot,
-    Record,
-}

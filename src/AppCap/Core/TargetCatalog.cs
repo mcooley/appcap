@@ -2,6 +2,7 @@ namespace AppCap;
 
 public sealed class TargetCatalog
 {
+    private readonly TargetApplication[] applications;
     private readonly Dictionary<string, TargetApplication> applicationsByName;
 
     public TargetCatalog(IReadOnlyList<TargetApplication> applications)
@@ -12,14 +13,18 @@ public sealed class TargetCatalog
             throw new ArgumentException("At least one target application is required.", nameof(applications));
         }
 
+        this.applications = applications.ToArray();
+
         applicationsByName = new Dictionary<string, TargetApplication>(StringComparer.Ordinal);
-        foreach (TargetApplication application in applications)
+        foreach (TargetApplication application in this.applications)
         {
             applicationsByName[application.Name] = application;
         }
 
-        Default = applications[0];
+        Default = this.applications[0];
     }
+
+    public IReadOnlyList<TargetApplication> Applications => applications;
 
     public TargetApplication Default { get; }
 

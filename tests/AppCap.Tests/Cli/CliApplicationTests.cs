@@ -1,13 +1,14 @@
+using System.CommandLine;
+
 namespace AppCap.Tests;
 
 public sealed class CliApplicationTests
 {
     private static readonly TargetCatalog Catalog = new(
     [
-        new TargetApplication { Name = "bedrock", Id = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!Game" },
-        new TargetApplication { Name = "bedrockpreview", Id = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe!Game" },
-        new TargetApplication { Name = "education", Id = "Microsoft.MinecraftEducationEdition_8wekyb3d8bbwe!Microsoft.MinecraftEducationEdition" },
-        new TargetApplication { Name = "testapp", Id = "AppCap.E2ETestApp_6tt0djjd38yk4!App" },
+        new TargetApplication { Name = "calculator", Id = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App" },
+        new TargetApplication { Name = "notepad", Id = "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App" },
+        new TargetApplication { Name = "paint", Id = "Microsoft.Paint_8wekyb3d8bbwe!App" },
     ]);
 
     [Fact]
@@ -20,7 +21,8 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
-        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("Usage:", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("Commands:", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -30,14 +32,14 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "bedrock", "click", "-x", "5", "-y", "7"],
+            ["--target", "calculator", "click", "-x", "5", "-y", "7"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         ClickCommand command = Assert.IsType<ClickCommand>(runner.Command);
-        Assert.Equal("bedrock", command.Target.Name);
+        Assert.Equal("calculator", command.Target.Name);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
     }
@@ -48,29 +50,39 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "education"], Catalog, runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "paint"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
-        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("Usage:", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void EmptyInvocationIsVerbLess()
+    public void EmptyInvocationCanRunWithoutConfiguration()
     {
-        Assert.True(CommandParser.IsVerbLessInvocation([]));
+        Assert.True(CommandParser.CanInvokeWithoutConfiguration([]));
     }
 
     [Fact]
-    public void TargetOnlyInvocationIsVerbLess()
+    public void TargetOnlyInvocationCanRunWithoutConfiguration()
     {
-        Assert.True(CommandParser.IsVerbLessInvocation(["--target", "education"]));
+        Assert.True(CommandParser.CanInvokeWithoutConfiguration(["--target", "paint"]));
     }
 
     [Fact]
-    public void InvocationWithVerbIsNotVerbLess()
+    public void InvocationWithVerbRequiresConfiguration()
     {
-        Assert.False(CommandParser.IsVerbLessInvocation(["click", "-x", "1", "-y", "2"]));
+        Assert.False(CommandParser.CanInvokeWithoutConfiguration(["click", "-x", "1", "-y", "2"]));
+    }
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("click", "--help")]
+    [InlineData("--version")]
+    [InlineData("[suggest]", "click")]
+    public void BuiltInHelpVersionAndDirectivesCanRunWithoutConfiguration(params string[] args)
+    {
+        Assert.True(CommandParser.CanInvokeWithoutConfiguration(args));
     }
 
     [Fact]
@@ -83,7 +95,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
-        Assert.Contains("Usage: appcap", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("Usage:", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -127,22 +139,21 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "bedrock", "hover", "-x", "5", "-y", "7"],
+            ["--target", "calculator", "hover", "-x", "5", "-y", "7"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
-        Assert.Equal("bedrock", command.Target.Name);
+        Assert.Equal("calculator", command.Target.Name);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
     }
 
     [Theory]
-    [InlineData("bedrockpreview")]
-    [InlineData("education")]
-    [InlineData("testapp")]
+    [InlineData("notepad")]
+    [InlineData("paint")]
     public async Task ParsesNamedTargets(string targetValue)
     {
         RecordingRunner runner = new();
@@ -166,14 +177,14 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "bedrock", "type", "hello[Enter]"],
+            ["--target", "calculator", "type", "hello[Enter]"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
-        Assert.Equal("bedrock", command.Target.Name);
+        Assert.Equal("calculator", command.Target.Name);
         Assert.Collection(
             command.Actions,
             action => Assert.Equal("hello", Assert.IsType<TextKeyboardAction>(action).Text),
@@ -287,14 +298,14 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "testapp", "record", "start", "--output", "recording.mp4"],
+            ["--target", "paint", "record", "start", "--output", "recording.mp4"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
-        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("paint", command.Target.Name);
         Assert.Equal("recording.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(30), command.TimeLimit);
         Assert.False(command.ExcludeCursor);
@@ -324,14 +335,14 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "testapp", "record", "caption", "Test caption"],
+            ["--target", "paint", "record", "caption", "Test caption"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordCaptionCommand command = Assert.IsType<RecordCaptionCommand>(runner.Command);
-        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("paint", command.Target.Name);
         Assert.Equal("Test caption", command.Caption);
     }
 
@@ -412,11 +423,11 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "stop"], Catalog, runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "paint", "record", "stop"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStopCommand command = Assert.IsType<RecordStopCommand>(runner.Command);
-        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("paint", command.Target.Name);
     }
 
     [Fact]
@@ -425,11 +436,11 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "testapp", "record", "cancel"], Catalog, runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "paint", "record", "cancel"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordCancelCommand command = Assert.IsType<RecordCancelCommand>(runner.Command);
-        Assert.Equal("testapp", command.Target.Name);
+        Assert.Equal("paint", command.Target.Name);
     }
 
     [Fact]
@@ -442,7 +453,49 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
-        Assert.Contains("appcap screenshot", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("Usage:", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("screenshot", console.OutputText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HelpWithUnknownTargetDoesNotRunCommand()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--target", "nope", "click", "--help"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(runner.Command);
+        Assert.DoesNotContain("Unknown target 'nope'.", console.ErrorText, StringComparison.Ordinal);
+        Assert.Contains("click", console.OutputText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task VersionDoesNotRunCommand()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["--version"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Matches(@"\S", console.OutputText);
+    }
+
+    [Fact]
+    public void TargetOptionOffersConfiguredCompletions()
+    {
+        RecordingRunner runner = new();
+        RootCommand rootCommand = CommandParser.CreateRootCommand(Catalog, runner);
+
+        System.CommandLine.ParseResult parseResult = rootCommand.Parse(["--target"]);
+        string[] completions = parseResult.GetCompletions().Select(completion => completion.Label).ToArray();
+
+        Assert.Contains("calculator", completions, StringComparer.Ordinal);
+        Assert.Contains("notepad", completions, StringComparer.Ordinal);
+        Assert.Contains("paint", completions, StringComparer.Ordinal);
     }
 
     private sealed class RecordingRunner : ICommandRunner

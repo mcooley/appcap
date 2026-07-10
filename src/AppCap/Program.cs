@@ -14,9 +14,26 @@ if (WorkerHost.IsWorkerInvocation(args))
 
 SystemConsole console = new();
 
-if (CommandParser.IsVerbLessInvocation(args))
+if (CommandParser.CanInvokeWithoutConfiguration(args))
 {
-	return CliApplication.WriteHelp(console, HelpTopic.Root);
+	if (CommandParser.StartsWithDirective(args))
+	{
+		try
+		{
+			TargetCatalog directiveCatalog = ConfigLoader.Load(AppContext.BaseDirectory);
+			return await CliApplication.RunAsync(
+				args,
+				directiveCatalog,
+				CommandServices.CreateRunner(),
+				console).ConfigureAwait(false);
+		}
+		catch (AppCapException)
+		{
+			return await CliApplication.RunWithoutConfigurationAsync(console: console, args: args).ConfigureAwait(false);
+		}
+	}
+
+	return await CliApplication.RunWithoutConfigurationAsync(console: console, args: args).ConfigureAwait(false);
 }
 
 TargetCatalog catalog;

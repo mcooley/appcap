@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Help;
 using System.CommandLine.Parsing;
 using System.Globalization;
 
@@ -6,188 +7,388 @@ namespace AppCap;
 
 public static class CommandParser
 {
-    public static bool IsVerbLessInvocation(IReadOnlyList<string> args)
+    private const string ConfigurationRequiredMessage = "Configuration must be loaded before commands can run.";
+
+    public static bool CanInvokeWithoutConfiguration(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        CommandLineModel model = CommandLineModel.Create();
-        System.CommandLine.ParseResult result = model.RootCommand.Parse(args);
-        return result.Errors.Count is 0 && result.CommandResult.Command == model.RootCommand;
-    }
-
-    public static ParseResult Parse(IReadOnlyList<string> args, TargetCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(catalog);
-
-        if (args.Count is 0)
-        {
-            return ParseResult.Valid(new HelpCommand(HelpTopic.Root));
-        }
-
-        if (TryParseHelp(args, out HelpTopic helpTopic))
-        {
-            return ParseResult.Valid(new HelpCommand(helpTopic));
-        }
-
-        CommandLineModel model = CommandLineModel.Create();
-        System.CommandLine.ParseResult result = model.RootCommand.Parse(args);
-        if (result.Errors.Count > 0)
-        {
-            return ParseResult.Failure(result.Errors[0].Message);
-        }
-
-        Command command = result.CommandResult.Command;
-        if (command == model.RootCommand)
-        {
-            return ParseResult.Valid(new HelpCommand(HelpTopic.Root));
-        }
-
-        string? targetValue = result.GetValue(model.TargetOption);
-        TargetApplication target = catalog.Default;
-        if (targetValue is not null && !catalog.TryParse(targetValue, out target))
-        {
-            return ParseResult.Failure($"Unknown target '{targetValue}'.");
-        }
-
-        if (command == model.ClickCommand)
-        {
-            return ParseResult.Valid(new ClickCommand(
-                target,
-                result.GetRequiredValue(model.ClickXOption),
-                result.GetRequiredValue(model.ClickYOption)));
-        }
-
-        if (command == model.HoverCommand)
-        {
-            return ParseResult.Valid(new HoverCommand(
-                target,
-                result.GetRequiredValue(model.HoverXOption),
-                result.GetRequiredValue(model.HoverYOption)));
-        }
-
-        if (command == model.TypeCommand)
-        {
-            string sequence = result.GetRequiredValue(model.TypeTextArgument);
-            if (!KeyboardSequenceParser.TryParse(sequence, out IReadOnlyList<KeyboardAction> actions, out string? errorMessage))
-            {
-                return ParseResult.Failure(errorMessage ?? "Invalid keyboard sequence.");
-            }
-
-            return ParseResult.Valid(new TypeCommand(target, actions));
-        }
-
-        if (command == model.ResizeCommand)
-        {
-            return ParseResult.Valid(new ResizeCommand(
-                target,
-                result.GetRequiredValue(model.ResizeWidthOption),
-                result.GetRequiredValue(model.ResizeHeightOption)));
-        }
-
-        if (command == model.ScreenshotCommand)
-        {
-            return ParseResult.Valid(new ScreenshotCommand(
-                target,
-                result.GetRequiredValue(model.ScreenshotOutputOption),
-                result.GetValue(model.ScreenshotExcludeCursorOption),
-                NormalizeOptionalText(result.GetValue(model.ScreenshotCaptionOption))));
-        }
-
-        if (command == model.RecordStartCommand)
-        {
-            return ParseResult.Valid(new RecordStartCommand(
-                target,
-                result.GetRequiredValue(model.RecordOutputOption),
-                TimeSpan.FromMinutes(result.GetValue(model.RecordTimeLimitOption)),
-                result.GetValue(model.RecordExcludeCursorOption)));
-        }
-
-        if (command == model.RecordStopCommand)
-        {
-            return ParseResult.Valid(new RecordStopCommand(target));
-        }
-
-        if (command == model.RecordCancelCommand)
-        {
-            return ParseResult.Valid(new RecordCancelCommand(target));
-        }
-
-        if (command == model.RecordCaptionCommand)
-        {
-            string? caption = NormalizeOptionalText(result.GetRequiredValue(model.RecordCaptionArgument));
-            return caption is null
-                ? ParseResult.Failure("Caption text must not be empty.")
-                : ParseResult.Valid(new RecordCaptionCommand(target, caption));
-        }
-
-        return ParseResult.Failure($"Unknown command '{command.Name}'.");
-    }
-
-    private static bool TryParseHelp(IReadOnlyList<string> args, out HelpTopic topic)
-    {
-        topic = HelpTopic.Root;
-        if (args.Count is 0)
-        {
-            return false;
-        }
-
-        if (args[0] is "--help" or "help")
+        if (args.Count is 0 ||
+            args.Contains("--help", StringComparer.Ordinal) ||
+            args.Contains("-?", StringComparer.Ordinal) ||
+            args.Contains("--version", StringComparer.Ordinal) ||
+            StartsWithDirective(args))
         {
             return true;
         }
 
-        if (!args.Contains("--help", StringComparer.Ordinal))
-        {
-            return false;
-        }
-
-        topic = args[0] switch
-        {
-            "click" => HelpTopic.Click,
-            "hover" => HelpTopic.Hover,
-            "type" => HelpTopic.Type,
-            "resize" => HelpTopic.Resize,
-            "screenshot" => HelpTopic.Screenshot,
-            "record" => HelpTopic.Record,
-            _ => HelpTopic.Root,
-        };
-        return true;
+        RootCommand rootCommand = CreateRootCommandForConfigurationlessInvocation();
+        System.CommandLine.ParseResult result = rootCommand.Parse(args);
+        return result.Errors.Count is 0 && result.CommandResult.Command == rootCommand;
     }
 
-    private static Option<int> RequiredNonNegativeIntegerOption(string name, string errorName, params string[] aliases)
+    public static System.CommandLine.ParseResult Parse(IReadOnlyList<string> args, TargetCatalog catalog, ICommandRunner runner)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(runner);
+
+        return CreateRootCommand(catalog, runner).Parse(args);
+    }
+
+    internal static RootCommand CreateRootCommand(TargetCatalog catalog, ICommandRunner runner)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(runner);
+
+        return CreateRootCommand(catalog, runner.RunAsync);
+    }
+
+    internal static RootCommand CreateRootCommandForConfigurationlessInvocation() =>
+        CreateRootCommand(
+            catalog: null,
+            static (_, _) => Task.FromException(new AppCapException(ConfigurationRequiredMessage, ExitCodes.UsageError)));
+
+    private static RootCommand CreateRootCommand(
+        TargetCatalog? catalog,
+        Func<AppCapCommand, CancellationToken, Task> executeCommandAsync)
+    {
+        ArgumentNullException.ThrowIfNull(executeCommandAsync);
+
+        RootCommand rootCommand = new("Automates interactions with a configured target application.");
+        HelpOption helpOption = rootCommand.Options.OfType<HelpOption>().Single();
+        helpOption.Aliases.Remove("-h");
+        Option<string?> targetOption = new("--target")
+        {
+            Description = catalog is null
+                ? "Selects the configured target application."
+                : $"Selects the configured target application. Defaults to {catalog.Default.Name}.",
+            HelpName = "target",
+            Recursive = true,
+        };
+        if (catalog is not null)
+        {
+            targetOption.CompletionSources.Add(_ => catalog.Applications.Select(application => application.Name));
+            targetOption.Validators.Add(result =>
+            {
+                if (result.Tokens.Count is 0)
+                {
+                    return;
+                }
+
+                CommandResult? commandResult = FindParentCommandResult(result);
+                if (commandResult is null)
+                {
+                    return;
+                }
+
+                CommandResult invokedCommand = FindInvokedCommandResult(commandResult);
+                if (invokedCommand.Command == rootCommand || HasBuiltInShortCircuitToken(commandResult))
+                {
+                    return;
+                }
+
+                string? targetValue = result.GetValueOrDefault<string?>();
+                if (targetValue is not null && !catalog.TryParse(targetValue, out _))
+                {
+                    result.AddError($"Unknown target '{targetValue}'.");
+                }
+            });
+        }
+
+        Option<int> coordinateXOption = RequiredIntegerOption(
+            "-x",
+            "pixels",
+            "Sets the horizontal coordinate in pixels within the target window.",
+            value => value >= 0);
+        Option<int> coordinateYOption = RequiredIntegerOption(
+            "-y",
+            "pixels",
+            "Sets the vertical coordinate in pixels within the target window.",
+            value => value >= 0);
+        Option<bool> excludeCursorOption = new("--exclude-cursor")
+        {
+            Description = "Excludes the cursor from the captured output.",
+        };
+
+        Command clickCommand = new("click", "Injects a mouse click into the target window.");
+        clickCommand.Add(coordinateXOption);
+        clickCommand.Add(coordinateYOption);
+        clickCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new ClickCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(coordinateXOption),
+                    parseResult.GetRequiredValue(coordinateYOption)),
+                cancellationToken));
+
+        Command hoverCommand = new("hover", "Moves the cursor over the target window.");
+        hoverCommand.Add(coordinateXOption);
+        hoverCommand.Add(coordinateYOption);
+        hoverCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new HoverCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(coordinateXOption),
+                    parseResult.GetRequiredValue(coordinateYOption)),
+                cancellationToken));
+
+        Argument<string> typeTextArgument = new("text-and-keys")
+        {
+            Description = "Specifies the text and bracketed key presses to inject into the target window.",
+            HelpName = "text-and-keys",
+        };
+        typeTextArgument.Validators.Add(result =>
+        {
+            string? sequence = result.GetValueOrDefault<string>();
+            if (sequence is null)
+            {
+                return;
+            }
+
+            if (!KeyboardSequenceParser.TryParse(sequence, out _, out string? errorMessage))
+            {
+                result.AddError(errorMessage ?? "Invalid keyboard sequence.");
+            }
+        });
+        Command typeCommand = new(
+            "type",
+            "Injects keyboard input into the target window. Bracketed keys use WebDriver/Playwright-style key names such as [Escape], [Enter], [Shift+F2], and [Control+A].");
+        typeCommand.Add(typeTextArgument);
+        typeCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new TypeCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    ParseKeyboardSequence(parseResult.GetRequiredValue(typeTextArgument))),
+                cancellationToken));
+
+        Option<int> resizeWidthOption = RequiredIntegerOption(
+            "--width",
+            "pixels",
+            "Sets the target window width in pixels.",
+            value => value > 0,
+            "-w");
+        Option<int> resizeHeightOption = RequiredIntegerOption(
+            "--height",
+            "pixels",
+            "Sets the target window height in pixels.",
+            value => value > 0,
+            "-h");
+        Command resizeCommand = new("resize", "Resizes the target window.");
+        resizeCommand.Add(resizeWidthOption);
+        resizeCommand.Add(resizeHeightOption);
+        resizeCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new ResizeCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(resizeWidthOption),
+                    parseResult.GetRequiredValue(resizeHeightOption)),
+                cancellationToken));
+
+        Option<string> screenshotOutputOption = RequiredOutputOption(
+            ".png",
+            "Writes the screenshot to the specified PNG file.",
+            "screenshot output must be a .png file.");
+        Option<string?> screenshotCaptionOption = new("--caption")
+        {
+            Description = "Shows a caption in the screenshot when specified.",
+            HelpName = "text",
+        };
+        Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the target window.");
+        screenshotCommand.Add(screenshotOutputOption);
+        screenshotCommand.Add(excludeCursorOption);
+        screenshotCommand.Add(screenshotCaptionOption);
+        screenshotCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new ScreenshotCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(screenshotOutputOption),
+                    parseResult.GetValue(excludeCursorOption),
+                    NormalizeOptionalText(parseResult.GetValue(screenshotCaptionOption))),
+                cancellationToken));
+
+        Option<string> recordOutputOption = RequiredOutputOption(
+            ".mp4",
+            "Writes the recording to the specified MP4 file.",
+            "recording output must be a .mp4 file.");
+        Option<TimeSpan> recordTimeLimitOption = new("--time-limit")
+        {
+            Description = "Sets the recording time limit in minutes. Fractional minutes are supported and the default is 30 minutes.",
+            HelpName = "minutes",
+            DefaultValueFactory = _ => TimeSpan.FromMinutes(30),
+        };
+        recordTimeLimitOption.CustomParser = ParseTimeLimit;
+        Command recordStartCommand = new("start", "Starts recording the target window.");
+        recordStartCommand.Add(recordOutputOption);
+        recordStartCommand.Add(recordTimeLimitOption);
+        recordStartCommand.Add(excludeCursorOption);
+        recordStartCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new RecordStartCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(recordOutputOption),
+                    parseResult.GetValue(recordTimeLimitOption),
+                    parseResult.GetValue(excludeCursorOption)),
+                cancellationToken));
+
+        Command recordStopCommand = new("stop", "Stops recording the target window.");
+        recordStopCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new RecordStopCommand(ResolveTarget(parseResult, targetOption, catalog)),
+                cancellationToken));
+
+        Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
+        recordCancelCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new RecordCancelCommand(ResolveTarget(parseResult, targetOption, catalog)),
+                cancellationToken));
+
+        Argument<string> recordCaptionArgument = new("text")
+        {
+            Description = "Specifies the caption text to show in the active recording.",
+            HelpName = "text",
+        };
+        recordCaptionArgument.Validators.Add(result =>
+        {
+            string? caption = result.GetValueOrDefault<string>();
+            if (caption is not null && string.IsNullOrWhiteSpace(caption))
+            {
+                result.AddError("Caption text must not be empty.");
+            }
+        });
+        Command recordCaptionCommand = new("caption", "Shows a caption in the recording for three seconds.");
+        recordCaptionCommand.Add(recordCaptionArgument);
+        recordCaptionCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new RecordCaptionCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    parseResult.GetRequiredValue(recordCaptionArgument)),
+                cancellationToken));
+
+        Command recordCommand = new(
+            "record",
+            "Starts, stops, or cancels recording the target window. The cursor is included by default. Captions fade out after 3 seconds. Recordings stop and save after 30 minutes by default.");
+        recordCommand.Add(recordStartCommand);
+        recordCommand.Add(recordStopCommand);
+        recordCommand.Add(recordCancelCommand);
+        recordCommand.Add(recordCaptionCommand);
+
+        rootCommand.SetAction(parseResult => new HelpAction().Invoke(parseResult));
+        rootCommand.Add(targetOption);
+        rootCommand.Add(clickCommand);
+        rootCommand.Add(hoverCommand);
+        rootCommand.Add(typeCommand);
+        rootCommand.Add(resizeCommand);
+        rootCommand.Add(screenshotCommand);
+        rootCommand.Add(recordCommand);
+        return rootCommand;
+    }
+
+    internal static bool StartsWithDirective(IReadOnlyList<string> args) =>
+        args.Count > 0 && IsDirectiveToken(args[0]);
+
+    private static bool IsDirectiveToken(string value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length >= 3 &&
+        value[0] == '[' &&
+        value[^1] == ']';
+
+    private static CommandResult? FindParentCommandResult(SymbolResult result)
+    {
+        for (SymbolResult? current = result.Parent; current is not null; current = current.Parent)
+        {
+            if (current is CommandResult commandResult)
+            {
+                return commandResult;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasBuiltInShortCircuitToken(CommandResult commandResult) =>
+        commandResult.Tokens.Any(token => token.Value is "--help" or "-?" or "--version");
+
+    private static CommandResult FindInvokedCommandResult(CommandResult commandResult)
+    {
+        CommandResult current = commandResult;
+        while (current.Children.OfType<CommandResult>().FirstOrDefault() is CommandResult childCommand)
+        {
+            current = childCommand;
+        }
+
+        return current;
+    }
+
+    private static Option<int> RequiredIntegerOption(
+        string name,
+        string helpName,
+        string description,
+        Func<int, bool> isValid,
+        params string[] aliases)
     {
         Option<int> option = new(name, aliases)
         {
+            Description = description,
+            HelpName = helpName,
             Required = true,
         };
-        option.CustomParser = result => ParseInteger(result, errorName, value => value >= 0);
+        option.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is not 1 || !int.TryParse(result.Tokens[0].Value, out int value))
+            {
+                return;
+            }
+
+            if (!isValid(value))
+            {
+                result.AddError($"Invalid value for {name}.");
+            }
+        });
         return option;
     }
 
-    private static Option<int> RequiredPositiveIntegerOption(string name, string errorName, params string[] aliases)
+    private static Option<string> RequiredOutputOption(string extension, string description, string extensionErrorMessage)
     {
-        Option<int> option = new(name, aliases)
+        Option<string> option = new("--output")
         {
+            Description = description,
+            HelpName = $"path{extension}",
             Required = true,
         };
-        option.CustomParser = result => ParseInteger(result, errorName, value => value > 0);
+        option.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is 0)
+            {
+                return;
+            }
+
+            string? value = result.GetValueOrDefault<string>();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                result.AddError("Invalid value for --output.");
+                return;
+            }
+
+            if (!Path.GetExtension(value).Equals(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                result.AddError(extensionErrorMessage);
+            }
+        });
         return option;
     }
 
-    private static int ParseInteger(ArgumentResult result, string errorName, Func<int, bool> isValid)
+    private static IReadOnlyList<KeyboardAction> ParseKeyboardSequence(string sequence)
     {
-        string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
-        if (!int.TryParse(value, out int parsed) || !isValid(parsed))
+        if (!KeyboardSequenceParser.TryParse(sequence, out IReadOnlyList<KeyboardAction> actions, out string? errorMessage))
         {
-            result.AddError($"Invalid value for {errorName}.");
-            return 0;
+            throw new AppCapException(errorMessage ?? "Invalid keyboard sequence.", ExitCodes.UsageError);
         }
 
-        return parsed;
+        return actions;
     }
 
-    private static double ParseTimeLimitMinutes(ArgumentResult result)
+    private static TimeSpan ParseTimeLimit(ArgumentResult result)
     {
         string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double minutes) ||
@@ -195,260 +396,27 @@ public static class CommandParser
             minutes > (int.MaxValue / 60d))
         {
             result.AddError("Invalid value for --time-limit.");
-            return 0;
+            return TimeSpan.Zero;
         }
 
-        return minutes;
+        return TimeSpan.FromMinutes(minutes);
+    }
+
+    private static TargetApplication ResolveTarget(
+        System.CommandLine.ParseResult parseResult,
+        Option<string?> targetOption,
+        TargetCatalog? catalog)
+    {
+        if (catalog is null)
+        {
+            throw new AppCapException(ConfigurationRequiredMessage, ExitCodes.UsageError);
+        }
+
+        string? targetValue = parseResult.GetValue(targetOption);
+        return targetValue is not null && catalog.TryParse(targetValue, out TargetApplication target)
+            ? target
+            : catalog.Default;
     }
 
     private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
-
-    private sealed class CommandLineModel
-    {
-        private CommandLineModel(
-            RootCommand rootCommand,
-            Option<string?> targetOption,
-            Command clickCommand,
-            Option<int> clickXOption,
-            Option<int> clickYOption,
-            Command hoverCommand,
-            Option<int> hoverXOption,
-            Option<int> hoverYOption,
-            Command typeCommand,
-            Argument<string> typeTextArgument,
-            Command resizeCommand,
-            Option<int> resizeWidthOption,
-            Option<int> resizeHeightOption,
-            Command screenshotCommand,
-            Option<string> screenshotOutputOption,
-            Option<bool> screenshotExcludeCursorOption,
-            Option<string?> screenshotCaptionOption,
-            Command recordCommand,
-            Command recordStartCommand,
-            Command recordStopCommand,
-            Command recordCancelCommand,
-            Command recordCaptionCommand,
-            Option<string> recordOutputOption,
-            Option<double> recordTimeLimitOption,
-            Option<bool> recordExcludeCursorOption,
-            Argument<string> recordCaptionArgument)
-        {
-            RootCommand = rootCommand;
-            TargetOption = targetOption;
-            ClickCommand = clickCommand;
-            ClickXOption = clickXOption;
-            ClickYOption = clickYOption;
-            HoverCommand = hoverCommand;
-            HoverXOption = hoverXOption;
-            HoverYOption = hoverYOption;
-            TypeCommand = typeCommand;
-            TypeTextArgument = typeTextArgument;
-            ResizeCommand = resizeCommand;
-            ResizeWidthOption = resizeWidthOption;
-            ResizeHeightOption = resizeHeightOption;
-            ScreenshotCommand = screenshotCommand;
-            ScreenshotOutputOption = screenshotOutputOption;
-            ScreenshotExcludeCursorOption = screenshotExcludeCursorOption;
-            ScreenshotCaptionOption = screenshotCaptionOption;
-            RecordCommand = recordCommand;
-            RecordStartCommand = recordStartCommand;
-            RecordStopCommand = recordStopCommand;
-            RecordCancelCommand = recordCancelCommand;
-            RecordCaptionCommand = recordCaptionCommand;
-            RecordOutputOption = recordOutputOption;
-            RecordTimeLimitOption = recordTimeLimitOption;
-            RecordExcludeCursorOption = recordExcludeCursorOption;
-            RecordCaptionArgument = recordCaptionArgument;
-        }
-
-        public RootCommand RootCommand { get; }
-
-        public Option<string?> TargetOption { get; }
-
-        public Command ClickCommand { get; }
-
-        public Option<int> ClickXOption { get; }
-
-        public Option<int> ClickYOption { get; }
-
-        public Command HoverCommand { get; }
-
-        public Option<int> HoverXOption { get; }
-
-        public Option<int> HoverYOption { get; }
-
-        public Command TypeCommand { get; }
-
-        public Argument<string> TypeTextArgument { get; }
-
-        public Command ResizeCommand { get; }
-
-        public Option<int> ResizeWidthOption { get; }
-
-        public Option<int> ResizeHeightOption { get; }
-
-        public Command ScreenshotCommand { get; }
-
-        public Option<string> ScreenshotOutputOption { get; }
-
-        public Option<bool> ScreenshotExcludeCursorOption { get; }
-
-        public Option<string?> ScreenshotCaptionOption { get; }
-
-        public Command RecordCommand { get; }
-
-        public Command RecordStartCommand { get; }
-
-        public Command RecordStopCommand { get; }
-
-        public Command RecordCancelCommand { get; }
-
-        public Command RecordCaptionCommand { get; }
-
-        public Option<string> RecordOutputOption { get; }
-
-        public Option<double> RecordTimeLimitOption { get; }
-
-        public Option<bool> RecordExcludeCursorOption { get; }
-
-        public Argument<string> RecordCaptionArgument { get; }
-
-        public static CommandLineModel Create()
-        {
-            Option<string?> targetOption = new("--target")
-            {
-                Recursive = true,
-            };
-
-            Option<int> clickXOption = RequiredNonNegativeIntegerOption("-x", "-x");
-            Option<int> clickYOption = RequiredNonNegativeIntegerOption("-y", "-y");
-            Command clickCommand = new("click", "Injects a mouse click into the target window.");
-            clickCommand.Add(clickXOption);
-            clickCommand.Add(clickYOption);
-
-            Option<int> hoverXOption = RequiredNonNegativeIntegerOption("-x", "-x");
-            Option<int> hoverYOption = RequiredNonNegativeIntegerOption("-y", "-y");
-            Command hoverCommand = new("hover", "Moves the cursor over the target window.");
-            hoverCommand.Add(hoverXOption);
-            hoverCommand.Add(hoverYOption);
-
-            Argument<string> typeTextArgument = new("text-and-keys");
-            Command typeCommand = new("type", "Injects keyboard input into the target window.");
-            typeCommand.Add(typeTextArgument);
-
-            Option<int> resizeWidthOption = RequiredPositiveIntegerOption("--width", "--width", "-w");
-            Option<int> resizeHeightOption = RequiredPositiveIntegerOption("--height", "--height", "-h");
-            Command resizeCommand = new("resize", "Resizes the target window.");
-            resizeCommand.Add(resizeWidthOption);
-            resizeCommand.Add(resizeHeightOption);
-
-            Option<string> screenshotOutputOption = new("--output")
-            {
-                Required = true,
-            };
-            screenshotOutputOption.CustomParser = result =>
-            {
-                string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    result.AddError("Invalid value for --output.");
-                    return string.Empty;
-                }
-
-                if (!Path.GetExtension(value).Equals(".png", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.AddError("screenshot output must be a .png file.");
-                    return string.Empty;
-                }
-
-                return value;
-            };
-            Command screenshotCommand = new("screenshot", "Takes a PNG screenshot of the target window.");
-            Option<bool> screenshotExcludeCursorOption = new("--exclude-cursor");
-            Option<string?> screenshotCaptionOption = new("--caption");
-            screenshotCommand.Add(screenshotOutputOption);
-            screenshotCommand.Add(screenshotExcludeCursorOption);
-            screenshotCommand.Add(screenshotCaptionOption);
-
-            Option<string> recordOutputOption = new("--output")
-            {
-                Required = true,
-            };
-            recordOutputOption.CustomParser = result =>
-            {
-                string? value = result.Tokens.Count is 1 ? result.Tokens[0].Value : null;
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    result.AddError("Invalid value for --output.");
-                    return string.Empty;
-                }
-
-                if (!Path.GetExtension(value).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
-                {
-                    result.AddError("recording output must be a .mp4 file.");
-                    return string.Empty;
-                }
-
-                return value;
-            };
-            Command recordStartCommand = new("start", "Starts recording the target window.");
-            Option<double> recordTimeLimitOption = new("--time-limit")
-            {
-                DefaultValueFactory = _ => 30,
-            };
-            recordTimeLimitOption.CustomParser = ParseTimeLimitMinutes;
-            Option<bool> recordExcludeCursorOption = new("--exclude-cursor");
-            recordStartCommand.Add(recordOutputOption);
-            recordStartCommand.Add(recordTimeLimitOption);
-            recordStartCommand.Add(recordExcludeCursorOption);
-            Command recordStopCommand = new("stop", "Stops recording the target window.");
-            Command recordCancelCommand = new("cancel", "Stops recording the target window and discards the output file.");
-            Argument<string> recordCaptionArgument = new("text");
-            Command recordCaptionCommand = new("caption", "Shows a caption in the recording for three seconds.");
-            recordCaptionCommand.Add(recordCaptionArgument);
-            Command recordCommand = new("record", "Starts, stops, or cancels recording the target window.");
-            recordCommand.Add(recordStartCommand);
-            recordCommand.Add(recordStopCommand);
-            recordCommand.Add(recordCancelCommand);
-            recordCommand.Add(recordCaptionCommand);
-
-            RootCommand rootCommand = new("Automates interactions with a configured target application.");
-            rootCommand.SetAction(_ => { });
-            rootCommand.Add(targetOption);
-            rootCommand.Add(clickCommand);
-            rootCommand.Add(hoverCommand);
-            rootCommand.Add(typeCommand);
-            rootCommand.Add(resizeCommand);
-            rootCommand.Add(screenshotCommand);
-            rootCommand.Add(recordCommand);
-
-            return new CommandLineModel(
-                rootCommand,
-                targetOption,
-                clickCommand,
-                clickXOption,
-                clickYOption,
-                hoverCommand,
-                hoverXOption,
-                hoverYOption,
-                typeCommand,
-                typeTextArgument,
-                resizeCommand,
-                resizeWidthOption,
-                resizeHeightOption,
-                screenshotCommand,
-                screenshotOutputOption,
-                screenshotExcludeCursorOption,
-                screenshotCaptionOption,
-                recordCommand,
-                recordStartCommand,
-                recordStopCommand,
-                recordCancelCommand,
-                recordCaptionCommand,
-                recordOutputOption,
-                recordTimeLimitOption,
-                recordExcludeCursorOption,
-                recordCaptionArgument);
-        }
-    }
 }
