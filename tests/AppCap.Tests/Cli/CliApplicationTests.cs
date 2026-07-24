@@ -46,6 +46,42 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task TapParsesTerseCoordinates()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "calculator", "tap", "123,456", "--device", "touch"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        TapCommand command = Assert.IsType<TapCommand>(runner.Command);
+        Assert.Equal(123, command.X);
+        Assert.Equal(456, command.Y);
+        Assert.Equal(InputDeviceType.Touch, command.DeviceType);
+    }
+
+    [Theory]
+    [InlineData("tap")]
+    [InlineData("tap", "-x", "5")]
+    [InlineData("tap", "123,456", "-x", "5", "-y", "7")]
+    [InlineData("tap", "-1,2")]
+    [InlineData("tap", "1")]
+    public async Task TapRejectsInvalidCoordinateSyntax(params string[] args)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(args, Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+    }
+
+    [Fact]
     public async Task TargetOnlyArgsPrintRootHelp()
     {
         RecordingRunner runner = new();

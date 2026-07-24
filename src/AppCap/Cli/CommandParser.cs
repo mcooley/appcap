@@ -96,16 +96,22 @@ public static class CommandParser
             });
         }
 
-        Option<int> coordinateXOption = RequiredIntegerOption(
+        Option<int?> coordinateXOption = OptionalIntegerOption(
             "-x",
             "pixels",
             "Sets the horizontal coordinate in pixels within the target window.",
             value => value >= 0);
-        Option<int> coordinateYOption = RequiredIntegerOption(
+        Option<int?> coordinateYOption = OptionalIntegerOption(
             "-y",
             "pixels",
             "Sets the vertical coordinate in pixels within the target window.",
             value => value >= 0);
+        Argument<CoordinatePair?> coordinatesArgument = new("coordinates")
+        {
+            Description = "Specifies the coordinates as x,y.",
+            HelpName = "x,y",
+        };
+        coordinatesArgument.CustomParser = ParseCoordinates;
         Option<bool> excludeCursorOption = new("--exclude-cursor")
         {
             Description = "Excludes the cursor from the captured output.",
@@ -121,17 +127,36 @@ public static class CommandParser
         Argument<string> inputDeviceArgument = CreateInputDeviceArgument();
 
         Command tapCommand = new("tap", "Injects a tap into the target window.");
+        tapCommand.Add(coordinatesArgument);
         tapCommand.Add(coordinateXOption);
         tapCommand.Add(coordinateYOption);
         tapCommand.Add(deviceOption);
+        tapCommand.Validators.Add(result =>
+        {
+            bool hasCoordinates = result.GetResult(coordinatesArgument)?.Tokens.Count > 0;
+            bool hasCoordinateX = result.GetResult(coordinateXOption)?.Tokens.Count > 0;
+            bool hasCoordinateY = result.GetResult(coordinateYOption)?.Tokens.Count > 0;
+
+            if (hasCoordinates && (hasCoordinateX || hasCoordinateY))
+            {
+                result.AddError("Specify coordinates either as x,y or with -x and -y, not both.");
+            }
+            else if (!hasCoordinates && (!hasCoordinateX || !hasCoordinateY))
+            {
+                result.AddError("Coordinates are required. Specify x,y or both -x and -y.");
+            }
+        });
         tapCommand.SetAction((parseResult, cancellationToken) =>
-            executeCommandAsync(
+        {
+            CoordinatePair? coordinates = parseResult.GetValue(coordinatesArgument);
+            return executeCommandAsync(
                 new TapCommand(
                     ResolveTarget(parseResult, targetOption, catalog),
-                    parseResult.GetRequiredValue(coordinateXOption),
-                    parseResult.GetRequiredValue(coordinateYOption),
+                    coordinates?.X ?? parseResult.GetValue(coordinateXOption) ?? throw MissingCoordinatesException(),
+                    coordinates?.Y ?? parseResult.GetValue(coordinateYOption) ?? throw MissingCoordinatesException(),
                     ParseOptionalDeviceType(parseResult.GetValue(deviceOption))),
-                cancellationToken));
+                cancellationToken);
+        });
 
         Argument<string> typeTextArgument = new("text-and-keys")
         {
@@ -254,7 +279,7 @@ public static class CommandParser
         recordTimeLimitOption.CustomParser = ParseTimeLimit;
         Option<CropRectangle?> recordCropOption = new("--crop")
         {
-            Description = "Captures only the specified rectangle as x,y,width,height. Width and height must be even.",
+            Description = "Captures only the specified rectangle as x,y,width,height.",
             HelpName = "x,y,width,height",
         };
         recordCropOption.CustomParser = ParseRecordingCrop;
@@ -390,6 +415,32 @@ public static class CommandParser
         return option;
     }
 
+    private static Option<int?> OptionalIntegerOption(
+        string name,
+        string helpName,
+        string description,
+        Func<int, bool> isValid)
+    {
+        Option<int?> option = new(name)
+        {
+            Description = description,
+            HelpName = helpName,
+        };
+        option.Validators.Add(result =>
+        {
+            if (result.Tokens.Count is not 1 || !int.TryParse(result.Tokens[0].Value, out int value))
+            {
+                return;
+            }
+
+            if (!isValid(value))
+            {
+                result.AddError($"Invalid value for {name}.");
+            }
+        });
+        return option;
+    }
+
     private static Option<string?> CreateDeviceOption()
     {
         Option<string?> option = new("--device")
@@ -483,6 +534,29 @@ public static class CommandParser
         return TimeSpan.FromMinutes(minutes);
     }
 
+    private static CoordinatePair? ParseCoordinates(ArgumentResult result)
+    {
+        if (result.Tokens.Count is 0)
+        {
+            return null;
+        }
+
+        string[] parts = result.Tokens.Count is 1
+            ? result.Tokens[0].Value.Split(',', StringSplitOptions.TrimEntries)
+            : [];
+        if (parts.Length is not 2 ||
+            !int.TryParse(parts[0], out int x) ||
+            !int.TryParse(parts[1], out int y) ||
+            x < 0 ||
+            y < 0)
+        {
+            result.AddError("Invalid coordinates. Expected x,y with nonnegative integer values.");
+            return null;
+        }
+
+        return new CoordinatePair(x, y);
+    }
+
     private static CropRectangle? ParseCrop(ArgumentResult result)
     {
         if (result.Tokens.Count is 0)
@@ -530,6 +604,9 @@ public static class CommandParser
 
     private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
+    private static AppCapException MissingCoordinatesException() =>
+        new("Coordinates are required. Specify x,y or both -x and -y.", ExitCodes.UsageError);
+
     private static void ValidateInputDeviceToken(SymbolResult result)
     {
         if (result.Tokens.Count is 0)
@@ -543,4 +620,6 @@ public static class CommandParser
             result.AddError("Invalid input device identifier.");
         }
     }
+
+    private readonly record struct CoordinatePair(int X, int Y);
 }

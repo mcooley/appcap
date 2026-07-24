@@ -69,7 +69,7 @@ Injects a touch tap into the target window. Coordinates are relative to the top-
 corner of the target window.
 
 ```powershell
-appcap --target calculator tap -x 151 -y 684
+appcap --target calculator tap 151,684
 appcap --target calculator tap --device touch -x 151 -y 684
 ```
 
