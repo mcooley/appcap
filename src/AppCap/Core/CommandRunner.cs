@@ -4,28 +4,25 @@ public sealed class CommandRunner : ICommandRunner
 {
     private readonly ITargetResolver targetResolver;
     private readonly IWindowController windowController;
-    private readonly IInputInjector inputInjector;
-    private readonly ICursorMover cursorMover;
-    private readonly IKeyboardInputInjector keyboardInputInjector;
+    private readonly IInputController inputController;
     private readonly IScreenshotCapture screenshotCapture;
     private readonly IRecordingController recordingController;
+    private readonly ICommandConsole console;
 
     public CommandRunner(
         ITargetResolver targetResolver,
         IWindowController windowController,
-        IInputInjector inputInjector,
-        ICursorMover cursorMover,
-        IKeyboardInputInjector keyboardInputInjector,
+        IInputController inputController,
         IScreenshotCapture screenshotCapture,
-        IRecordingController recordingController)
+        IRecordingController recordingController,
+        ICommandConsole console)
     {
         this.targetResolver = targetResolver;
         this.windowController = windowController;
-        this.inputInjector = inputInjector;
-        this.cursorMover = cursorMover;
-        this.keyboardInputInjector = keyboardInputInjector;
+        this.inputController = inputController;
         this.screenshotCapture = screenshotCapture;
         this.recordingController = recordingController;
+        this.console = console;
     }
 
     public async Task RunAsync(AppCapCommand command, CancellationToken cancellationToken)
@@ -33,11 +30,17 @@ public sealed class CommandRunner : ICommandRunner
         ArgumentNullException.ThrowIfNull(command);
         switch (command)
         {
-            case ClickCommand click:
-                await ClickAsync(click, cancellationToken).ConfigureAwait(false);
+            case InputDeviceAttachCommand attach:
+                await AttachInputDeviceAsync(attach, cancellationToken).ConfigureAwait(false);
                 break;
-            case HoverCommand hover:
-                await HoverAsync(hover, cancellationToken).ConfigureAwait(false);
+            case InputDeviceRemoveCommand remove:
+                await RemoveInputDeviceAsync(remove, cancellationToken).ConfigureAwait(false);
+                break;
+            case InputDeviceListCommand list:
+                await ListInputDevicesAsync(list, cancellationToken).ConfigureAwait(false);
+                break;
+            case TapCommand tap:
+                await TapAsync(tap, cancellationToken).ConfigureAwait(false);
                 break;
             case TypeCommand type:
                 await TypeAsync(type, cancellationToken).ConfigureAwait(false);
@@ -65,44 +68,26 @@ public sealed class CommandRunner : ICommandRunner
         }
     }
 
-    private async Task ClickAsync(ClickCommand command, CancellationToken cancellationToken)
-    {
-        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
+    private Task AttachInputDeviceAsync(InputDeviceAttachCommand command, CancellationToken cancellationToken) =>
+        inputController.AttachInputDeviceAsync(command.Target, command.DeviceType, cancellationToken);
 
-        WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);
-        if (command.X >= bounds.Width || command.Y >= bounds.Height)
+    private Task RemoveInputDeviceAsync(InputDeviceRemoveCommand command, CancellationToken cancellationToken) =>
+        inputController.RemoveInputDeviceAsync(command.Target, command.DeviceType, cancellationToken);
+
+    private async Task ListInputDevicesAsync(InputDeviceListCommand command, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<InputDeviceStatus> devices = await inputController.ListInputDevicesAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        foreach (InputDeviceStatus device in devices)
         {
-            throw new AppCapException("Click coordinates are outside the target window.", ExitCodes.UsageError);
+            await console.Output.WriteLineAsync($"{device.DeviceType}: {(device.Attached ? "attached" : "detached")}").ConfigureAwait(false);
         }
-
-        int screenX = bounds.Left + command.X;
-        int screenY = bounds.Top + command.Y;
-        await inputInjector.ClickAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task HoverAsync(HoverCommand command, CancellationToken cancellationToken)
-    {
-        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
+    private Task TapAsync(TapCommand command, CancellationToken cancellationToken) =>
+        inputController.TapAsync(command.Target, command.X, command.Y, command.DeviceType, cancellationToken);
 
-        WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);
-        if (command.X >= bounds.Width || command.Y >= bounds.Height)
-        {
-            throw new AppCapException("Hover coordinates are outside the target window.", ExitCodes.UsageError);
-        }
-
-        int screenX = bounds.Left + command.X;
-        int screenY = bounds.Top + command.Y;
-        await cursorMover.MoveToAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task TypeAsync(TypeCommand command, CancellationToken cancellationToken)
-    {
-        TargetWindow window = await targetResolver.ResolveAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
-        await keyboardInputInjector.TypeAsync(window, command.Actions, cancellationToken).ConfigureAwait(false);
-    }
+    private Task TypeAsync(TypeCommand command, CancellationToken cancellationToken) =>
+        inputController.TypeAsync(command.Target, command.TextAndKeys, command.DeviceType, cancellationToken);
 
     private async Task ResizeAsync(ResizeCommand command, CancellationToken cancellationToken)
     {

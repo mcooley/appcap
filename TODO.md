@@ -13,13 +13,12 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Input
 
-- Investigate whether we should change the "hover" command to use the same synthetic pointer device as "click"
-- Consider renaming "click" to "tap" since it's using synthetic pointer input and not mouse
 - Add mouse wheel or scroll support.
 - Add drag support.
 - Add gamepad input support.
 - Add broader key-name coverage for `appcap type` if real workflows need it.
 - Add optional timing controls for type and pointer input.
+- Add a `mouse` input device before restoring pointer-hover support.
 
 ## Video Capture
 
@@ -36,10 +35,8 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔ target design.
 
-- Move input injection and window control behind the `ITarget` seam / target protocol so they become remotable, not just frame capture. See `docs/target-protocol.md`.
 - Build out **remote targets** end-to-end: configuring a remote target in the config file, discovering/authenticating its endpoint, a concrete remote transport binding (for example TCP or WebSocket), and a `RemoteTarget : ITarget` client.
 - Define the optimized frame-streaming binding of the target protocol for remote **video** capture (in-proc uses direct GPU surface handoff today).
-- Negotiate/validate `TargetProtocol.Version` between worker and target so mismatches are rejected cleanly.
 
 ## Platform Support
 

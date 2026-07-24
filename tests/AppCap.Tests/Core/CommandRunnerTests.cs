@@ -5,78 +5,75 @@ public sealed class CommandRunnerTests
     private static readonly TargetApplication Target = new() { Name = "target", Id = "Package_family!App" };
 
     [Fact]
-    public async Task ClickRejectsCoordinatesOutsideWindow()
+    public async Task InputDeviceAttachDelegatesToInputController()
     {
-        TestServices services = new()
-        {
-            Bounds = new WindowBounds(10, 20, 100, 50),
-        };
+        TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() =>
-            runner.RunAsync(new ClickCommand(Target, 100, 10), CancellationToken.None));
+        await runner.RunAsync(new InputDeviceAttachCommand(Target, InputDeviceType.Touch), CancellationToken.None);
 
-        Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
-        Assert.Null(services.InputInjector.Click);
+        Assert.Equal((Target, InputDeviceType.Touch), services.InputController.Attach);
+        Assert.Null(services.TargetResolver.RequestedTarget);
     }
 
     [Fact]
-    public async Task ClickInsideWindowInjectsClick()
+    public async Task InputDeviceListWritesAttachmentState()
     {
         TestServices services = new()
         {
-            Bounds = new WindowBounds(10, 20, 100, 50),
+            ListedDevices = new InputDeviceStatus[]
+            {
+                new InputDeviceStatus(InputDeviceType.Touch, true),
+                new InputDeviceStatus(InputDeviceType.Keyboard, false),
+            },
         };
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new ClickCommand(Target, 99, 49), CancellationToken.None);
+        await runner.RunAsync(new InputDeviceListCommand(Target), CancellationToken.None);
 
-        Assert.Equal((109, 69), services.InputInjector.Click);
-        Assert.Equal(["foreground", "bounds", "click"], services.Events);
+        Assert.Equal(
+            $"touch: attached{Environment.NewLine}keyboard: detached{Environment.NewLine}",
+            services.Console.OutputText);
+        Assert.Null(services.TargetResolver.RequestedTarget);
     }
 
     [Fact]
-    public async Task HoverInsideWindowMovesCursor()
+    public async Task TapDelegatesCoordinatesAndDeviceSelection()
     {
-        TestServices services = new()
-        {
-            Bounds = new WindowBounds(10, 20, 100, 50),
-        };
+        TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new HoverCommand(Target, 99, 49), CancellationToken.None);
+        await runner.RunAsync(new TapCommand(Target, 99, 49, InputDeviceType.Touch), CancellationToken.None);
 
-        Assert.Equal((109, 69), services.CursorMover.Move);
-        Assert.Equal(["foreground", "bounds", "hover"], services.Events);
+        Assert.Equal((Target, 99, 49, InputDeviceType.Touch), services.InputController.Tap);
+        Assert.Null(services.TargetResolver.RequestedTarget);
     }
 
     [Fact]
-    public async Task HoverRejectsCoordinatesOutsideWindow()
-    {
-        TestServices services = new()
-        {
-            Bounds = new WindowBounds(10, 20, 100, 50),
-        };
-        CommandRunner runner = services.CreateRunner();
-
-        AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() =>
-            runner.RunAsync(new HoverCommand(Target, 100, 10), CancellationToken.None));
-
-        Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
-        Assert.Null(services.CursorMover.Move);
-    }
-
-    [Fact]
-    public async Task TypeBringsWindowToForegroundAndInjectsKeyboardInput()
+    public async Task TypeDelegatesRawTextAndDeviceSelection()
     {
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
         KeyboardAction[] actions = [new TextKeyboardAction("hello"), new KeyPressKeyboardAction([], KeyboardKey.Enter)];
 
-        await runner.RunAsync(new TypeCommand(Target, actions), CancellationToken.None);
+        await runner.RunAsync(new TypeCommand(Target, "hello[Enter]", actions, InputDeviceType.Keyboard), CancellationToken.None);
 
-        Assert.Same(actions, services.KeyboardInputInjector.Actions);
-        Assert.Equal(["foreground", "type"], services.Events);
+        Assert.Equal((Target, "hello[Enter]", InputDeviceType.Keyboard), services.InputController.Type);
+        Assert.Null(services.TargetResolver.RequestedTarget);
+    }
+
+    [Fact]
+    public async Task InputErrorsPropagateWithoutResolvingWindow()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+        services.InputController.FailTapWith = new AppCapException("No 'touch' input device is attached for target 'target'.", ExitCodes.UsageError);
+
+        AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() =>
+            runner.RunAsync(new TapCommand(Target, 10, 20), CancellationToken.None));
+
+        Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+        Assert.Null(services.TargetResolver.RequestedTarget);
     }
 
     [Fact]
@@ -163,40 +160,36 @@ public sealed class CommandRunnerTests
 
         public WindowBounds Bounds { get; init; } = new(0, 0, 640, 480);
 
-        public List<string> Events { get; } = [];
+        public IReadOnlyList<InputDeviceStatus> ListedDevices { get; init; } = [];
 
         public TestTargetResolver TargetResolver { get; private set; } = null!;
 
         public TestWindowController WindowController { get; private set; } = null!;
 
-        public TestInputInjector InputInjector { get; private set; } = null!;
-
-        public TestCursorMover CursorMover { get; private set; } = null!;
-
-        public TestKeyboardInputInjector KeyboardInputInjector { get; private set; } = null!;
+        public TestInputController InputController { get; private set; } = null!;
 
         public TestScreenshotCapture ScreenshotCapture { get; private set; } = null!;
 
         public TestRecordingController RecordingController { get; private set; } = null!;
 
+        public TestConsole Console { get; private set; } = null!;
+
         public CommandRunner CreateRunner()
         {
             TargetResolver = new TestTargetResolver(Window);
-            WindowController = new TestWindowController(Bounds, Events);
-            InputInjector = new TestInputInjector(Events);
-            CursorMover = new TestCursorMover(Events);
-            KeyboardInputInjector = new TestKeyboardInputInjector(Events);
+            WindowController = new TestWindowController(Bounds);
+            InputController = new TestInputController(ListedDevices);
             ScreenshotCapture = new TestScreenshotCapture();
             RecordingController = new TestRecordingController();
+            Console = new TestConsole();
 
             return new CommandRunner(
                 TargetResolver,
                 WindowController,
-                InputInjector,
-                CursorMover,
-                KeyboardInputInjector,
+                InputController,
                 ScreenshotCapture,
-                RecordingController);
+                RecordingController,
+                Console);
         }
     }
 
@@ -204,10 +197,7 @@ public sealed class CommandRunnerTests
     {
         private readonly TargetWindow window;
 
-        public TestTargetResolver(TargetWindow window)
-        {
-            this.window = window;
-        }
+        public TestTargetResolver(TargetWindow window) => this.window = window;
 
         public TargetApplication? RequestedTarget { get; private set; }
 
@@ -221,13 +211,8 @@ public sealed class CommandRunnerTests
     private sealed class TestWindowController : IWindowController
     {
         private readonly WindowBounds bounds;
-        private readonly List<string> events;
 
-        public TestWindowController(WindowBounds bounds, List<string> events)
-        {
-            this.bounds = bounds;
-            this.events = events;
-        }
+        public TestWindowController(WindowBounds bounds) => this.bounds = bounds;
 
         public TargetWindow? ForegroundWindow { get; private set; }
 
@@ -236,15 +221,11 @@ public sealed class CommandRunnerTests
         public Task BringToForegroundAsync(TargetWindow window, CancellationToken cancellationToken)
         {
             ForegroundWindow = window;
-            events.Add("foreground");
             return Task.CompletedTask;
         }
 
-        public Task<WindowBounds> GetBoundsAsync(TargetWindow window, CancellationToken cancellationToken)
-        {
-            events.Add("bounds");
-            return Task.FromResult(bounds);
-        }
+        public Task<WindowBounds> GetBoundsAsync(TargetWindow window, CancellationToken cancellationToken) =>
+            Task.FromResult(bounds);
 
         public Task ResizeAsync(TargetWindow window, int width, int height, CancellationToken cancellationToken)
         {
@@ -253,59 +234,51 @@ public sealed class CommandRunnerTests
         }
     }
 
-    private sealed class TestInputInjector : IInputInjector
+    private sealed class TestInputController : IInputController
     {
-        private readonly List<string> events;
+        private readonly IReadOnlyList<InputDeviceStatus> listedDevices;
 
-        public TestInputInjector(List<string> events)
+        public TestInputController(IReadOnlyList<InputDeviceStatus> listedDevices) => this.listedDevices = listedDevices;
+
+        public (TargetApplication Target, InputDeviceType DeviceType)? Attach { get; private set; }
+
+        public (TargetApplication Target, InputDeviceType DeviceType)? Remove { get; private set; }
+
+        public (TargetApplication Target, int X, int Y, InputDeviceType? DeviceType)? Tap { get; private set; }
+
+        public (TargetApplication Target, string TextAndKeys, InputDeviceType? DeviceType)? Type { get; private set; }
+
+        public AppCapException? FailTapWith { get; set; }
+
+        public Task AttachInputDeviceAsync(TargetApplication target, InputDeviceType deviceType, CancellationToken cancellationToken)
         {
-            this.events = events;
-        }
-
-        public (int X, int Y)? Click { get; private set; }
-
-        public Task ClickAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
-        {
-            events.Add("click");
-            Click = (screenX, screenY);
+            Attach = (target, deviceType);
             return Task.CompletedTask;
         }
-    }
 
-    private sealed class TestKeyboardInputInjector : IKeyboardInputInjector
-    {
-        private readonly List<string> events;
-
-        public TestKeyboardInputInjector(List<string> events)
+        public Task RemoveInputDeviceAsync(TargetApplication target, InputDeviceType deviceType, CancellationToken cancellationToken)
         {
-            this.events = events;
-        }
-
-        public IReadOnlyList<KeyboardAction>? Actions { get; private set; }
-
-        public Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
-        {
-            events.Add("type");
-            Actions = actions;
+            Remove = (target, deviceType);
             return Task.CompletedTask;
         }
-    }
 
-    private sealed class TestCursorMover : ICursorMover
-    {
-        private readonly List<string> events;
+        public Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetApplication target, CancellationToken cancellationToken) =>
+            Task.FromResult(listedDevices);
 
-        public TestCursorMover(List<string> events)
+        public Task TapAsync(TargetApplication target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
         {
-            this.events = events;
+            if (FailTapWith is not null)
+            {
+                throw FailTapWith;
+            }
+
+            Tap = (target, x, y, deviceType);
+            return Task.CompletedTask;
         }
 
-        public (int X, int Y)? Move { get; private set; }
-
-        public Task MoveToAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+        public Task TypeAsync(TargetApplication target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
         {
-            events.Add("hover");
-            Move = (screenX, screenY);
+            Type = (target, textAndKeys, deviceType);
             return Task.CompletedTask;
         }
     }
@@ -377,6 +350,24 @@ public sealed class CommandRunnerTests
             CaptionTarget = target;
             Caption = caption;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class TestConsole : ICommandConsole, IDisposable
+    {
+        private readonly StringWriter output = new();
+        private readonly StringWriter error = new();
+
+        public TextWriter Output => output;
+
+        public TextWriter ErrorOutput => error;
+
+        public string OutputText => output.ToString();
+
+        public void Dispose()
+        {
+            output.Dispose();
+            error.Dispose();
         }
     }
 }

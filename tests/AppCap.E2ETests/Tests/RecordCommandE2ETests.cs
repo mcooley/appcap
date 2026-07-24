@@ -57,11 +57,11 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     {
         string path = Context.NewOutputPath("recording.mp4");
 
+        AttachInputDevices("touch");
         Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         Context.Run("record", "start", "--output", path).AssertSuccess();
         await Task.Delay(500);
-        Context.Run("hover", "-x", "330", "-y", "130").AssertSuccess();
-        Context.Run("click", "-x", "150", "-y", "130").AssertSuccess();
+        Context.Run("tap", "-x", "150", "-y", "130").AssertSuccess();
         await Task.Delay(500);
         Context.Run("record", "stop").AssertSuccess();
         await WaitForMp4FileAsync(path);
@@ -160,11 +160,11 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     {
         string path = Context.NewOutputPath("closed-window.mp4");
 
+        AttachInputDevices("touch");
         Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         Context.Run("record", "start", "--output", path).AssertSuccess();
         await Task.Delay(500);
-        Context.Run("hover", "-x", "330", "-y", "130").AssertSuccess();
-        Context.Run("click", "-x", "150", "-y", "130").AssertSuccess();
+        Context.Run("tap", "-x", "150", "-y", "130").AssertSuccess();
         await Task.Delay(500);
 
         E2EHelpers.CloseTestAppProcesses();

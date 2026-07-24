@@ -48,25 +48,32 @@ If the configuration file is missing or malformed, `appcap` prints a friendly er
 
 ## Commands
 
-### Click
+### Input devices
 
-Taps the screen.
-
-```powershell
-appcap --target calculator click -x 151 -y 684
-```
-
-Coordinates are relative to the top-left corner of the target window.
-
-### Hover
-
-Moves the cursor.
+Targets expose the input devices they support. The Windows target currently supports
+`touch` and `keyboard`; attach each device before using it:
 
 ```powershell
-appcap --target calculator hover -x 151 -y 684
+appcap --target calculator inputdevice list
+appcap --target calculator inputdevice attach touch
+appcap --target calculator inputdevice attach keyboard
+appcap --target calculator inputdevice remove touch
 ```
 
-Coordinates are relative to the top-left corner of the target window.
+Only one device of each type can be attached to a target. `inputdevice list` shows both
+supported device types and whether each is attached.
+
+### Tap
+
+Injects a touch tap into the target window. Coordinates are relative to the top-left
+corner of the target window.
+
+```powershell
+appcap --target calculator tap -x 151 -y 684
+appcap --target calculator tap --device touch -x 151 -y 684
+```
+
+`tap` uses the attached `touch` device by default. `--device` explicitly selects it.
 
 ### Type
 
@@ -76,11 +83,15 @@ Injects literal text and bracketed key presses.
 appcap --target calculator type "hello[Enter]"
 appcap --target calculator type "[Escape][F2][Shift+F2]"
 appcap --target calculator type "[Control+A]replacement text[Enter]"
+appcap --target calculator type --device keyboard "replacement text[Enter]"
 ```
 
 Bracketed keys use WebDriver/Playwright-style key names, for example `[Escape]`, `[Enter]`, `[Shift+F2]`, and `[Control+A]`.
 
 Use `[[` and `]]` for literal square brackets.
+
+`type` uses the attached `keyboard` device by default. `--device` must name an attached
+`keyboard` device.
 
 ### Resize
 

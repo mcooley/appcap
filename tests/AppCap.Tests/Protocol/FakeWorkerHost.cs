@@ -1,16 +1,16 @@
 using AppCap;
+using AppCap.Protocol;
 using AppCap.Protocol.Worker;
 using System.Collections.Concurrent;
 
 namespace AppCap.Tests;
 
-// A controllable IWorkerHost used by protocol tests to drive the worker-protocol dispatch
-// without any real capture or file I/O. It tracks which targets are "recording", records
-// the last screenshot/start requests, and can be configured to fail or to block a stop, so
-// tests can verify the acknowledgement, error, not-recording, and concurrency paths.
 internal sealed class FakeWorkerHost : IWorkerHost
 {
+    private static readonly InputDeviceType[] SupportedInputDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard];
+
     private readonly ConcurrentDictionary<string, byte> recordings = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, InputDeviceAttachmentRegistry> inputDevices = new(StringComparer.Ordinal);
 
     public FakeWorkerHost(IEnumerable<string>? recording = null)
     {
@@ -31,9 +31,21 @@ internal sealed class FakeWorkerHost : IWorkerHost
 
     public CaptionRequest? LastCaption { get; private set; }
 
+    public InputDeviceRequest? LastInputDeviceAttach { get; private set; }
+
+    public InputDeviceRequest? LastInputDeviceRemove { get; private set; }
+
+    public TargetDescriptorRequest? LastInputDeviceList { get; private set; }
+
+    public (TargetDescriptorRequest Target, int X, int Y, InputDeviceType? DeviceType)? LastTap { get; private set; }
+
+    public (TargetDescriptorRequest Target, string TextAndKeys, InputDeviceType? DeviceType)? LastType { get; private set; }
+
     public string? StartFailWith { get; set; }
 
     public string? StopFailWith { get; set; }
+
+    public string? InputFailWith { get; set; }
 
     public string? BlockStopForTarget { get; set; }
 
@@ -90,5 +102,65 @@ internal sealed class FakeWorkerHost : IWorkerHost
     {
         LastScreenshot = request;
         return Task.FromResult(recordings.ContainsKey(request.TargetName));
+    }
+
+    public Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        LastInputDeviceAttach = new InputDeviceRequest
+        {
+            TargetName = target.TargetName,
+            ApplicationId = target.ApplicationId,
+            DeviceType = deviceType.ToString(),
+        };
+        ThrowIfInputFailed();
+        GetRegistry(target.TargetName).Attach(deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        LastInputDeviceRemove = new InputDeviceRequest
+        {
+            TargetName = target.TargetName,
+            ApplicationId = target.ApplicationId,
+            DeviceType = deviceType.ToString(),
+        };
+        ThrowIfInputFailed();
+        GetRegistry(target.TargetName).Remove(deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    {
+        LastInputDeviceList = target;
+        ThrowIfInputFailed();
+        return Task.FromResult(GetRegistry(target.TargetName).List());
+    }
+
+    public Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        LastTap = (target, x, y, deviceType);
+        ThrowIfInputFailed();
+        _ = GetRegistry(target.TargetName).Select(InputDeviceType.Touch, deviceType, "tap");
+        return Task.CompletedTask;
+    }
+
+    public Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        LastType = (target, textAndKeys, deviceType);
+        ThrowIfInputFailed();
+        _ = GetRegistry(target.TargetName).Select(InputDeviceType.Keyboard, deviceType, "type");
+        return Task.CompletedTask;
+    }
+
+    private InputDeviceAttachmentRegistry GetRegistry(string targetName) =>
+        inputDevices.GetOrAdd(targetName, static name => new InputDeviceAttachmentRegistry(name, SupportedInputDevices));
+
+    private void ThrowIfInputFailed()
+    {
+        if (InputFailWith is not null)
+        {
+            throw new AppCapException(InputFailWith);
+        }
     }
 }

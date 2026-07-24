@@ -187,6 +187,65 @@ public sealed class RecordingIpcTests : IDisposable
     }
 
     [Fact]
+    public async Task InputDeviceCommandsReachWorker()
+    {
+        string target = Guid.NewGuid().ToString();
+        TargetDescriptorRequest request = new() { TargetName = target, ApplicationId = "Package_family!App" };
+        FakeWorkerHost host = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            await RecordingIpc.AttachInputDeviceAsync(request, InputDeviceType.Touch, cts.Token);
+            IReadOnlyList<InputDeviceStatus> devices = await RecordingIpc.ListInputDevicesAsync(request, cts.Token);
+            await RecordingIpc.TapAsync(request, 150, 130, deviceType: null, cts.Token);
+
+            Assert.Equal(target, host.LastInputDeviceAttach!.TargetName);
+            Assert.Equal("touch", host.LastInputDeviceAttach.DeviceType);
+            Assert.Collection(
+                devices,
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Touch, device.DeviceType);
+                    Assert.True(device.Attached);
+                },
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Keyboard, device.DeviceType);
+                    Assert.False(device.Attached);
+                });
+            Assert.Equal(target, host.LastTap!.Value.Target.TargetName);
+            Assert.Equal(150, host.LastTap.Value.X);
+            Assert.Equal(130, host.LastTap.Value.Y);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
+    public async Task InputSelectionErrorsMapToUsageExitCode()
+    {
+        string target = Guid.NewGuid().ToString();
+        TargetDescriptorRequest request = new() { TargetName = target, ApplicationId = "Package_family!App" };
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(new FakeWorkerHost(), cts.Token);
+        try
+        {
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(async () =>
+                await RecordingIpc.TapAsync(request, 10, 20, deviceType: null, cts.Token));
+
+            Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+            Assert.Contains("No 'touch' input device is attached", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
     public async Task ConcurrentRequestsAreNotBlockedByASlowStop()
     {
         string slowTarget = Guid.NewGuid().ToString();

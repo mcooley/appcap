@@ -1,12 +1,13 @@
+using AppCap;
 using AppCap.Protocol.Target;
 
 namespace AppCap.Tests;
 
-// A controllable ITarget used by protocol tests to drive the target-protocol dispatch
-// (status and capture_frame) without any real graphics capture.
-internal sealed class FakeTarget : ITarget
+internal sealed class FakeTarget : ITargetHost
 {
+    private static readonly InputDeviceType[] SupportedDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard];
     private readonly CapturedFrame frame;
+    private readonly InputDeviceAttachmentRegistry attachments = new("fake-target", SupportedDevices);
 
     public FakeTarget(CapturedFrame? frame = null)
     {
@@ -15,9 +16,52 @@ internal sealed class FakeTarget : ITarget
 
     public bool? LastIncludeCursor { get; private set; }
 
+    public InputDeviceType? LastAttachedDeviceType { get; private set; }
+
+    public InputDeviceType? LastRemovedDeviceType { get; private set; }
+
+    public (int X, int Y, InputDeviceType? DeviceType)? LastTap { get; private set; }
+
+    public (string TextAndKeys, InputDeviceType? DeviceType)? LastType { get; private set; }
+
+    public IReadOnlyList<InputDeviceType> SupportedInputDevices => SupportedDevices;
+
+    public bool HasAttachedInputDevices => attachments.HasAttachedDevices;
+
     public Task<CapturedFrame> CaptureFrameAsync(bool includeCursor, CancellationToken cancellationToken)
     {
         LastIncludeCursor = includeCursor;
         return Task.FromResult(frame);
+    }
+
+    public Task AttachInputDeviceAsync(InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        LastAttachedDeviceType = deviceType;
+        attachments.Attach(deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveInputDeviceAsync(InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        LastRemovedDeviceType = deviceType;
+        attachments.Remove(deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(attachments.List());
+
+    public Task TapAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        _ = attachments.Select(InputDeviceType.Touch, deviceType, "tap");
+        LastTap = (x, y, deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        _ = attachments.Select(InputDeviceType.Keyboard, deviceType, "type");
+        LastType = (textAndKeys, deviceType);
+        return Task.CompletedTask;
     }
 }

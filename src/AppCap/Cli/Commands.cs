@@ -2,11 +2,19 @@ namespace AppCap;
 
 public abstract record AppCapCommand;
 
-public sealed record ClickCommand(TargetApplication Target, int X, int Y) : AppCapCommand;
+public sealed record InputDeviceAttachCommand(TargetApplication Target, InputDeviceType DeviceType) : AppCapCommand;
 
-public sealed record HoverCommand(TargetApplication Target, int X, int Y) : AppCapCommand;
+public sealed record InputDeviceRemoveCommand(TargetApplication Target, InputDeviceType DeviceType) : AppCapCommand;
 
-public sealed record TypeCommand(TargetApplication Target, IReadOnlyList<KeyboardAction> Actions) : AppCapCommand;
+public sealed record InputDeviceListCommand(TargetApplication Target) : AppCapCommand;
+
+public sealed record TapCommand(TargetApplication Target, int X, int Y, InputDeviceType? DeviceType = null) : AppCapCommand;
+
+public sealed record TypeCommand(
+    TargetApplication Target,
+    string TextAndKeys,
+    IReadOnlyList<KeyboardAction> Actions,
+    InputDeviceType? DeviceType = null) : AppCapCommand;
 
 public sealed record ResizeCommand(TargetApplication Target, int Width, int Height) : AppCapCommand;
 

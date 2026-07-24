@@ -7,14 +7,11 @@ public sealed class ScreenshotCommandE2ETests : E2ETestBase
     [E2EFact]
     public async Task ExcludeCursorWritesScreenshot()
     {
-        const int cursorX = 500;
-        const int cursorY = 220;
         E2EContext context = Context;
         string withoutCursorPath = context.NewOutputPath("without-cursor.png");
         string withCursorPath = context.NewOutputPath("with-cursor.png");
 
         context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
-        context.Run("hover", "-x", cursorX.ToString(System.Globalization.CultureInfo.InvariantCulture), "-y", cursorY.ToString(System.Globalization.CultureInfo.InvariantCulture)).AssertSuccess();
         context.Run("screenshot", "--exclude-cursor", "--output", withoutCursorPath).AssertSuccess();
         context.Run("screenshot", "--output", withCursorPath).AssertSuccess();
 

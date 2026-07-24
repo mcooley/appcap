@@ -45,9 +45,9 @@ Lifecycle:
   the well-known per-user pipe; if no worker answers it takes a launch lock, starts one
   worker process, and waits for it to become reachable. Subsequent clients reuse the same
   worker. Each recording runs as an independent `RecordingSession` keyed by target name.
-- The worker **self-terminates when idle**. When it has no active sessions for an idle
-  interval it exits, so a worker never runs indefinitely even if clients go away without
-  stopping their recordings.
+- The worker **self-terminates when idle**. When it has no active recordings or attached
+  target input devices for an idle interval it exits, so a worker never runs indefinitely
+  even if clients go away without stopping their recordings.
 
 When no long-running background work is required (for example, taking a single
 screenshot while nothing is recording), the client **hosts the worker in its own
@@ -87,18 +87,17 @@ protocols.
 
 ### Worker ↔ Target
 
-- **Transport:** direct in-proc calls today (the `ITarget` seam); designed to also run
-  over a **remote transport** (TCP/WebSocket/etc.) to reach a target on another machine.
+- **Transport:** an in-memory duplex stream for a local target; designed to also run over
+  a **remote transport** (TCP/WebSocket/etc.) to reach a target on another machine.
 - **Design philosophy:** **documented and versioned.** A target may be implemented by a
   different tool on a different OS, so this protocol has a stable, published contract
   (`TargetProtocol.Version`) and is described in
   [`docs/target-protocol.md`](target-protocol.md).
-- **Payloads:** frame capture today (`target.capture_frame`, `target.status`); input
-  injection and window control are target responsibilities that will be brought under
-  this protocol next (see [Not yet built](#not-yet-built)).
+- **Payloads:** frame capture and input-device operations (`target.capture_frame`,
+  `target.status`, `target.input_device.*`, and `target.input.*`). Targets own their
+  supported device types and attachment state.
 - **Code:** `TargetProtocol` / `TargetMethods` and the reference server `TargetServer`
-  under `src/AppCap/Protocol`; the `ITarget` seam is implemented in-proc by the Windows
-  capture targets.
+  under `src/AppCap/Protocol`; `WindowsTargetHost` implements the local target.
 
 ## In-proc reuse and the frame-handoff optimization
 
@@ -109,11 +108,10 @@ reusing the remoting code in-proc:
   runs over an in-memory duplex stream that reuses the exact JSON-RPC codec and framing
   used over the named pipe (`InProcDuplexTransport`). The client is equally thin whether
   the worker is local-in-proc or a separate process.
-- The **worker↔target** boundary is expressed through the `ITarget` interface. In-proc,
-  the worker calls the target directly; a remote target would place the documented
-  target protocol between them. The documented protocol is exercised by tests that run a
-  `TargetServer` over an in-proc duplex, so the wire contract stays correct even before a
-  real remote host exists.
+- The **worker↔target** boundary always uses the documented target protocol. In-proc it
+  runs over an in-memory duplex stream; a remote target would replace that transport
+  while preserving the same messages. The video capture path remains optimized by passing
+  GPU surfaces in-process.
 
 However, **performance-sensitive paths use an optimized transport rather than the
 generic serialized protocol.** The prime example is **video recording**: the target
@@ -161,8 +159,8 @@ caption and writes the output file.
    serves `recording.status` / `recording.stop` / `recording.cancel` / `screenshot`
    (each keyed by target name) over its pipe.
 3. A later **client** (`record stop`) connects over the pipe and asks the worker to
-   finalize (or discard) that target's recording. When the worker has no active sessions
-   for its idle interval it self-terminates.
+   finalize (or discard) that target's recording. When the worker has no active recordings
+   or attached input devices for its idle interval it self-terminates.
 
 ## Not yet built (TODO)
 
@@ -173,11 +171,6 @@ further restructuring.
   discovering/authenticating its endpoint, and a concrete remote transport binding plus a
   `RemoteTarget : ITarget` client. Only the in-proc target and the documented protocol
   (with a reference server and tests) exist today.
-- **Input injection and window control under the target protocol:** these are target
-  responsibilities but currently run as direct in-proc OS calls. They will be moved
-  behind `ITarget` / the target protocol so they are remotable too.
-- **Protocol version negotiation:** `TargetProtocol.Version` is published but not yet
-  negotiated/validated between worker and target.
 
 ## Source map
 

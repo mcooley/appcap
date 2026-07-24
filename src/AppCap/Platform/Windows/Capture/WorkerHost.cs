@@ -6,11 +6,10 @@ using System.Collections.Concurrent;
 namespace AppCap.Windows;
 
 // The machine-wide worker: a single per-user process, launched just-in-time by a client,
-// that multiplexes every recording and screenshot for that user. It owns one
-// RecordingSession per recording target, serves the worker protocol over its named pipe
-// (RecordingIpc), and self-terminates once it has been idle with no active recordings. All
-// worker-protocol methods are keyed by target name so many recordings run concurrently
-// without head-of-line blocking.
+// that multiplexes recording, screenshot, and input-device state for that user. It owns one
+// RecordingSession per recording target plus one WorkerTargetSession per target with attached
+// input devices, serves the worker protocol over its named pipe (RecordingIpc), and
+// self-terminates once it has been idle with no active recordings or attached devices.
 internal sealed class WorkerHost : IWorkerHost, IDisposable
 {
     public const string WorkerCommand = "--appcap-worker";
@@ -19,12 +18,23 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     private static readonly TimeSpan IdleCheckInterval = TimeSpan.FromSeconds(5);
 
     private readonly ConcurrentDictionary<string, RecordingSession> sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, WorkerTargetSession> targetSessions = new(StringComparer.Ordinal);
+    private readonly ITargetResolver targetResolver;
+    private readonly IWindowController windowController;
+    private readonly IInputInjector inputInjector;
+    private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly CancellationTokenSource shutdown;
     private long lastActivityTicks = Environment.TickCount64;
     private bool disposed;
 
-    private WorkerHost(CancellationToken cancellationToken) =>
+    private WorkerHost(CancellationToken cancellationToken)
+    {
+        targetResolver = new TargetResolver(new WindowFinder(), new TargetLauncher());
+        windowController = new WindowController();
+        inputInjector = new SyntheticPointerInputInjector();
+        keyboardInputInjector = new KeyboardInputInjector();
         shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+    }
 
     public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == WorkerCommand;
 
@@ -164,6 +174,91 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         return true;
     }
 
+    public async Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+
+        WorkerTargetSession session = GetOrCreateTargetSession(target);
+        try
+        {
+            await session.AttachInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CleanupTargetSessionIfIdle(target.TargetName, session);
+            MarkActivity();
+        }
+    }
+
+    public async Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+
+        WorkerTargetSession session = GetOrCreateTargetSession(target);
+        try
+        {
+            await session.RemoveInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CleanupTargetSessionIfIdle(target.TargetName, session);
+            MarkActivity();
+        }
+    }
+
+    public async Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+
+        WorkerTargetSession session = GetOrCreateTargetSession(target);
+        try
+        {
+            return await session.ListInputDevicesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CleanupTargetSessionIfIdle(target.TargetName, session);
+            MarkActivity();
+        }
+    }
+
+    public async Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+
+        WorkerTargetSession session = GetOrCreateTargetSession(target);
+        try
+        {
+            await session.TapAsync(x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CleanupTargetSessionIfIdle(target.TargetName, session);
+            MarkActivity();
+        }
+    }
+
+    public async Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+
+        WorkerTargetSession session = GetOrCreateTargetSession(target);
+        try
+        {
+            await session.TypeAsync(textAndKeys, deviceType, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            CleanupTargetSessionIfIdle(target.TargetName, session);
+            MarkActivity();
+        }
+    }
+
     public void Dispose()
     {
         if (disposed)
@@ -172,6 +267,11 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         }
 
         disposed = true;
+        foreach (KeyValuePair<string, WorkerTargetSession> entry in targetSessions)
+        {
+            entry.Value.Dispose();
+        }
+
         shutdown.Dispose();
     }
 
@@ -203,7 +303,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             {
                 await Task.Delay(IdleCheckInterval, cancellationToken).ConfigureAwait(false);
 
-                if (!sessions.IsEmpty)
+                if (!sessions.IsEmpty || !targetSessions.IsEmpty)
                 {
                     continue;
                 }
@@ -235,9 +335,40 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             {
             }
         }
+
+        foreach (KeyValuePair<string, WorkerTargetSession> entry in targetSessions.ToArray())
+        {
+            if (targetSessions.TryRemove(entry))
+            {
+                entry.Value.Dispose();
+            }
+        }
     }
 
     private void MarkActivity() => Volatile.Write(ref lastActivityTicks, Environment.TickCount64);
+
+    private WorkerTargetSession GetOrCreateTargetSession(TargetDescriptorRequest request) =>
+        targetSessions.GetOrAdd(
+            request.TargetName,
+            _ => new WorkerTargetSession(
+                new TargetApplication { Name = request.TargetName, Id = request.ApplicationId },
+                targetResolver,
+                windowController,
+                inputInjector,
+                keyboardInputInjector));
+
+    private void CleanupTargetSessionIfIdle(string targetName, WorkerTargetSession session)
+    {
+        if (session.HasAttachedInputDevices)
+        {
+            return;
+        }
+
+        if (targetSessions.TryRemove(new KeyValuePair<string, WorkerTargetSession>(targetName, session)))
+        {
+            session.Dispose();
+        }
+    }
 
     private static async Task ObserveAsync(Task task)
     {

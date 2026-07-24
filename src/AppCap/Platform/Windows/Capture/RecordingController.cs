@@ -1,7 +1,5 @@
 using AppCap;
 using AppCap.Protocol.Worker;
-using System.Diagnostics;
-
 namespace AppCap.Windows;
 
 // Client-side recording orchestration. Recording work is owned by the machine-wide worker
@@ -11,8 +9,6 @@ namespace AppCap.Windows;
 // processes on the same desktop) and passes the descriptor to the worker.
 public sealed class RecordingController : IRecordingController
 {
-    private static readonly TimeSpan WorkerLaunchTimeout = TimeSpan.FromSeconds(10);
-
     public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -31,7 +27,7 @@ public sealed class RecordingController : IRecordingController
             Directory.CreateDirectory(outputDirectory);
         }
 
-        await EnsureWorkerRunningAsync(cancellationToken).ConfigureAwait(false);
+        await WorkerProcessController.EnsureWorkerRunningAsync(cancellationToken).ConfigureAwait(false);
 
         RecordingStartRequest request = new()
         {
@@ -84,70 +80,4 @@ public sealed class RecordingController : IRecordingController
         }
     }
 
-    // Ensures a machine worker is reachable, launching one just-in-time if not. A
-    // cross-process lock serializes launches so two clients that both find no worker cannot
-    // spawn competing workers; the winner launches the worker and the others reuse it.
-    private static async Task EnsureWorkerRunningAsync(CancellationToken cancellationToken)
-    {
-        if (await RecordingIpc.PingAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        using WorkerLaunchLock? launchLock = await RecordingIpc.TryAcquireLaunchLockAsync(TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
-        if (launchLock is null)
-        {
-            throw new AppCapException("Timed out waiting to launch the recording worker.");
-        }
-
-        // Another client may have launched the worker while we waited for the lock.
-        if (await RecordingIpc.PingAsync(cancellationToken).ConfigureAwait(false))
-        {
-            return;
-        }
-
-        LaunchWorker();
-        await WaitForWorkerAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static void LaunchWorker()
-    {
-        string executablePath = Environment.ProcessPath ?? throw new AppCapException("Recording worker could not be launched.");
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = executablePath,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add(WorkerHost.WorkerCommand);
-
-        try
-        {
-            // The worker is an independent, long-lived process: it must outlive this client,
-            // so its handle is disposed without terminating it.
-            Process process = Process.Start(startInfo) ?? throw new AppCapException("Recording worker could not be launched.");
-            process.Dispose();
-        }
-        catch (System.ComponentModel.Win32Exception exception)
-        {
-            throw new AppCapException("Recording worker could not be launched.", exception);
-        }
-    }
-
-    private static async Task WaitForWorkerAsync(CancellationToken cancellationToken)
-    {
-        using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutSource.CancelAfter(WorkerLaunchTimeout);
-        while (!timeoutSource.IsCancellationRequested)
-        {
-            if (await RecordingIpc.PingAsync(timeoutSource.Token).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            await Task.Delay(100, timeoutSource.Token).ConfigureAwait(false);
-        }
-
-        throw new AppCapException("Recording worker did not start.");
-    }
 }

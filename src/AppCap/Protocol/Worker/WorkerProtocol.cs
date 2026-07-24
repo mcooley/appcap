@@ -50,6 +50,12 @@ internal static class WorkerMethods
     // JsonRpcErrorCodes.NotRecording if the target is no longer recording, so the client
     // can fall back to an in-process capture.
     public const string Screenshot = "screenshot";
+
+    public const string InputDeviceAttach = "input_device.attach";
+    public const string InputDeviceRemove = "input_device.remove";
+    public const string InputDeviceList = "input_device.list";
+    public const string InputTap = "input.tap";
+    public const string InputType = "input.type";
 }
 
 // Parameters for a recording.start call. The client resolves the target window and passes
@@ -96,6 +102,39 @@ internal sealed class CaptionRequest : TargetRequest
     public string Caption { get; set; } = string.Empty;
 }
 
+internal class TargetDescriptorRequest : TargetRequest
+{
+    [JsonPropertyName("applicationId")]
+    public string ApplicationId { get; set; } = string.Empty;
+}
+
+internal sealed class InputDeviceRequest : TargetDescriptorRequest
+{
+    [JsonPropertyName("deviceType")]
+    public string DeviceType { get; set; } = string.Empty;
+}
+
+internal sealed class PointerInputRequest : TargetDescriptorRequest
+{
+    [JsonPropertyName("x")]
+    public int X { get; set; }
+
+    [JsonPropertyName("y")]
+    public int Y { get; set; }
+
+    [JsonPropertyName("deviceType")]
+    public string? DeviceType { get; set; }
+}
+
+internal sealed class KeyboardInputRequest : TargetDescriptorRequest
+{
+    [JsonPropertyName("textAndKeys")]
+    public string TextAndKeys { get; set; } = string.Empty;
+
+    [JsonPropertyName("deviceType")]
+    public string? DeviceType { get; set; }
+}
+
 // Parameters for a screenshot call. The worker resolves the frame from the target's live
 // recording session, renders the optional caption, and writes the PNG to OutputPath (an
 // absolute path, since the worker may run with a different working directory than the
@@ -131,6 +170,21 @@ internal sealed class ScreenshotResult
 {
     [JsonPropertyName("acknowledged")]
     public bool Acknowledged { get; set; }
+}
+
+internal sealed class WorkerInputDeviceStateDto
+{
+    [JsonPropertyName("deviceType")]
+    public string DeviceType { get; set; } = string.Empty;
+
+    [JsonPropertyName("attached")]
+    public bool Attached { get; set; }
+}
+
+internal sealed class WorkerInputDeviceListResult
+{
+    [JsonPropertyName("devices")]
+    public WorkerInputDeviceStateDto[] Devices { get; set; } = [];
 }
 
 // Result of a recording.status call.
@@ -176,4 +230,15 @@ internal interface IWorkerHost
     // true on success, or false if the target is no longer recording so the caller can
     // fall back to an in-process capture.
     Task<bool> CaptureScreenshotAsync(ScreenshotRequest request, CancellationToken cancellationToken);
+
+    Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken);
+
+    Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken);
+
+    Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
+
+
+    Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken);
 }

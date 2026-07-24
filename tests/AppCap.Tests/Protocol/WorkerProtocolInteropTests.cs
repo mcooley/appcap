@@ -102,6 +102,63 @@ public sealed class WorkerProtocolInteropTests : IDisposable
     }
 
     [Fact]
+    public async Task RawJsonRpcClientManagesInputDevicesAndTap()
+    {
+        const string target = "cam";
+        string pipeName = RecordingIpc.GetPipeName();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        FakeWorkerHost host = new();
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            string attachReply = await SendRawAsync(
+                pipeName,
+                "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"input_device.attach\",\"params\":{\"targetName\":\"cam\",\"applicationId\":\"Package_family!App\",\"deviceType\":\"touch\"}}",
+                cts.Token);
+            using (JsonDocument document = JsonDocument.Parse(attachReply))
+            {
+                Assert.Equal(9, document.RootElement.GetProperty("id").GetInt32());
+                Assert.True(document.RootElement.GetProperty("result").GetProperty("acknowledged").GetBoolean());
+            }
+
+            string listReply = await SendRawAsync(
+                pipeName,
+                "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"input_device.list\",\"params\":{\"targetName\":\"cam\",\"applicationId\":\"Package_family!App\"}}",
+                cts.Token);
+            using (JsonDocument document = JsonDocument.Parse(listReply))
+            {
+                JsonElement devices = document.RootElement.GetProperty("result").GetProperty("devices");
+                Assert.Equal(2, devices.GetArrayLength());
+                Assert.Equal("touch", devices[0].GetProperty("deviceType").GetString());
+                Assert.True(devices[0].GetProperty("attached").GetBoolean());
+                Assert.Equal("keyboard", devices[1].GetProperty("deviceType").GetString());
+                Assert.False(devices[1].GetProperty("attached").GetBoolean());
+            }
+
+            string tapReply = await SendRawAsync(
+                pipeName,
+                "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"input.tap\",\"params\":{\"targetName\":\"cam\",\"applicationId\":\"Package_family!App\",\"x\":150,\"y\":130}}",
+                cts.Token);
+            using (JsonDocument document = JsonDocument.Parse(tapReply))
+            {
+                Assert.Equal(11, document.RootElement.GetProperty("id").GetInt32());
+                Assert.True(document.RootElement.GetProperty("result").GetProperty("acknowledged").GetBoolean());
+            }
+
+            Assert.Equal(target, host.LastInputDeviceAttach!.TargetName);
+            Assert.Equal("touch", host.LastInputDeviceAttach.DeviceType);
+            Assert.Equal(target, host.LastTap!.Value.Target.TargetName);
+            Assert.Equal(150, host.LastTap.Value.X);
+            Assert.Equal(130, host.LastTap.Value.Y);
+            Assert.Null(host.LastTap.Value.DeviceType);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
     public async Task RawJsonRpcClientPings()
     {
         string pipeName = RecordingIpc.GetPipeName();

@@ -13,7 +13,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
     private const uint WmLButtonDown = 0x0201;
     private const uint WmLButtonUp = 0x0202;
 
-    public Task ClickAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
+    public Task TapAsync(TargetWindow window, int screenX, int screenY, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         cancellationToken.ThrowIfCancellationRequested();
@@ -21,7 +21,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         HWND hwnd = new(window.Handle);
         if (!IsTargetAtPoint(window, hwnd, screenX, screenY))
         {
-            throw new AppCapException("Click target is not visible at the requested coordinates.");
+            throw new AppCapException("Tap target is not visible at the requested coordinates.");
         }
 
         using DestroySyntheticPointerDeviceSafeHandle device = PInvoke.CreateSyntheticPointerDevice_SafeHandle(
@@ -67,7 +67,7 @@ public sealed class SyntheticPointerInputInjector : IInputInjector
         Point clientPoint = new(screenX, screenY);
         if (!PInvoke.ScreenToClient(hwnd, ref clientPoint))
         {
-            throw new AppCapException("Click input injection failed.");
+            throw new AppCapException("Tap input injection failed.");
         }
 
         LPARAM lParam = new((clientPoint.X & 0xffff) | ((clientPoint.Y & 0xffff) << 16));

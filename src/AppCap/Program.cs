@@ -24,7 +24,7 @@ if (CommandParser.CanInvokeWithoutConfiguration(args))
 			return await CliApplication.RunAsync(
 				args,
 				directiveCatalog,
-				CommandServices.CreateRunner(),
+				CommandServices.CreateRunner(console),
 				console).ConfigureAwait(false);
 		}
 		catch (AppCapException)
@@ -50,5 +50,5 @@ catch (AppCapException exception)
 return await CliApplication.RunAsync(
 	args,
 	catalog,
-	CommandServices.CreateRunner(),
+	CommandServices.CreateRunner(console),
 	console).ConfigureAwait(false);

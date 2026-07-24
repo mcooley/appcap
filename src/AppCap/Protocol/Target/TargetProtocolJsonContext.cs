@@ -10,5 +10,11 @@ namespace AppCap.Protocol.Target;
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(CaptureFrameParams))]
 [JsonSerializable(typeof(CaptureFrameResult))]
+[JsonSerializable(typeof(InputDeviceParams))]
+[JsonSerializable(typeof(PointerInputParams))]
+[JsonSerializable(typeof(KeyboardInputParams))]
+[JsonSerializable(typeof(InputDeviceStateDto))]
+[JsonSerializable(typeof(InputDeviceListResult))]
+[JsonSerializable(typeof(TargetCommandResult))]
 [JsonSerializable(typeof(TargetStatusResult))]
 internal sealed partial class TargetProtocolJsonContext : JsonSerializerContext;

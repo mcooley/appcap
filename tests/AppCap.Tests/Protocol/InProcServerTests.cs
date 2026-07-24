@@ -54,7 +54,7 @@ public sealed class InProcServerTests
     }
 
     [Fact]
-    public async Task TargetServerHandlesStatusAndCaptureFrameInProcess()
+    public async Task TargetServerHandlesStatusCaptureAndInputInProcess()
     {
         using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
         byte[] pixels = [9, 8, 7, 6, 5, 4, 3, 2];
@@ -64,25 +64,39 @@ public sealed class InProcServerTests
         Task serve = TargetServer.ServeAsync(server, target, cts.Token);
         try
         {
-            JsonRpcRequest statusRequest = JsonRpcCodec.CreateRequest(TargetMethods.Status, 1);
-            await JsonRpcCodec.WriteRequestAsync(client, statusRequest, cts.Token);
-            JsonRpcResponse? statusResponse = await JsonRpcCodec.ReadResponseAsync(client, cts.Token);
-            TargetStatusResult? status = JsonRpcCodec.ReadResult(statusResponse!.Result!.Value, TargetProtocolJsonContext.Default.TargetStatusResult);
+            TargetClient targetClient = new(client);
+            TargetStatusResult status = await targetClient.GetStatusAsync(cts.Token);
             Assert.Equal(TargetProtocol.Version, status!.ProtocolVersion);
+            Assert.Equal(["touch", "keyboard"], status.SupportedInputDevices);
 
-            JsonRpcRequest captureRequest = JsonRpcCodec.CreateRequest(
-                TargetMethods.CaptureFrame,
-                2,
-                new CaptureFrameParams { IncludeCursor = true },
-                TargetProtocolJsonContext.Default.CaptureFrameParams);
-            await JsonRpcCodec.WriteRequestAsync(client, captureRequest, cts.Token);
-            JsonRpcResponse? captureResponse = await JsonRpcCodec.ReadResponseAsync(client, cts.Token);
-            CaptureFrameResult? result = JsonRpcCodec.ReadResult(captureResponse!.Result!.Value, TargetProtocolJsonContext.Default.CaptureFrameResult);
-
-            Assert.Equal(2, result!.Width);
-            Assert.Equal(1, result.Height);
-            Assert.Equal(Convert.ToBase64String(pixels), result.PixelsBase64);
+            CapturedFrame captured = await targetClient.CaptureFrameAsync(includeCursor: true, cts.Token);
+            Assert.Equal(2, captured.Width);
+            Assert.Equal(1, captured.Height);
+            Assert.Equal(pixels, captured.BgraPixels);
             Assert.True(target.LastIncludeCursor);
+
+            await targetClient.AttachInputDeviceAsync(InputDeviceType.Touch, cts.Token);
+            await targetClient.AttachInputDeviceAsync(InputDeviceType.Keyboard, cts.Token);
+            IReadOnlyList<InputDeviceStatus> devices = await targetClient.ListInputDevicesAsync(cts.Token);
+            Assert.Collection(
+                devices,
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Touch, device.DeviceType);
+                    Assert.True(device.Attached);
+                },
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Keyboard, device.DeviceType);
+                    Assert.True(device.Attached);
+                });
+
+            await targetClient.TapAsync(10, 20, null, cts.Token);
+            await targetClient.TypeAsync("abc[Enter]", null, cts.Token);
+
+            Assert.Equal(InputDeviceType.Keyboard, target.LastAttachedDeviceType);
+            Assert.Equal((10, 20, (InputDeviceType?)null), target.LastTap);
+            Assert.Equal(("abc[Enter]", (InputDeviceType?)null), target.LastType);
         }
         finally
         {

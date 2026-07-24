@@ -26,22 +26,23 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
-    public async Task ClickParsesCoordinatesAndTarget()
+    public async Task TapParsesCoordinatesTargetAndDevice()
     {
         RecordingRunner runner = new();
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "calculator", "click", "-x", "5", "-y", "7"],
+            ["--target", "calculator", "tap", "-x", "5", "-y", "7", "--device", "touch"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        ClickCommand command = Assert.IsType<ClickCommand>(runner.Command);
+        TapCommand command = Assert.IsType<TapCommand>(runner.Command);
         Assert.Equal("calculator", command.Target.Name);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
+        Assert.Equal(InputDeviceType.Touch, command.DeviceType);
     }
 
     [Fact]
@@ -72,14 +73,14 @@ public sealed class CliApplicationTests
     [Fact]
     public void InvocationWithVerbRequiresConfiguration()
     {
-        Assert.False(CommandParser.CanInvokeWithoutConfiguration(["click", "-x", "1", "-y", "2"]));
+        Assert.False(CommandParser.CanInvokeWithoutConfiguration(["tap", "-x", "1", "-y", "2"]));
     }
 
     [Theory]
     [InlineData("--help")]
-    [InlineData("click", "--help")]
+    [InlineData("tap", "--help")]
     [InlineData("--version")]
-    [InlineData("[suggest]", "click")]
+    [InlineData("[suggest]", "tap")]
     public void BuiltInHelpVersionAndDirectivesCanRunWithoutConfiguration(params string[] args)
     {
         Assert.True(CommandParser.CanInvokeWithoutConfiguration(args));
@@ -105,7 +106,7 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", "nope", "click", "-x", "1", "-y", "1"],
+            ["--target", "nope", "tap", "-x", "1", "-y", "1"],
             Catalog,
             runner,
             console);
@@ -132,25 +133,6 @@ public sealed class CliApplicationTests
         Assert.Contains("Invalid value for --width.", console.ErrorText, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task HoverParsesCoordinatesAndTarget()
-    {
-        RecordingRunner runner = new();
-        using TestConsole console = new();
-
-        int exitCode = await CliApplication.RunAsync(
-            ["--target", "calculator", "hover", "-x", "5", "-y", "7"],
-            Catalog,
-            runner,
-            console);
-
-        Assert.Equal(ExitCodes.Success, exitCode);
-        HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
-        Assert.Equal("calculator", command.Target.Name);
-        Assert.Equal(5, command.X);
-        Assert.Equal(7, command.Y);
-    }
-
     [Theory]
     [InlineData("notepad")]
     [InlineData("paint")]
@@ -160,13 +142,13 @@ public sealed class CliApplicationTests
         using TestConsole console = new();
 
         int exitCode = await CliApplication.RunAsync(
-            ["--target", targetValue, "hover", "-x", "5", "-y", "7"],
+            ["--target", targetValue, "tap", "-x", "5", "-y", "7"],
             Catalog,
             runner,
             console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
-        HoverCommand command = Assert.IsType<HoverCommand>(runner.Command);
+        TapCommand command = Assert.IsType<TapCommand>(runner.Command);
         Assert.Equal(targetValue, command.Target.Name);
     }
 
@@ -185,10 +167,63 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
         Assert.Equal("calculator", command.Target.Name);
+        Assert.Equal("hello[Enter]", command.TextAndKeys);
         Assert.Collection(
             command.Actions,
             action => Assert.Equal("hello", Assert.IsType<TextKeyboardAction>(action).Text),
             action => Assert.Equal(KeyboardKey.Enter, Assert.IsType<KeyPressKeyboardAction>(action).Key));
+    }
+
+    [Fact]
+    public async Task TypeParsesDeviceSelection()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["type", "abc", "--device", "keyboard"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
+        Assert.Equal(InputDeviceType.Keyboard, command.DeviceType);
+    }
+
+    [Fact]
+    public async Task InputDeviceAttachParsesTargetAndDevice()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "paint", "inputdevice", "attach", "touch"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        InputDeviceAttachCommand command = Assert.IsType<InputDeviceAttachCommand>(runner.Command);
+        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal(InputDeviceType.Touch, command.DeviceType);
+    }
+
+    [Fact]
+    public async Task InputDeviceListParsesTarget()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "paint", "inputdevice", "list"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        InputDeviceListCommand command = Assert.IsType<InputDeviceListCommand>(runner.Command);
+        Assert.Equal("paint", command.Target.Name);
     }
 
     [Fact]
@@ -520,12 +555,12 @@ public sealed class CliApplicationTests
         RecordingRunner runner = new();
         using TestConsole console = new();
 
-        int exitCode = await CliApplication.RunAsync(["--target", "nope", "click", "--help"], Catalog, runner, console);
+        int exitCode = await CliApplication.RunAsync(["--target", "nope", "tap", "--help"], Catalog, runner, console);
 
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.Null(runner.Command);
         Assert.DoesNotContain("Unknown target 'nope'.", console.ErrorText, StringComparison.Ordinal);
-        Assert.Contains("click", console.OutputText, StringComparison.Ordinal);
+        Assert.Contains("tap", console.OutputText, StringComparison.Ordinal);
     }
 
     [Fact]

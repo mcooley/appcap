@@ -189,6 +189,92 @@ internal static class RecordingIpc
         return acknowledgement?.Acknowledged ?? false;
     }
 
+    public static Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken) =>
+        SendAcknowledgedInputAsync(
+            WorkerMethods.InputDeviceAttach,
+            new InputDeviceRequest
+            {
+                TargetName = target.TargetName,
+                ApplicationId = target.ApplicationId,
+                DeviceType = deviceType.ToString(),
+            },
+            WorkerProtocolJsonContext.Default.InputDeviceRequest,
+            cancellationToken);
+
+    public static Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken) =>
+        SendAcknowledgedInputAsync(
+            WorkerMethods.InputDeviceRemove,
+            new InputDeviceRequest
+            {
+                TargetName = target.TargetName,
+                ApplicationId = target.ApplicationId,
+                DeviceType = deviceType.ToString(),
+            },
+            WorkerProtocolJsonContext.Default.InputDeviceRequest,
+            cancellationToken);
+
+    public static async Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    {
+        JsonRpcRequest request = JsonRpcCodec.CreateRequest(
+            WorkerMethods.InputDeviceList,
+            Interlocked.Increment(ref nextRequestId),
+            target,
+            WorkerProtocolJsonContext.Default.TargetDescriptorRequest);
+
+        JsonRpcResponse? response = await SendRequestAsync(request, TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            throw new AppCapException("The worker did not respond to the input-device list request.");
+        }
+
+        if (response.Error is { } error)
+        {
+            throw CreateWorkerProtocolException(error);
+        }
+
+        if (response.Result is not { } result)
+        {
+            throw new AppCapException("The worker returned an empty input-device list response.");
+        }
+
+        WorkerInputDeviceListResult? list = JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.WorkerInputDeviceListResult);
+        if (list is null)
+        {
+            throw new AppCapException("The worker returned an empty input-device list response.");
+        }
+
+        return list.Devices
+            .Select(static device => new InputDeviceStatus(InputDeviceType.Parse(device.DeviceType), device.Attached))
+            .ToArray();
+    }
+
+    public static Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendAcknowledgedInputAsync(
+            WorkerMethods.InputTap,
+            new PointerInputRequest
+            {
+                TargetName = target.TargetName,
+                ApplicationId = target.ApplicationId,
+                X = x,
+                Y = y,
+                DeviceType = deviceType?.ToString(),
+            },
+            WorkerProtocolJsonContext.Default.PointerInputRequest,
+            cancellationToken);
+
+    public static Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendAcknowledgedInputAsync(
+            WorkerMethods.InputType,
+            new KeyboardInputRequest
+            {
+                TargetName = target.TargetName,
+                ApplicationId = target.ApplicationId,
+                TextAndKeys = textAndKeys,
+                DeviceType = deviceType?.ToString(),
+            },
+            WorkerProtocolJsonContext.Default.KeyboardInputRequest,
+            cancellationToken);
+
     // Acquires the cross-process lock that serializes just-in-time worker launches, so two
     // clients that both find no worker running cannot spawn competing workers. Returns null
     // if the lock could not be acquired within the timeout. Dispose to release.
@@ -456,6 +542,54 @@ internal static class RecordingIpc
         await JsonRpcCodec.WriteRequestAsync(pipe, request, timeoutSource.Token).ConfigureAwait(false);
         return await JsonRpcCodec.ReadResponseAsync(pipe, timeoutSource.Token).ConfigureAwait(false);
     }
+
+    private static async Task SendAcknowledgedInputAsync<TParams>(
+        string method,
+        TParams parameters,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsTypeInfo,
+        CancellationToken cancellationToken)
+    {
+        JsonRpcRequest request = JsonRpcCodec.CreateRequest(
+            method,
+            Interlocked.Increment(ref nextRequestId),
+            parameters,
+            paramsTypeInfo);
+
+        JsonRpcResponse? response = await SendRequestAsync(request, TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        if (response is null)
+        {
+            throw new AppCapException($"The worker did not respond to '{method}'.");
+        }
+
+        if (response.Error is { } error)
+        {
+            throw CreateWorkerProtocolException(error);
+        }
+
+        if (response.Result is not { } result)
+        {
+            throw new AppCapException($"The worker returned an empty response for '{method}'.");
+        }
+
+        RecordingCommandResult? acknowledgement = JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        if (acknowledgement is not { Acknowledged: true })
+        {
+            throw new AppCapException($"The worker did not acknowledge '{method}'.");
+        }
+    }
+
+    private static AppCapException CreateWorkerProtocolException(JsonRpcError error) =>
+        new(error.Message, MapWorkerProtocolExitCode(error.Code));
+
+    private static int MapWorkerProtocolExitCode(int errorCode) => errorCode switch
+    {
+        JsonRpcErrorCodes.InvalidParams or
+        JsonRpcErrorCodes.UnsupportedInputDevice or
+        JsonRpcErrorCodes.InputDeviceAlreadyAttached or
+        JsonRpcErrorCodes.InputDeviceNotAttached or
+        JsonRpcErrorCodes.InvalidInputDeviceSelection => ExitCodes.UsageError,
+        _ => ExitCodes.OperationalError,
+    };
 }
 
 // A cross-process lock, backed by a named semaphore, that serializes just-in-time worker

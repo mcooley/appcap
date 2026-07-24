@@ -36,4 +36,19 @@ internal sealed class InProcScreenshotHost : IWorkerHost
         await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, request.Crop, cancellationToken).ConfigureAwait(false);
         return true;
     }
+
+    public Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken) =>
+        throw new AppCapException("The in-process screenshot worker does not manage input devices.");
+
+    public Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken) =>
+        throw new AppCapException("The in-process screenshot worker does not manage input devices.");
+
+    public Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<InputDeviceStatus>>([]);
+
+    public Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        throw new AppCapException("The in-process screenshot worker does not inject input.");
+
+    public Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        throw new AppCapException("The in-process screenshot worker does not inject input.");
 }

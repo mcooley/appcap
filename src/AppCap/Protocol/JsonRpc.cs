@@ -42,6 +42,21 @@ internal static class JsonRpcErrorCodes
     // could not be served. This is distinct from a failure: the client treats it as
     // "nothing to stop" or as a cue to fall back to an in-process capture.
     public const int NotRecording = -32002;
+
+    // The requested input device type is not supported by the target.
+    public const int UnsupportedInputDevice = -32003;
+
+    // The requested input device is already attached to the target.
+    public const int InputDeviceAlreadyAttached = -32004;
+
+    // The requested input device is not attached to the target.
+    public const int InputDeviceNotAttached = -32005;
+
+    // The requested input device does not match the command's required device type.
+    public const int InvalidInputDeviceSelection = -32006;
+
+    // Input injection or input-device state management failed.
+    public const int InputFailed = -32007;
 }
 
 // A JSON-RPC 2.0 request object. "id" and "params" are stored as raw JSON so the

@@ -117,26 +117,20 @@ public static class CommandParser
         };
         cropOption.CustomParser = ParseCrop;
 
-        Command clickCommand = new("click", "Injects a mouse click into the target window.");
-        clickCommand.Add(coordinateXOption);
-        clickCommand.Add(coordinateYOption);
-        clickCommand.SetAction((parseResult, cancellationToken) =>
-            executeCommandAsync(
-                new ClickCommand(
-                    ResolveTarget(parseResult, targetOption, catalog),
-                    parseResult.GetRequiredValue(coordinateXOption),
-                    parseResult.GetRequiredValue(coordinateYOption)),
-                cancellationToken));
+        Option<string?> deviceOption = CreateDeviceOption();
+        Argument<string> inputDeviceArgument = CreateInputDeviceArgument();
 
-        Command hoverCommand = new("hover", "Moves the cursor over the target window.");
-        hoverCommand.Add(coordinateXOption);
-        hoverCommand.Add(coordinateYOption);
-        hoverCommand.SetAction((parseResult, cancellationToken) =>
+        Command tapCommand = new("tap", "Injects a tap into the target window.");
+        tapCommand.Add(coordinateXOption);
+        tapCommand.Add(coordinateYOption);
+        tapCommand.Add(deviceOption);
+        tapCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
-                new HoverCommand(
+                new TapCommand(
                     ResolveTarget(parseResult, targetOption, catalog),
                     parseResult.GetRequiredValue(coordinateXOption),
-                    parseResult.GetRequiredValue(coordinateYOption)),
+                    parseResult.GetRequiredValue(coordinateYOption),
+                    ParseOptionalDeviceType(parseResult.GetValue(deviceOption))),
                 cancellationToken));
 
         Argument<string> typeTextArgument = new("text-and-keys")
@@ -161,12 +155,44 @@ public static class CommandParser
             "type",
             "Injects keyboard input into the target window. Bracketed keys use WebDriver/Playwright-style key names such as [Escape], [Enter], [Shift+F2], and [Control+A].");
         typeCommand.Add(typeTextArgument);
+        typeCommand.Add(deviceOption);
         typeCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
                 new TypeCommand(
                     ResolveTarget(parseResult, targetOption, catalog),
-                    ParseKeyboardSequence(parseResult.GetRequiredValue(typeTextArgument))),
+                    parseResult.GetRequiredValue(typeTextArgument),
+                    ParseKeyboardSequence(parseResult.GetRequiredValue(typeTextArgument)),
+                    ParseOptionalDeviceType(parseResult.GetValue(deviceOption))),
                 cancellationToken));
+
+        Command inputDeviceAttachCommand = new("attach", "Attaches an input device to the target.");
+        inputDeviceAttachCommand.Add(inputDeviceArgument);
+        inputDeviceAttachCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new InputDeviceAttachCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    ParseRequiredDeviceType(parseResult.GetRequiredValue(inputDeviceArgument))),
+                cancellationToken));
+
+        Command inputDeviceRemoveCommand = new("remove", "Removes an input device from the target.");
+        inputDeviceRemoveCommand.Add(inputDeviceArgument);
+        inputDeviceRemoveCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new InputDeviceRemoveCommand(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    ParseRequiredDeviceType(parseResult.GetRequiredValue(inputDeviceArgument))),
+                cancellationToken));
+
+        Command inputDeviceListCommand = new("list", "Lists the target's supported input devices and attachment state.");
+        inputDeviceListCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new InputDeviceListCommand(ResolveTarget(parseResult, targetOption, catalog)),
+                cancellationToken));
+
+        Command inputDeviceCommand = new("inputdevice", "Manages attached input devices for the target.");
+        inputDeviceCommand.Add(inputDeviceAttachCommand);
+        inputDeviceCommand.Add(inputDeviceRemoveCommand);
+        inputDeviceCommand.Add(inputDeviceListCommand);
 
         Option<int> resizeWidthOption = RequiredIntegerOption(
             "--width",
@@ -285,9 +311,9 @@ public static class CommandParser
 
         rootCommand.SetAction(parseResult => new HelpAction().Invoke(parseResult));
         rootCommand.Add(targetOption);
-        rootCommand.Add(clickCommand);
-        rootCommand.Add(hoverCommand);
+        rootCommand.Add(tapCommand);
         rootCommand.Add(typeCommand);
+        rootCommand.Add(inputDeviceCommand);
         rootCommand.Add(resizeCommand);
         rootCommand.Add(screenshotCommand);
         rootCommand.Add(recordCommand);
@@ -358,6 +384,30 @@ public static class CommandParser
         return option;
     }
 
+    private static Option<string?> CreateDeviceOption()
+    {
+        Option<string?> option = new("--device")
+        {
+            Description = "Selects an attached input device by type.",
+            HelpName = "device",
+        };
+        option.CompletionSources.Add(_ => InputDeviceType.KnownTypes.Select(deviceType => deviceType.ToString()));
+        option.Validators.Add(ValidateInputDeviceToken);
+        return option;
+    }
+
+    private static Argument<string> CreateInputDeviceArgument()
+    {
+        Argument<string> argument = new("device")
+        {
+            Description = "Specifies the input device type.",
+            HelpName = "device",
+        };
+        argument.CompletionSources.Add(_ => InputDeviceType.KnownTypes.Select(deviceType => deviceType.ToString()));
+        argument.Validators.Add(ValidateInputDeviceToken);
+        return argument;
+    }
+
     private static Option<string> RequiredOutputOption(string extension, string description, string extensionErrorMessage)
     {
         Option<string> option = new("--output")
@@ -397,6 +447,21 @@ public static class CommandParser
 
         return actions;
     }
+
+    private static InputDeviceType ParseRequiredDeviceType(string value)
+    {
+        if (!InputDeviceType.TryParse(value, out InputDeviceType deviceType))
+        {
+            throw new AppCapException("Invalid input device identifier.", ExitCodes.UsageError);
+        }
+
+        return deviceType;
+    }
+
+    private static InputDeviceType? ParseOptionalDeviceType(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : ParseRequiredDeviceType(value);
 
     private static TimeSpan ParseTimeLimit(ArgumentResult result)
     {
@@ -446,4 +511,18 @@ public static class CommandParser
     }
 
     private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static void ValidateInputDeviceToken(SymbolResult result)
+    {
+        if (result.Tokens.Count is 0)
+        {
+            return;
+        }
+
+        string? value = result.Tokens[0].Value;
+        if (!InputDeviceType.TryParse(value, out _))
+        {
+            result.AddError("Invalid input device identifier.");
+        }
+    }
 }
