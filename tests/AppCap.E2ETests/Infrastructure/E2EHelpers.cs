@@ -146,6 +146,30 @@ internal static class E2EHelpers
         }
     }
 
+    public static string WaitForTestAppWindowTitle(TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        string title = string.Empty;
+        while (stopwatch.Elapsed < timeout)
+        {
+            foreach (Process process in Process.GetProcessesByName("AppCap.TestApp"))
+            {
+                using (process)
+                {
+                    title = process.MainWindowTitle;
+                    if (title.Contains(" | typed:", StringComparison.Ordinal))
+                    {
+                        return title;
+                    }
+                }
+            }
+
+            Thread.Sleep(50);
+        }
+
+        throw new TimeoutException($"The E2E test app did not report typed text within {timeout.TotalSeconds} seconds. Last window title: '{title}'.");
+    }
+
     public static void CloseAppCapProcesses()
     {
         foreach (Process process in Process.GetProcessesByName("AppCap"))

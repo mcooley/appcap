@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Drawing;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -23,7 +24,7 @@ internal static unsafe class WindowApplication
 
     private static bool clicked;
     private static bool hovered;
-    private static int typedCharacters;
+    private static readonly StringBuilder TypedText = new();
     private static bool gameInputLoaded;
 
     public static int Run()
@@ -107,12 +108,9 @@ internal static unsafe class WindowApplication
                 SetClicked(hwnd, pointerDownPoint.X, pointerDownPoint.Y);
                 return new LRESULT(0);
             case PInvoke.WM_CHAR:
-                if (wParam.Value >= 0x20)
-                {
-                    typedCharacters++;
-                    _ = PInvoke.InvalidateRect(hwnd, null, false);
-                }
-
+                TypedText.Append((char)wParam.Value);
+                UpdateTitle(hwnd);
+                _ = PInvoke.InvalidateRect(hwnd, null, false);
                 return new LRESULT(0);
             case PInvoke.WM_DESTROY:
                 PInvoke.PostQuitMessage(0);
@@ -130,13 +128,13 @@ internal static unsafe class WindowApplication
         Fill(hdc, paint.rcPaint, Rgb(10, 90, 140));
         Fill(hdc, ClickRect, clicked ? Rgb(220, 40, 40) : Rgb(80, 80, 80));
         Fill(hdc, HoverRect, hovered ? Rgb(245, 210, 40) : Rgb(80, 80, 80));
-        Fill(hdc, TextRect, typedCharacters > 0 ? Rgb(40, 190, 90) : Rgb(80, 80, 80));
+        Fill(hdc, TextRect, TypedText.Length > 0 ? Rgb(40, 190, 90) : Rgb(80, 80, 80));
 
         _ = PInvoke.SetBkMode(hdc, BACKGROUND_MODE.TRANSPARENT);
         _ = PInvoke.SetTextColor(hdc, Rgb(255, 255, 255));
         DrawText(hdc, 92, 112, clicked ? "clicked" : "click target");
         DrawText(hdc, 272, 112, hovered ? "hovered" : "hover target");
-        DrawText(hdc, 92, 272, typedCharacters > 0 ? $"typed {typedCharacters}" : "type target");
+        DrawText(hdc, 92, 272, TypedText.Length > 0 ? $"typed {TypedText.Length}" : "type target");
         DrawText(hdc, 16, 16, gameInputLoaded ? "GameInput loaded" : "GameInput unavailable");
 
         _ = PInvoke.EndPaint(hwnd, paint);
@@ -171,8 +169,27 @@ internal static unsafe class WindowApplication
     {
         clicked = false;
         hovered = false;
-        typedCharacters = 0;
+        TypedText.Clear();
+        UpdateTitle(hwnd);
         _ = PInvoke.InvalidateRect(hwnd, null, false);
+    }
+
+    private static void UpdateTitle(HWND hwnd)
+    {
+        string escapedText = TypedText
+            .ToString()
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\t", "\\t", StringComparison.Ordinal);
+        string title = $"{Title} | typed:{escapedText}";
+        unsafe
+        {
+            fixed (char* titlePointer = title)
+            {
+                _ = PInvoke.SetWindowText(hwnd, new PCWSTR(titlePointer));
+            }
+        }
     }
 
     private static void SetHovered(HWND hwnd, int x, int y)

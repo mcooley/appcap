@@ -5,6 +5,7 @@ RegisterClass
 CreateWindowEx
 ShowWindow
 UpdateWindow
+SetWindowText
 GetMessage
 TranslateMessage
 DispatchMessage

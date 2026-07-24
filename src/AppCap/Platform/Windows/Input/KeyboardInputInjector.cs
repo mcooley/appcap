@@ -40,18 +40,29 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
 
     private static void SendText(TargetWindow window, string text)
     {
+        if (TrySendInputs(CreateUnicodeInputs(text)))
+        {
+            return;
+        }
+
         foreach (char character in text)
         {
-            if (TrySendInputs([
-                UnicodeInput(character, isKeyUp: false),
-                UnicodeInput(character, isKeyUp: true),
-            ]))
-            {
-                continue;
-            }
-
             SendCharMessage(window, character);
         }
+    }
+
+    internal static INPUT[] CreateUnicodeInputs(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        INPUT[] inputs = new INPUT[text.Length * 2];
+        for (int index = 0; index < text.Length; index++)
+        {
+            inputs[index * 2] = UnicodeInput(text[index], isKeyUp: false);
+            inputs[(index * 2) + 1] = UnicodeInput(text[index], isKeyUp: true);
+        }
+
+        return inputs;
     }
 
     private static void SendKeyPress(TargetWindow window, KeyPressKeyboardAction keyPress)

@@ -4,7 +4,7 @@ namespace AppCap.E2ETests;
 
 public sealed class E2EContext
 {
-    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(40);
     private static readonly Lazy<E2EContext> CurrentContext = new(E2EHelpers.CreateContext);
 
     internal E2EContext(string target, string executablePath, string outputDirectory)

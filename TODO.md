@@ -19,6 +19,7 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 - Add broader key-name coverage for `appcap type` if real workflows need it.
 - Add optional timing controls for type and pointer input.
 - Add a `mouse` input device before restoring pointer-hover support.
+- See if we can detach input devices and allow the worker process to shut down when MCP server dies
 
 ## Video Capture
 
