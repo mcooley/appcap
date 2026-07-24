@@ -71,6 +71,8 @@ finally {
 
 The repository includes a packaged NativeAOT Win32 test app in `tests/AppCap.TestApp`. It exposes deterministic colored regions for pointer, keyboard, screenshot, and coordinate assertions. The packaging script writes an unsigned MSIX to `artifacts/testapp/AppCap.E2ETestApp.msix`; the `-Install` switch registers the generated package layout for local developer testing.
 
+`AppCap.TestApp` uses GameInput as a wrapper over Windows input APIs. The GameInput redist must be installed on the machine running the tests. If it's not installed, run `winget install Microsoft.GameInput`.
+
 ## Target Configuration
 
 Targets are represented by `TargetApplication`, which pairs a target name with an application `id`. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. When `--target` is omitted, the first configured target is used.
