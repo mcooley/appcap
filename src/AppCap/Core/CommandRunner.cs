@@ -7,25 +7,22 @@ public sealed class CommandRunner : ICommandRunner
     private readonly IInputController inputController;
     private readonly IScreenshotCapture screenshotCapture;
     private readonly IRecordingController recordingController;
-    private readonly ICommandConsole console;
 
     public CommandRunner(
         ITargetResolver targetResolver,
         IWindowController windowController,
         IInputController inputController,
         IScreenshotCapture screenshotCapture,
-        IRecordingController recordingController,
-        ICommandConsole console)
+        IRecordingController recordingController)
     {
         this.targetResolver = targetResolver;
         this.windowController = windowController;
         this.inputController = inputController;
         this.screenshotCapture = screenshotCapture;
         this.recordingController = recordingController;
-        this.console = console;
     }
 
-    public async Task RunAsync(AppCapCommand command, CancellationToken cancellationToken)
+    public async Task<CommandExecutionResult> RunAsync(AppCapCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
         switch (command)
@@ -37,8 +34,7 @@ public sealed class CommandRunner : ICommandRunner
                 await RemoveInputDeviceAsync(remove, cancellationToken).ConfigureAwait(false);
                 break;
             case InputDeviceListCommand list:
-                await ListInputDevicesAsync(list, cancellationToken).ConfigureAwait(false);
-                break;
+                return await ListInputDevicesAsync(list, cancellationToken).ConfigureAwait(false);
             case TapCommand tap:
                 await TapAsync(tap, cancellationToken).ConfigureAwait(false);
                 break;
@@ -66,6 +62,8 @@ public sealed class CommandRunner : ICommandRunner
             default:
                 throw new AppCapException("Unsupported command.", ExitCodes.UsageError);
         }
+
+        return CommandExecutionResult.Empty;
     }
 
     private Task AttachInputDeviceAsync(InputDeviceAttachCommand command, CancellationToken cancellationToken) =>
@@ -74,13 +72,13 @@ public sealed class CommandRunner : ICommandRunner
     private Task RemoveInputDeviceAsync(InputDeviceRemoveCommand command, CancellationToken cancellationToken) =>
         inputController.RemoveInputDeviceAsync(command.Target, command.DeviceType, cancellationToken);
 
-    private async Task ListInputDevicesAsync(InputDeviceListCommand command, CancellationToken cancellationToken)
+    private async Task<CommandExecutionResult> ListInputDevicesAsync(InputDeviceListCommand command, CancellationToken cancellationToken)
     {
         IReadOnlyList<InputDeviceStatus> devices = await inputController.ListInputDevicesAsync(command.Target, cancellationToken).ConfigureAwait(false);
-        foreach (InputDeviceStatus device in devices)
-        {
-            await console.Output.WriteLineAsync($"{device.DeviceType}: {(device.Attached ? "attached" : "detached")}").ConfigureAwait(false);
-        }
+        string output = string.Join(
+            Environment.NewLine,
+            devices.Select(device => $"{device.DeviceType}: {(device.Attached ? "attached" : "detached")}"));
+        return new CommandExecutionResult(output);
     }
 
     private Task TapAsync(TapCommand command, CancellationToken cancellationToken) =>

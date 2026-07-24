@@ -15,20 +15,30 @@ changing the others.
 ```
   ┌────────┐   client<->worker    ┌────────┐   worker<->target   ┌────────┐
   │ Client │ ───────────────────▶ │ Worker │ ──────────────────▶ │ Target │
-  │  (CLI) │   named pipe /       │        │   in-proc /         │ (OS    │
+  │CLI/MCP │   named pipe /       │        │   in-proc /         │ (OS    │
   └────────┘   in-proc duplex     └────────┘   remote transport  │  capture)
                                                                   └────────┘
 ```
 
-### Client
+### Client frontends
 
-The **client** is the CLI you invoke. It is deliberately **thin and short-lived**: it
-parses arguments, resolves the target, sends one or more high-level requests to a
-worker, prints the result, and exits. The client does **not** perform file I/O, media
-encoding, image rendering, or OS capture itself — that all belongs to the worker and
-the target.
+The CLI is AppCap's canonical interface. Every AppCap feature must be accessible
+from the CLI, and the CLI remains the primary focus of end-to-end test coverage. New
+features are designed and tested through the CLI before other frontends expose them.
 
-Many client instances can run at once (each `appcap` invocation is a client).
+The stdio MCP server is a second, complete client frontend. Its tools use the CLI's
+naming and terminology and delegate to the same command model and worker services. It
+does not own capture, input, recording, or file-writing behavior. Like the CLI, it can
+connect to the long-lived worker process shared by other client instances. The MCP
+process itself lives only as long as its stdio client connection.
+
+Both frontends are deliberately thin: they parse their respective interfaces, resolve
+the target, send one or more high-level requests to a worker, return the result, and
+exit. A client does **not** perform media encoding, image rendering, or OS capture
+itself; that belongs to the worker and target. The MCP screenshot tool may read the PNG
+produced by the worker to return the protocol's image content result.
+
+Many client instances can run at once (each CLI or MCP invocation is a client).
 
 ### Worker
 
@@ -177,6 +187,7 @@ further restructuring.
 | Area | Location |
 | --- | --- |
 | Client (CLI + orchestration) | `src/AppCap/Cli`, `src/AppCap/Core` |
+| Client (MCP stdio frontend) | `src/AppCap/Mcp` |
 | Shared protocol primitives | `src/AppCap/Protocol` (`JsonRpc`, `JsonRpcCodec`, `DuplexStream`, `InProcDuplexTransport`) |
 | Client↔Worker protocol | `src/AppCap/Protocol` (`WorkerProtocol`), `RecordingIpc` |
 | Worker↔Target protocol | `src/AppCap/Protocol` (`TargetProtocol`, `TargetServer`, `ITarget`), documented in `docs/target-protocol.md` |

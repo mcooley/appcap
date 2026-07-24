@@ -49,7 +49,7 @@ public static class CommandParser
             catalog: null,
             static (_, _) => Task.FromException(new AppCapException(ConfigurationRequiredMessage, ExitCodes.UsageError)));
 
-    private static RootCommand CreateRootCommand(
+    internal static RootCommand CreateRootCommand(
         TargetCatalog? catalog,
         Func<AppCapCommand, CancellationToken, Task> executeCommandAsync)
     {

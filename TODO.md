@@ -37,6 +37,8 @@ See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔
 
 - Build out **remote targets** end-to-end: configuring a remote target in the config file, discovering/authenticating its endpoint, a concrete remote transport binding (for example TCP or WebSocket), and a `RemoteTarget : ITarget` client.
 - Define the optimized frame-streaming binding of the target protocol for remote **video** capture (in-proc uses direct GPU surface handoff today).
+- Run [conformance test suite](https://github.com/modelcontextprotocol/conformance) against the MCP server
+  - Blocked on [lack of stdio support](https://github.com/modelcontextprotocol/conformance/issues/258) 
 
 ## Platform Support
 

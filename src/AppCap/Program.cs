@@ -14,6 +14,21 @@ if (WorkerHost.IsWorkerInvocation(args))
 
 SystemConsole console = new();
 
+if (args is ["mcp"])
+{
+	try
+	{
+		TargetCatalog mcpCatalog = ConfigLoader.Load(AppContext.BaseDirectory);
+		await McpServerApplication.RunAsync(mcpCatalog).ConfigureAwait(false);
+		return ExitCodes.Success;
+	}
+	catch (AppCapException exception)
+	{
+		console.ErrorOutput.WriteLine(exception.Message);
+		return exception.ExitCode;
+	}
+}
+
 if (CommandParser.CanInvokeWithoutConfiguration(args))
 {
 	if (CommandParser.StartsWithDirective(args))
@@ -24,7 +39,7 @@ if (CommandParser.CanInvokeWithoutConfiguration(args))
 			return await CliApplication.RunAsync(
 				args,
 				directiveCatalog,
-				CommandServices.CreateRunner(console),
+				CommandServices.CreateRunner(),
 				console).ConfigureAwait(false);
 		}
 		catch (AppCapException)
@@ -50,5 +65,5 @@ catch (AppCapException exception)
 return await CliApplication.RunAsync(
 	args,
 	catalog,
-	CommandServices.CreateRunner(console),
+	CommandServices.CreateRunner(),
 	console).ConfigureAwait(false);

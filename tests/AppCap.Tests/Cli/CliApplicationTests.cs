@@ -46,6 +46,18 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task CommandOutputIsWrittenToConsole()
+    {
+        RecordingRunner runner = new() { Result = new CommandExecutionResult("touch: attached") };
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["inputdevice", "list"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Equal($"touch: attached{Environment.NewLine}", console.OutputText);
+    }
+
+    [Fact]
     public async Task TapParsesTerseCoordinates()
     {
         RecordingRunner runner = new();
@@ -649,10 +661,12 @@ public sealed class CliApplicationTests
     {
         public AppCapCommand? Command { get; private set; }
 
-        public Task RunAsync(AppCapCommand command, CancellationToken cancellationToken)
+        public CommandExecutionResult Result { get; init; } = CommandExecutionResult.Empty;
+
+        public Task<CommandExecutionResult> RunAsync(AppCapCommand command, CancellationToken cancellationToken)
         {
             Command = command;
-            return Task.CompletedTask;
+            return Task.FromResult(Result);
         }
     }
 

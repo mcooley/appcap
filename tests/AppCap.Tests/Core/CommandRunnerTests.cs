@@ -17,7 +17,7 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
-    public async Task InputDeviceListWritesAttachmentState()
+    public async Task InputDeviceListReturnsAttachmentState()
     {
         TestServices services = new()
         {
@@ -29,11 +29,11 @@ public sealed class CommandRunnerTests
         };
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new InputDeviceListCommand(Target), CancellationToken.None);
+        CommandExecutionResult result = await runner.RunAsync(new InputDeviceListCommand(Target), CancellationToken.None);
 
         Assert.Equal(
-            $"touch: attached{Environment.NewLine}keyboard: detached{Environment.NewLine}",
-            services.Console.OutputText);
+            $"touch: attached{Environment.NewLine}keyboard: detached",
+            result.Output);
         Assert.Null(services.TargetResolver.RequestedTarget);
     }
 
@@ -172,8 +172,6 @@ public sealed class CommandRunnerTests
 
         public TestRecordingController RecordingController { get; private set; } = null!;
 
-        public TestConsole Console { get; private set; } = null!;
-
         public CommandRunner CreateRunner()
         {
             TargetResolver = new TestTargetResolver(Window);
@@ -181,15 +179,13 @@ public sealed class CommandRunnerTests
             InputController = new TestInputController(ListedDevices);
             ScreenshotCapture = new TestScreenshotCapture();
             RecordingController = new TestRecordingController();
-            Console = new TestConsole();
 
             return new CommandRunner(
                 TargetResolver,
                 WindowController,
                 InputController,
                 ScreenshotCapture,
-                RecordingController,
-                Console);
+                RecordingController);
         }
     }
 
@@ -353,21 +349,4 @@ public sealed class CommandRunnerTests
         }
     }
 
-    private sealed class TestConsole : ICommandConsole, IDisposable
-    {
-        private readonly StringWriter output = new();
-        private readonly StringWriter error = new();
-
-        public TextWriter Output => output;
-
-        public TextWriter ErrorOutput => error;
-
-        public string OutputText => output.ToString();
-
-        public void Dispose()
-        {
-            output.Dispose();
-            error.Dispose();
-        }
-    }
 }

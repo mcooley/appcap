@@ -2,5 +2,5 @@ namespace AppCap;
 
 public interface ICommandRunner
 {
-    Task RunAsync(AppCapCommand command, CancellationToken cancellationToken);
+    Task<CommandExecutionResult> RunAsync(AppCapCommand command, CancellationToken cancellationToken);
 }

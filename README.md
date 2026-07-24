@@ -1,11 +1,15 @@
 # appcap
 
-`appcap` is a screen recording and automation CLI tool.
-
-Currently supports Windows 11.
+`appcap` is a screen recorder and automation tool for targeting one Windows app at a time. From a command line or agent, you can capture screenshots and video, send keyboard and pointer input, and control an app’s windows without involving your whole desktop.
 
 ## Installing
 `appcap` is a single-file executable. Copy the exe to your target machine along with an `appcap.config.json` file (see [Targets](#targets)) and run it from the command line.
+
+### MCP Server
+
+AppCap provides a stdio Model Context Protocol server with the same operations as
+the CLI. Configure an MCP host to launch `appcap mcp`. Like the rest of the cli, configure targets with an
+`appcap.config.json` file next to the executable.
 
 ## Targets
 

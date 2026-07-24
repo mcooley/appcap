@@ -22,7 +22,16 @@ public static class CliApplication
             return await RunWithoutConfigurationAsync(args, console, cancellationToken).ConfigureAwait(false);
         }
 
-        RootCommand rootCommand = CommandParser.CreateRootCommand(catalog, runner);
+        RootCommand rootCommand = CommandParser.CreateRootCommand(
+            catalog,
+            async (command, token) =>
+            {
+                CommandExecutionResult result = await runner.RunAsync(command, token).ConfigureAwait(false);
+                if (result.Output.Length > 0)
+                {
+                    await console.Output.WriteLineAsync(result.Output).ConfigureAwait(false);
+                }
+            });
         return await InvokeAsync(rootCommand, args, console, cancellationToken).ConfigureAwait(false);
     }
 

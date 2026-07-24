@@ -69,6 +69,19 @@ finally {
 
 `APPCAP_E2E_EXECUTABLE` can point to any previously-built `appcap.exe`; setting it is the only requirement to enable the E2E tests. Before running, the test harness copies the executable (and its published output directory) to a fresh temporary directory alongside its own `appcap.config.json` (defining the `testapp` target), so the original publish directory is left untouched.
 
+The MCP conformance script uses the same previously-built executable and does not build
+AppCap itself:
+
+```powershell
+$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'AppCap.exe'
+try {
+	powershell -ExecutionPolicy Bypass -File tests/run-mcp-conformance.ps1
+}
+finally {
+	Remove-Item Env:\APPCAP_E2E_EXECUTABLE -ErrorAction SilentlyContinue
+}
+```
+
 The repository includes a packaged NativeAOT Win32 test app in `tests/AppCap.TestApp`. It exposes deterministic colored regions for pointer, keyboard, screenshot, and coordinate assertions. The packaging script writes an unsigned MSIX to `artifacts/testapp/AppCap.E2ETestApp.msix`; the `-Install` switch registers the generated package layout for local developer testing.
 
 `AppCap.TestApp` uses GameInput as a wrapper over Windows input APIs. The GameInput redist must be installed on the machine running the tests. If it's not installed, run `winget install Microsoft.GameInput`.
