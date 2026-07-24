@@ -252,11 +252,17 @@ public static class CommandParser
             DefaultValueFactory = _ => TimeSpan.FromMinutes(30),
         };
         recordTimeLimitOption.CustomParser = ParseTimeLimit;
+        Option<CropRectangle?> recordCropOption = new("--crop")
+        {
+            Description = "Captures only the specified rectangle as x,y,width,height. Width and height must be even.",
+            HelpName = "x,y,width,height",
+        };
+        recordCropOption.CustomParser = ParseRecordingCrop;
         Command recordStartCommand = new("start", "Starts recording the target window.");
         recordStartCommand.Add(recordOutputOption);
         recordStartCommand.Add(recordTimeLimitOption);
         recordStartCommand.Add(excludeCursorOption);
-        recordStartCommand.Add(cropOption);
+        recordStartCommand.Add(recordCropOption);
         recordStartCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
                 new RecordStartCommand(
@@ -264,7 +270,7 @@ public static class CommandParser
                     parseResult.GetRequiredValue(recordOutputOption),
                     parseResult.GetValue(recordTimeLimitOption),
                     parseResult.GetValue(excludeCursorOption),
-                    parseResult.GetValue(cropOption)),
+                    parseResult.GetValue(recordCropOption)),
                 cancellationToken));
 
         Command recordStopCommand = new("stop", "Stops recording the target window.");
@@ -488,6 +494,18 @@ public static class CommandParser
         if (!CropRectangle.TryParse(value, out CropRectangle crop))
         {
             result.AddError("Invalid value for --crop. Expected x,y,width,height with nonnegative x/y and positive width/height.");
+            return null;
+        }
+
+        return crop;
+    }
+
+    private static CropRectangle? ParseRecordingCrop(ArgumentResult result)
+    {
+        CropRectangle? crop = ParseCrop(result);
+        if (crop is { } value && (value.Width % 2 != 0 || value.Height % 2 != 0))
+        {
+            result.AddError("Invalid value for --crop. Width and height must be even.");
             return null;
         }
 

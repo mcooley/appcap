@@ -24,6 +24,7 @@ internal sealed class RecordingWriter : IDisposable
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object captionGate = new();
     private Task encodeTask = Task.CompletedTask;
+    private CropRectangle? effectiveCrop;
     private IRecordingSurface? latestSurface;
     private IRecordingCaption? caption;
     private TimeSpan captionStartTime;
@@ -84,7 +85,7 @@ internal sealed class RecordingWriter : IDisposable
         }
 
         started = true;
-        (int width, int height) = GetOutputSize(sourceWidth, sourceHeight);
+        (int width, int height) = ConfigureOutputSize(sourceWidth, sourceHeight);
         encodeTask = encoder.EncodeAsync(outputPath, width, height, GetNextSample, cancellationToken);
 
         Task confirmed = await Task.WhenAny(firstFrameArrived.Task, encodeTask).ConfigureAwait(false);
@@ -172,7 +173,7 @@ internal sealed class RecordingWriter : IDisposable
                 using (frame)
                 {
                     latestSurface?.Dispose();
-                    latestSurface = crop is { } cropRectangle
+                    latestSurface = effectiveCrop is { } cropRectangle
                         ? composer.Crop(frame.Surface, cropRectangle)
                         : composer.Copy(frame.Surface);
                     lastSampleTime = frame.Timestamp;
@@ -294,15 +295,21 @@ internal sealed class RecordingWriter : IDisposable
         return (float)((CaptionVisibleDuration + CaptionFadeDuration - elapsed).TotalMilliseconds / CaptionFadeDuration.TotalMilliseconds);
     }
 
-    private (int Width, int Height) GetOutputSize(int sourceWidth, int sourceHeight)
+    private (int Width, int Height) ConfigureOutputSize(int sourceWidth, int sourceHeight)
     {
-        if (crop is not { } cropRectangle)
+        CropRectangle output = crop ?? new CropRectangle(0, 0, sourceWidth, sourceHeight);
+        output.ValidateWithin(sourceWidth, sourceHeight);
+        int width = output.Width & ~1;
+        int height = output.Height & ~1;
+        if (width == 0 || height == 0)
         {
-            return (sourceWidth, sourceHeight);
+            throw new AppCapException("Recording dimensions must be at least 2x2 pixels.");
         }
 
-        cropRectangle.ValidateWithin(sourceWidth, sourceHeight);
-        return (cropRectangle.Width, cropRectangle.Height);
+        effectiveCrop = crop is null && width == sourceWidth && height == sourceHeight
+            ? null
+            : new CropRectangle(output.X, output.Y, width, height);
+        return (width, height);
     }
 
     private void EnsureOutputFileExists()

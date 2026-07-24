@@ -25,6 +25,23 @@ public sealed class RecordingWriterTests
     }
 
     [Fact]
+    public async Task TrimsOddWindowDimensionsForMp4Encoding()
+    {
+        string path = NewOutputPath();
+        FakeRecordingEncoder encoder = new(writeOutput: true);
+        FakeSurfaceComposer composer = new();
+        using RecordingWriter writer = new(path, crop: null, encoder, composer);
+        writer.AddFrame(new FakeFrame(1044, 671, TimeSpan.Zero));
+        writer.CompleteFrames();
+
+        await writer.StartAsync(1044, 671, CancellationToken.None);
+        await writer.StopAsync(discard: false, CancellationToken.None);
+
+        Assert.Equal((1044, 670), encoder.OutputSize);
+        Assert.Equal([new CropRectangle(0, 0, 1044, 670)], composer.Crops);
+    }
+
+    [Fact]
     public async Task FinishesCaptionFadeAndWritesBlankTailAfterCaptureCompletes()
     {
         string path = NewOutputPath();

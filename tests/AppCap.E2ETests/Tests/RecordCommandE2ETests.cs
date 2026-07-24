@@ -139,6 +139,24 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task OddWindowDimensionsAreTrimmedForMp4Encoding()
+    {
+        string path = Context.NewOutputPath("odd-dimensions.mp4");
+
+        Context.Run("resize", "--width", "641", "--height", "481").AssertSuccess();
+        Context.Run("record", "start", "--output", path).AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        VideoInfo video = await E2EHelpers.ReadVideoInfoAsync(path);
+
+        Assert.Equal(640, video.Width);
+        Assert.Equal(480, video.Height);
+        AssertMp4FileWasWritten(path);
+    }
+
+    [E2EFact]
     public async Task RecordTimeLimitSavesMp4File()
     {
         string path = Context.NewOutputPath("time-limited.mp4");

@@ -420,6 +420,25 @@ public sealed class CliApplicationTests
         Assert.Equal(new CropRectangle(5, 6, 320, 240), command.Crop);
     }
 
+    [Theory]
+    [InlineData("5,6,319,240")]
+    [InlineData("5,6,320,239")]
+    public async Task RecordStartRejectsOddCropDimensions(string crop)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--crop", crop],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.UsageError, exitCode);
+        Assert.Null(runner.Command);
+        Assert.Contains("Width and height must be even.", console.ErrorText, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task RecordCaptionParsesTextAndTarget()
     {
