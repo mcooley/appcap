@@ -67,6 +67,19 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
 
     private static void SendKeyPress(TargetWindow window, KeyPressKeyboardAction keyPress)
     {
+        INPUT[] inputs = CreateKeyPressInputs(keyPress);
+        if (TrySendInputs(inputs))
+        {
+            return;
+        }
+
+        SendKeyPressMessages(window, keyPress);
+    }
+
+    internal static INPUT[] CreateKeyPressInputs(KeyPressKeyboardAction keyPress)
+    {
+        ArgumentNullException.ThrowIfNull(keyPress);
+
         List<INPUT> inputs = [];
         foreach (KeyboardModifier modifier in keyPress.Modifiers)
         {
@@ -82,12 +95,7 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
             inputs.Add(VirtualKeyInput(VirtualKeyFor(keyPress.Modifiers[index]), isKeyUp: true));
         }
 
-        if (TrySendInputs([.. inputs]))
-        {
-            return;
-        }
-
-        SendKeyPressMessages(window, keyPress);
+        return [.. inputs];
     }
 
     private static bool TrySendInputs(INPUT[] inputs)
@@ -110,7 +118,7 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
     private static void SendKeyPressMessages(TargetWindow window, KeyPressKeyboardAction keyPress)
     {
         HWND hwnd = new(window.Handle);
-        bool isSystemKey = keyPress.Modifiers.Contains(KeyboardModifier.Alt);
+        bool isSystemKey = keyPress.Key == KeyboardKey.Alt || keyPress.Modifiers.Contains(KeyboardModifier.Alt);
         foreach (KeyboardModifier modifier in keyPress.Modifiers)
         {
             SendKeyMessage(hwnd, VirtualKeyFor(modifier), isKeyUp: false, isSystemKey: modifier == KeyboardModifier.Alt);
@@ -197,6 +205,7 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
 
     private static VIRTUAL_KEY VirtualKeyFor(KeyboardKey key) => key switch
     {
+        KeyboardKey.Alt => VIRTUAL_KEY.VK_MENU,
         KeyboardKey.Escape => VIRTUAL_KEY.VK_ESCAPE,
         KeyboardKey.Enter => VIRTUAL_KEY.VK_RETURN,
         KeyboardKey.Tab => VIRTUAL_KEY.VK_TAB,

@@ -6,6 +6,25 @@ namespace AppCap.Tests;
 public sealed class KeyboardInputInjectorTests
 {
     [Fact]
+    public void StandaloneAltCreatesMenuKeyPress()
+    {
+        INPUT[] inputs = KeyboardInputInjector.CreateKeyPressInputs(new KeyPressKeyboardAction([], KeyboardKey.Alt));
+
+        Assert.Collection(
+            inputs,
+            input =>
+            {
+                Assert.Equal(VIRTUAL_KEY.VK_MENU, input.Anonymous.ki.wVk);
+                Assert.Equal((KEYBD_EVENT_FLAGS)0, input.Anonymous.ki.dwFlags);
+            },
+            input =>
+            {
+                Assert.Equal(VIRTUAL_KEY.VK_MENU, input.Anonymous.ki.wVk);
+                Assert.Equal(KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP, input.Anonymous.ki.dwFlags);
+            });
+    }
+
+    [Fact]
     public void UnicodeInputsPreserveEveryCharacter()
     {
         const string Text = "AppCap test";

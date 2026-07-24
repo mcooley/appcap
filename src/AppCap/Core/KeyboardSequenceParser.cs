@@ -121,6 +121,7 @@ public static class KeyboardSequenceParser
     {
         key = value.ToLowerInvariant() switch
         {
+            "alt" => KeyboardKey.Alt,
             "escape" or "esc" => KeyboardKey.Escape,
             "enter" or "return" => KeyboardKey.Enter,
             "tab" => KeyboardKey.Tab,
@@ -166,6 +167,7 @@ public static class KeyboardSequenceParser
     }
 
     private static bool IsNamedKey(string value) =>
+        value.Equals("alt", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("escape", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("esc", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("enter", StringComparison.OrdinalIgnoreCase) ||

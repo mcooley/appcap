@@ -16,6 +16,7 @@ public enum KeyboardModifier
 
 public enum KeyboardKey
 {
+    Alt,
     Escape,
     Enter,
     Tab,

@@ -53,6 +53,17 @@ public sealed class KeyboardSequenceParserTests
     }
 
     [Fact]
+    public void ParsesStandaloneAltKey()
+    {
+        Assert.True(KeyboardSequenceParser.TryParse("[Alt]", out IReadOnlyList<KeyboardAction> actions, out string? error));
+
+        Assert.Null(error);
+        KeyPressKeyboardAction key = Assert.IsType<KeyPressKeyboardAction>(Assert.Single(actions));
+        Assert.Empty(key.Modifiers);
+        Assert.Equal(KeyboardKey.Alt, key.Key);
+    }
+
+    [Fact]
     public void ParsesEscapedBrackets()
     {
         Assert.True(KeyboardSequenceParser.TryParse("open [[bracket]]", out IReadOnlyList<KeyboardAction> actions, out string? error));
