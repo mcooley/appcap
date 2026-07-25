@@ -5,22 +5,43 @@ namespace AppCap.Tests;
 
 public sealed class KeyboardInputInjectorTests
 {
-    [Fact]
-    public void StandaloneAltCreatesMenuKeyPress()
+    [Theory]
+    [InlineData(KeyboardKey.Shift)]
+    [InlineData(KeyboardKey.Control)]
+    [InlineData(KeyboardKey.Alt)]
+    [InlineData(KeyboardKey.Windows)]
+    public void StandaloneModifierCreatesKeyPress(KeyboardKey key)
     {
-        INPUT[] inputs = KeyboardInputInjector.CreateKeyPressInputs(new KeyPressKeyboardAction([], KeyboardKey.Alt));
+        VIRTUAL_KEY expectedVirtualKey = key switch
+        {
+            KeyboardKey.Shift => VIRTUAL_KEY.VK_SHIFT,
+            KeyboardKey.Control => VIRTUAL_KEY.VK_CONTROL,
+            KeyboardKey.Alt => VIRTUAL_KEY.VK_MENU,
+            KeyboardKey.Windows => VIRTUAL_KEY.VK_LWIN,
+            _ => throw new InvalidOperationException(),
+        };
+        INPUT[] inputs = KeyboardInputInjector.CreateKeyPressInputs(new KeyPressKeyboardAction([], key));
 
         Assert.Collection(
             inputs,
             input =>
             {
-                Assert.Equal(VIRTUAL_KEY.VK_MENU, input.Anonymous.ki.wVk);
-                Assert.Equal((KEYBD_EVENT_FLAGS)0, input.Anonymous.ki.dwFlags);
+                Assert.Equal(expectedVirtualKey, input.Anonymous.ki.wVk);
+                KEYBD_EVENT_FLAGS expectedFlags = key == KeyboardKey.Windows
+                    ? KEYBD_EVENT_FLAGS.KEYEVENTF_EXTENDEDKEY
+                    : 0;
+                Assert.Equal(expectedFlags, input.Anonymous.ki.dwFlags);
             },
             input =>
             {
-                Assert.Equal(VIRTUAL_KEY.VK_MENU, input.Anonymous.ki.wVk);
-                Assert.Equal(KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP, input.Anonymous.ki.dwFlags);
+                Assert.Equal(expectedVirtualKey, input.Anonymous.ki.wVk);
+                KEYBD_EVENT_FLAGS expectedFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+                if (key == KeyboardKey.Windows)
+                {
+                    expectedFlags |= KEYBD_EVENT_FLAGS.KEYEVENTF_EXTENDEDKEY;
+                }
+
+                Assert.Equal(expectedFlags, input.Anonymous.ki.dwFlags);
             });
     }
 
@@ -41,5 +62,17 @@ public sealed class KeyboardInputInjectorTests
             Assert.Equal(Text[index], keyUp.wScan);
             Assert.Equal(KEYBD_EVENT_FLAGS.KEYEVENTF_UNICODE | KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP, keyUp.dwFlags);
         }
+    }
+
+    [Fact]
+    public void PhysicalCommaUsesOemCommaKey()
+    {
+        INPUT[] inputs = KeyboardInputInjector.CreateKeyPressInputs(
+            new KeyPressKeyboardAction([KeyboardModifier.Control], KeyboardKey.Comma));
+
+        Assert.Equal(VIRTUAL_KEY.VK_CONTROL, inputs[0].Anonymous.ki.wVk);
+        Assert.Equal(VIRTUAL_KEY.VK_OEM_COMMA, inputs[1].Anonymous.ki.wVk);
+        Assert.Equal(VIRTUAL_KEY.VK_OEM_COMMA, inputs[2].Anonymous.ki.wVk);
+        Assert.Equal(VIRTUAL_KEY.VK_CONTROL, inputs[3].Anonymous.ki.wVk);
     }
 }

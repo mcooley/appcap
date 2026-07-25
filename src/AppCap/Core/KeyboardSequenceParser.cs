@@ -69,7 +69,9 @@ public static class KeyboardSequenceParser
             return false;
         }
 
-        string[] parts = token.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = token.EndsWith('+')
+            ? [.. token[..^1].Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries), "+"]
+            : token.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
         {
             errorMessage = "Keyboard sequence has an empty key token.";
@@ -121,7 +123,10 @@ public static class KeyboardSequenceParser
     {
         key = value.ToLowerInvariant() switch
         {
+            "shift" => KeyboardKey.Shift,
+            "control" or "ctrl" => KeyboardKey.Control,
             "alt" => KeyboardKey.Alt,
+            "windows" or "win" => KeyboardKey.Windows,
             "escape" or "esc" => KeyboardKey.Escape,
             "enter" or "return" => KeyboardKey.Enter,
             "tab" => KeyboardKey.Tab,
@@ -137,6 +142,17 @@ public static class KeyboardSequenceParser
             "arrowleft" or "left" => KeyboardKey.ArrowLeft,
             "arrowright" or "right" => KeyboardKey.ArrowRight,
             "space" => KeyboardKey.Space,
+            "backquote" or "`" => KeyboardKey.Backquote,
+            "minus" or "-" => KeyboardKey.Minus,
+            "equal" or "=" or "+" => KeyboardKey.Equal,
+            "bracketleft" => KeyboardKey.BracketLeft,
+            "bracketright" => KeyboardKey.BracketRight,
+            "backslash" or "\\" => KeyboardKey.Backslash,
+            "semicolon" or ";" => KeyboardKey.Semicolon,
+            "quote" or "'" => KeyboardKey.Quote,
+            "comma" or "," => KeyboardKey.Comma,
+            "period" or "." => KeyboardKey.Period,
+            "slash" or "/" => KeyboardKey.Slash,
             _ => default,
         };
 
@@ -167,7 +183,12 @@ public static class KeyboardSequenceParser
     }
 
     private static bool IsNamedKey(string value) =>
+        value.Equals("shift", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("control", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("ctrl", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("alt", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("windows", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("win", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("escape", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("esc", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("enter", StringComparison.OrdinalIgnoreCase) ||
@@ -192,7 +213,28 @@ public static class KeyboardSequenceParser
         value.Equals("left", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("arrowright", StringComparison.OrdinalIgnoreCase) ||
         value.Equals("right", StringComparison.OrdinalIgnoreCase) ||
-        value.Equals("space", StringComparison.OrdinalIgnoreCase);
+        value.Equals("space", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("backquote", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("`", StringComparison.Ordinal) ||
+        value.Equals("minus", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("-", StringComparison.Ordinal) ||
+        value.Equals("equal", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("=", StringComparison.Ordinal) ||
+        value.Equals("+", StringComparison.Ordinal) ||
+        value.Equals("bracketleft", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("bracketright", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("backslash", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("\\", StringComparison.Ordinal) ||
+        value.Equals("semicolon", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals(";", StringComparison.Ordinal) ||
+        value.Equals("quote", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("'", StringComparison.Ordinal) ||
+        value.Equals("comma", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals(",", StringComparison.Ordinal) ||
+        value.Equals("period", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals(".", StringComparison.Ordinal) ||
+        value.Equals("slash", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("/", StringComparison.Ordinal);
 
     private static void FlushText(List<KeyboardAction> actions, StringBuilder text)
     {

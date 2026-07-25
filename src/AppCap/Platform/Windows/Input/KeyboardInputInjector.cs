@@ -205,7 +205,10 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
 
     private static VIRTUAL_KEY VirtualKeyFor(KeyboardKey key) => key switch
     {
+        KeyboardKey.Shift => VIRTUAL_KEY.VK_SHIFT,
+        KeyboardKey.Control => VIRTUAL_KEY.VK_CONTROL,
         KeyboardKey.Alt => VIRTUAL_KEY.VK_MENU,
+        KeyboardKey.Windows => VIRTUAL_KEY.VK_LWIN,
         KeyboardKey.Escape => VIRTUAL_KEY.VK_ESCAPE,
         KeyboardKey.Enter => VIRTUAL_KEY.VK_RETURN,
         KeyboardKey.Tab => VIRTUAL_KEY.VK_TAB,
@@ -221,6 +224,17 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
         KeyboardKey.ArrowLeft => VIRTUAL_KEY.VK_LEFT,
         KeyboardKey.ArrowRight => VIRTUAL_KEY.VK_RIGHT,
         KeyboardKey.Space => VIRTUAL_KEY.VK_SPACE,
+        KeyboardKey.Backquote => VIRTUAL_KEY.VK_OEM_3,
+        KeyboardKey.Minus => VIRTUAL_KEY.VK_OEM_MINUS,
+        KeyboardKey.Equal => VIRTUAL_KEY.VK_OEM_PLUS,
+        KeyboardKey.BracketLeft => VIRTUAL_KEY.VK_OEM_4,
+        KeyboardKey.BracketRight => VIRTUAL_KEY.VK_OEM_6,
+        KeyboardKey.Backslash => VIRTUAL_KEY.VK_OEM_5,
+        KeyboardKey.Semicolon => VIRTUAL_KEY.VK_OEM_1,
+        KeyboardKey.Quote => VIRTUAL_KEY.VK_OEM_7,
+        KeyboardKey.Comma => VIRTUAL_KEY.VK_OEM_COMMA,
+        KeyboardKey.Period => VIRTUAL_KEY.VK_OEM_PERIOD,
+        KeyboardKey.Slash => VIRTUAL_KEY.VK_OEM_2,
         >= KeyboardKey.Digit0 and <= KeyboardKey.Digit9 => (VIRTUAL_KEY)((int)VIRTUAL_KEY.VK_0 + (key - KeyboardKey.Digit0)),
         >= KeyboardKey.A and <= KeyboardKey.Z => (VIRTUAL_KEY)((int)VIRTUAL_KEY.VK_A + (key - KeyboardKey.A)),
         >= KeyboardKey.F1 and <= KeyboardKey.F24 => (VIRTUAL_KEY)((int)VIRTUAL_KEY.VK_F1 + (key - KeyboardKey.F1)),

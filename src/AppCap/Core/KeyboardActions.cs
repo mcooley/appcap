@@ -16,7 +16,10 @@ public enum KeyboardModifier
 
 public enum KeyboardKey
 {
+    Shift,
+    Control,
     Alt,
+    Windows,
     Escape,
     Enter,
     Tab,
@@ -32,6 +35,17 @@ public enum KeyboardKey
     ArrowLeft,
     ArrowRight,
     Space,
+    Backquote,
+    Minus,
+    Equal,
+    BracketLeft,
+    BracketRight,
+    Backslash,
+    Semicolon,
+    Quote,
+    Comma,
+    Period,
+    Slash,
     Digit0,
     Digit1,
     Digit2,

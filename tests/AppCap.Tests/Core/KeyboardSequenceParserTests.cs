@@ -52,15 +52,38 @@ public sealed class KeyboardSequenceParserTests
             });
     }
 
-    [Fact]
-    public void ParsesStandaloneAltKey()
+    [Theory]
+    [InlineData("[Shift]", KeyboardKey.Shift)]
+    [InlineData("[Control]", KeyboardKey.Control)]
+    [InlineData("[Ctrl]", KeyboardKey.Control)]
+    [InlineData("[Alt]", KeyboardKey.Alt)]
+    [InlineData("[Windows]", KeyboardKey.Windows)]
+    [InlineData("[Win]", KeyboardKey.Windows)]
+    public void ParsesStandaloneModifierKey(string sequence, KeyboardKey expectedKey)
     {
-        Assert.True(KeyboardSequenceParser.TryParse("[Alt]", out IReadOnlyList<KeyboardAction> actions, out string? error));
+        Assert.True(KeyboardSequenceParser.TryParse(sequence, out IReadOnlyList<KeyboardAction> actions, out string? error));
 
         Assert.Null(error);
         KeyPressKeyboardAction key = Assert.IsType<KeyPressKeyboardAction>(Assert.Single(actions));
         Assert.Empty(key.Modifiers);
-        Assert.Equal(KeyboardKey.Alt, key.Key);
+        Assert.Equal(expectedKey, key.Key);
+    }
+
+    [Theory]
+    [InlineData("[Control+,]", KeyboardKey.Comma)]
+    [InlineData("[Control+Comma]", KeyboardKey.Comma)]
+    [InlineData("[Control+Period]", KeyboardKey.Period)]
+    [InlineData("[Control+Slash]", KeyboardKey.Slash)]
+    [InlineData("[Control+Semicolon]", KeyboardKey.Semicolon)]
+    [InlineData("[Control++]", KeyboardKey.Equal)]
+    public void ParsesPhysicalPunctuationKeys(string sequence, KeyboardKey expectedKey)
+    {
+        Assert.True(KeyboardSequenceParser.TryParse(sequence, out IReadOnlyList<KeyboardAction> actions, out string? error));
+
+        Assert.Null(error);
+        KeyPressKeyboardAction key = Assert.IsType<KeyPressKeyboardAction>(Assert.Single(actions));
+        Assert.Equal([KeyboardModifier.Control], key.Modifiers);
+        Assert.Equal(expectedKey, key.Key);
     }
 
     [Fact]
