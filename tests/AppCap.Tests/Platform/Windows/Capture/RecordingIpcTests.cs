@@ -64,6 +64,7 @@ public sealed class RecordingIpcTests : IDisposable
     public async Task PingReturnsFalseWhenNoWorkerIsRunning()
     {
         Assert.False(await RecordingIpc.PingAsync(CancellationToken.None));
+        Assert.Null(await RecordingIpc.GetWorkerProcessIdAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -120,6 +121,7 @@ public sealed class RecordingIpcTests : IDisposable
         try
         {
             Assert.True(await RecordingIpc.PingAsync(cts.Token));
+            Assert.Equal(Environment.ProcessId, await RecordingIpc.GetWorkerProcessIdAsync(cts.Token));
             Assert.True(await RecordingIpc.IsRecordingAsync(target, cts.Token));
 
             Assert.True(await RecordingIpc.SendStopAsync(target, cts.Token));

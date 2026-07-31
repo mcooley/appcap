@@ -10,10 +10,11 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 - Add graceful handling for game bootstrapper windows and child sign-in/pop-up windows. Capture any child windows separately and composite them into screenshots and recordings. Perhaps add a command to center/resize child windows as needed so they fully overlap the parent window.
 - Add the ability to target a monitor or the entire desktop
 - Include more robust support for capturing UWP app windows (like Calculator)
+- Add a "target launch" command to allow launching a target that was originally attached with --no-launch, or has closed
+- Add a file watcher for the config file
 
 ## Input
 
-- Better foreground window handling
 - Timing controller for keyboard and pointer input.
 - Add drag support.
 - Add gamepad input support.

@@ -171,6 +171,7 @@ public sealed class WorkerProtocolInteropTests : IDisposable
             string reply = await SendRawAsync(pipeName, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"worker.ping\"}", cts.Token);
             using JsonDocument document = JsonDocument.Parse(reply);
             Assert.True(document.RootElement.GetProperty("result").GetProperty("ok").GetBoolean());
+            Assert.Equal(Environment.ProcessId, document.RootElement.GetProperty("result").GetProperty("processId").GetInt32());
         }
         finally
         {

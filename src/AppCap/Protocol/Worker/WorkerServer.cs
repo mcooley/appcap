@@ -45,7 +45,10 @@ internal static class WorkerServer
         {
             case WorkerMethods.Ping:
                 host.Ping();
-                return JsonRpcCodec.CreateSuccess(request.Id, new PingResult { Ok = true }, WorkerProtocolJsonContext.Default.PingResult);
+                return JsonRpcCodec.CreateSuccess(
+                    request.Id,
+                    new PingResult { Ok = true, ProcessId = Environment.ProcessId },
+                    WorkerProtocolJsonContext.Default.PingResult);
 
             case WorkerMethods.TargetAttach:
                 return await AttachTargetAsync(request, host, cancellationToken).ConfigureAwait(false);

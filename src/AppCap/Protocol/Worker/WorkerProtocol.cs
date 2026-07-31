@@ -181,6 +181,9 @@ internal sealed class PingResult
 {
     [JsonPropertyName("ok")]
     public bool Ok { get; set; }
+
+    [JsonPropertyName("processId")]
+    public int ProcessId { get; set; }
 }
 
 // Result of a screenshot call. "acknowledged" is always true on success (the file is on

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using global::Windows.Win32;
 
 namespace AppCap.Windows;
 
@@ -8,8 +9,10 @@ internal static class WorkerProcessController
 
     public static async Task EnsureWorkerRunningAsync(CancellationToken cancellationToken)
     {
-        if (await RecordingIpc.PingAsync(cancellationToken).ConfigureAwait(false))
+        int? processId = await RecordingIpc.GetWorkerProcessIdAsync(cancellationToken).ConfigureAwait(false);
+        if (processId is not null)
         {
+            AllowWorkerToSetForegroundWindow(processId.Value);
             return;
         }
 
@@ -19,8 +22,10 @@ internal static class WorkerProcessController
             throw new AppCapException("Timed out waiting to launch the worker.");
         }
 
-        if (await RecordingIpc.PingAsync(cancellationToken).ConfigureAwait(false))
+        processId = await RecordingIpc.GetWorkerProcessIdAsync(cancellationToken).ConfigureAwait(false);
+        if (processId is not null)
         {
+            AllowWorkerToSetForegroundWindow(processId.Value);
             return;
         }
 
@@ -42,6 +47,7 @@ internal static class WorkerProcessController
         try
         {
             Process process = Process.Start(startInfo) ?? throw new AppCapException("The worker could not be launched.");
+            AllowWorkerToSetForegroundWindow(process.Id);
             process.Dispose();
         }
         catch (System.ComponentModel.Win32Exception exception)
@@ -56,8 +62,10 @@ internal static class WorkerProcessController
         timeoutSource.CancelAfter(WorkerLaunchTimeout);
         while (!timeoutSource.IsCancellationRequested)
         {
-            if (await RecordingIpc.PingAsync(timeoutSource.Token).ConfigureAwait(false))
+            int? processId = await RecordingIpc.GetWorkerProcessIdAsync(timeoutSource.Token).ConfigureAwait(false);
+            if (processId is not null)
             {
+                AllowWorkerToSetForegroundWindow(processId.Value);
                 return;
             }
 
@@ -66,4 +74,7 @@ internal static class WorkerProcessController
 
         throw new AppCapException("The worker did not start.");
     }
+
+    private static void AllowWorkerToSetForegroundWindow(int processId) =>
+        _ = PInvoke.AllowSetForegroundWindow((uint)processId);
 }

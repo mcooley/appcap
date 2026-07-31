@@ -19,28 +19,37 @@ internal static class RecordingIpc
     private static long nextRequestId;
 
     // Probes whether a machine worker is currently running and reachable.
-    public static async Task<bool> PingAsync(CancellationToken cancellationToken)
+    public static async Task<bool> PingAsync(CancellationToken cancellationToken) =>
+        await GetWorkerProcessIdAsync(cancellationToken).ConfigureAwait(false) is not null;
+
+    public static async Task<int?> GetWorkerProcessIdAsync(CancellationToken cancellationToken)
     {
         try
         {
             JsonRpcResponse? response = await SendRequestAsync(WorkerMethods.Ping, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
-            return response?.Result is not null;
+            if (response?.Result is not JsonElement result)
+            {
+                return null;
+            }
+
+            PingResult? ping = result.Deserialize(WorkerProtocolJsonContext.Default.PingResult);
+            return ping is { Ok: true, ProcessId: > 0 } ? ping.ProcessId : null;
         }
         catch (TimeoutException)
         {
-            return false;
+            return null;
         }
         catch (IOException)
         {
-            return false;
+            return null;
         }
         catch (JsonException)
         {
-            return false;
+            return null;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return null;
         }
     }
 
