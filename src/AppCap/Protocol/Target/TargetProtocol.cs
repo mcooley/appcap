@@ -120,8 +120,7 @@ internal sealed class TargetStatusResult
 // serialized form is what a *remote* target uses.
 internal sealed record CapturedFrame(int Width, int Height, byte[] BgraPixels);
 
-// Capture-only target capability used by in-proc worker paths that do not need the
-// documented target protocol.
+// Capture-only target capability used by the optimized in-process recording path.
 internal interface ITarget
 {
     Task<CapturedFrame> CaptureFrameAsync(bool includeCursor, CancellationToken cancellationToken);

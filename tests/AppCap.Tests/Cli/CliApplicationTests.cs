@@ -12,6 +12,59 @@ public sealed class CliApplicationTests
     ]);
 
     [Fact]
+    public async Task TargetAttachParsesOptionalNameAndNoLaunch()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["target", "attach", "notepad", "--no-launch"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        TargetAttachCommand command = Assert.IsType<TargetAttachCommand>(runner.Command);
+        Assert.Equal("notepad", command.Target!.Name);
+        Assert.False(command.Launch);
+    }
+
+    [Fact]
+    public async Task TargetAttachWithoutNameDefersAutoSelection()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["target", "attach"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        TargetAttachCommand command = Assert.IsType<TargetAttachCommand>(runner.Command);
+        Assert.Null(command.Target);
+        Assert.True(command.Launch);
+    }
+
+    [Fact]
+    public async Task TargetDetachAndListParse()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        Assert.Equal(ExitCodes.Success, await CliApplication.RunAsync(["target", "detach"], Catalog, runner, console));
+        Assert.Null(Assert.IsType<TargetDetachCommand>(runner.Command).Target);
+
+        Assert.Equal(ExitCodes.Success, await CliApplication.RunAsync(["target", "list"], Catalog, runner, console));
+        Assert.IsType<TargetListCommand>(runner.Command);
+    }
+
+    [Fact]
+    public async Task RecordStatusDefersAttachedTargetSelection()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(["record", "status"], Catalog, runner, console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        Assert.Null(Assert.IsType<RecordStatusCommand>(runner.Command).Target);
+    }
+
+    [Fact]
     public async Task EmptyArgsPrintsRootHelp()
     {
         RecordingRunner runner = new();
@@ -39,7 +92,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         TapCommand command = Assert.IsType<TapCommand>(runner.Command);
-        Assert.Equal("calculator", command.Target.Name);
+        Assert.Equal("calculator", command.Target!.Name);
         Assert.Equal(5, command.X);
         Assert.Equal(7, command.Y);
         Assert.Equal(InputDeviceType.Touch, command.DeviceType);
@@ -197,7 +250,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         TapCommand command = Assert.IsType<TapCommand>(runner.Command);
-        Assert.Equal(targetValue, command.Target.Name);
+        Assert.Equal(targetValue, command.Target!.Name);
     }
 
     [Fact]
@@ -214,7 +267,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         TypeCommand command = Assert.IsType<TypeCommand>(runner.Command);
-        Assert.Equal("calculator", command.Target.Name);
+        Assert.Equal("calculator", command.Target!.Name);
         Assert.Equal("hello[Enter]", command.TextAndKeys);
         Assert.Collection(
             command.Actions,
@@ -253,7 +306,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         InputDeviceAttachCommand command = Assert.IsType<InputDeviceAttachCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
         Assert.Equal(InputDeviceType.Touch, command.DeviceType);
     }
 
@@ -271,7 +324,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         InputDeviceListCommand command = Assert.IsType<InputDeviceListCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
     }
 
     [Fact]
@@ -428,7 +481,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
         Assert.Equal("recording.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(30), command.TimeLimit);
         Assert.False(command.ExcludeCursor);
@@ -501,7 +554,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordCaptionCommand command = Assert.IsType<RecordCaptionCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
         Assert.Equal("Test caption", command.Caption);
     }
 
@@ -586,7 +639,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStopCommand command = Assert.IsType<RecordStopCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
     }
 
     [Fact]
@@ -599,7 +652,7 @@ public sealed class CliApplicationTests
 
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordCancelCommand command = Assert.IsType<RecordCancelCommand>(runner.Command);
-        Assert.Equal("paint", command.Target.Name);
+        Assert.Equal("paint", command.Target!.Name);
     }
 
     [Fact]

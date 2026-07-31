@@ -1,5 +1,5 @@
-using AppCap;
 using System.Text.Json.Serialization;
+using AppCap;
 
 namespace AppCap.Protocol.Worker;
 
@@ -11,16 +11,18 @@ namespace AppCap.Protocol.Worker;
 // forwards-compatibility guarantees. It is optimized for development simplicity. See
 // docs/architecture.md.
 //
-// A worker is reached either over a Windows named pipe (the single machine-wide worker
-// process, which multiplexes many targets/recordings) or over an in-proc duplex stream (a
-// worker hosted in the client process when no long-running background task is needed). The
-// same messages and codec run over either. Because one worker serves many targets, every
-// method that operates on a recording carries the **target name** it applies to.
+// A worker is reached over a Windows named pipe. The single machine-wide worker process
+// multiplexes attached targets and their recordings, so every target operation carries
+// the target name it applies to.
 internal static class WorkerMethods
 {
     // Liveness probe. Always succeeds while the worker is reachable; the client uses it to
     // decide whether a worker is already running before launching one just-in-time.
     public const string Ping = "worker.ping";
+
+    public const string TargetAttach = "target.attach";
+    public const string TargetDetach = "target.detach";
+    public const string TargetList = "target.list";
 
     // Starts a recording for a target and acknowledges once the recording is confirmed
     // running (its first frame has been captured). Fails with
@@ -48,7 +50,7 @@ internal static class WorkerMethods
     // supplies the destination and options. Serving this never starts a second capture
     // session: the worker serves it from that target's live recording session. Fails with
     // JsonRpcErrorCodes.NotRecording if the target is no longer recording, so the client
-    // can fall back to an in-process capture.
+    // can report that the target is unavailable.
     public const string Screenshot = "screenshot";
 
     public const string InputDeviceAttach = "input_device.attach";
@@ -106,6 +108,21 @@ internal class TargetDescriptorRequest : TargetRequest
 {
     [JsonPropertyName("applicationId")]
     public string ApplicationId { get; set; } = string.Empty;
+}
+
+internal sealed class AttachedTargetDto
+{
+    [JsonPropertyName("targetName")]
+    public string TargetName { get; set; } = string.Empty;
+
+    [JsonPropertyName("applicationId")]
+    public string ApplicationId { get; set; } = string.Empty;
+}
+
+internal sealed class AttachedTargetListResult
+{
+    [JsonPropertyName("targets")]
+    public AttachedTargetDto[] Targets { get; set; } = [];
 }
 
 internal sealed class InputDeviceRequest : TargetDescriptorRequest
@@ -192,6 +209,15 @@ internal sealed class RecordingStatusResult
 {
     [JsonPropertyName("recording")]
     public bool Recording { get; set; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "never-started";
+
+    [JsonPropertyName("outputPath")]
+    public string? OutputPath { get; set; }
+
+    [JsonPropertyName("error")]
+    public string? Error { get; set; }
 }
 
 // Result of a recording.start, recording.stop, or recording.cancel call. "acknowledged" is
@@ -212,6 +238,14 @@ internal interface IWorkerHost
     // Records liveness activity and reports the worker is up. Returns true.
     bool Ping();
 
+    Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken);
+
+    Task<bool> DetachTargetAsync(string targetName, CancellationToken cancellationToken);
+
+    IReadOnlyList<TargetDescriptorRequest> ListTargets();
+
+    void CompleteRequest();
+
     // Starts a recording for the target and returns once it is confirmed running. Throws
     // AppCapException if the target is already recording or the capture cannot start.
     Task StartRecordingAsync(RecordingStartRequest request, CancellationToken cancellationToken);
@@ -223,12 +257,11 @@ internal interface IWorkerHost
 
     Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken);
 
-    // Reports whether a recording is currently running for the target.
-    bool IsRecording(string targetName);
+    RecordingStatusResult GetRecordingStatus(string targetName);
 
     // Captures and saves a screenshot from the target's live recording session. Returns
     // true on success, or false if the target is no longer recording so the caller can
-    // fall back to an in-process capture.
+    // report that the target is unavailable.
     Task<bool> CaptureScreenshotAsync(ScreenshotRequest request, CancellationToken cancellationToken);
 
     Task AttachInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken);

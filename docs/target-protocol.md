@@ -102,8 +102,10 @@ most once. Current Windows targets support `touch` and `keyboard`.
 | `target.input.type` | `textAndKeys`, optional `deviceType` | acknowledgement |
 
 `tap` requires an attached `touch` device; `type` requires an attached `keyboard`
-device. When `deviceType` is omitted, the target selects the attached device required by
-the operation. Supplying a different type is an error.
+device. AppCap's worker queries device state and attaches the required device automatically
+before these operations. Explicit attachment remains part of the protocol for targets with
+multiple meaningful devices. When `deviceType` is omitted, the target selects the attached
+device required by the operation. Supplying a different type is an error.
 
 Example attachment request:
 

@@ -193,6 +193,11 @@ public sealed class RecordCommandE2ETests : E2ETestBase
         Assert.NotEqual(0, stopResult.ExitCode);
         Assert.Contains("No recording is running", stopResult.StandardError, StringComparison.Ordinal);
 
+        CommandResult status = Context.Run("record", "status");
+        status.AssertSuccess();
+        Assert.Contains("status: timed-out", status.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains(path, status.StandardOutput, StringComparison.OrdinalIgnoreCase);
+
         await WaitForMp4FileAsync(path);
         AssertMp4FileWasWritten(path);
     }
@@ -212,6 +217,8 @@ public sealed class RecordCommandE2ETests : E2ETestBase
         E2EHelpers.CloseTestAppProcesses();
         await WaitForMp4FileAsync(path);
 
+        await WaitForRecordingStatusAsync("app-closed");
+
         AssertMp4FileWasWritten(path);
     }
 
@@ -220,6 +227,24 @@ public sealed class RecordCommandE2ETests : E2ETestBase
         FileInfo file = new(path);
         Assert.True(file.Exists, $"Expected MP4 file to exist at '{path}'.");
         Assert.True(file.Length > 0, $"Expected MP4 file at '{path}' to be non-empty.");
+    }
+
+    private async Task WaitForRecordingStatusAsync(string expectedStatus)
+    {
+        CommandResult? result = null;
+        for (int attempt = 0; attempt < 40; attempt++)
+        {
+            result = Context.Run("record", "status");
+            result.AssertSuccess();
+            if (result.StandardOutput.Contains($"status: {expectedStatus}", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            await Task.Delay(250);
+        }
+
+        Assert.Fail($"Recording did not reach status '{expectedStatus}'. Last output: {result?.StandardOutput}");
     }
 
     private static async Task WaitForMp4FileAsync(string path)

@@ -32,6 +32,13 @@ public sealed class E2EContext
     {
         List<string> fullArguments = ["--target", Target];
         fullArguments.AddRange(arguments);
+        return RunCore(fullArguments);
+    }
+
+    internal CommandResult RunUnscoped(params string[] arguments) => RunCore(arguments);
+
+    private CommandResult RunCore(IReadOnlyList<string> fullArguments)
+    {
         string standardOutputPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".stdout.txt");
         string standardErrorPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".stderr.txt");
         string scriptPath = NewOutputPath(Guid.NewGuid().ToString("N") + ".cmd");

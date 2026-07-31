@@ -3,27 +3,12 @@ using System.Text.Json;
 namespace AppCap.Protocol.Worker;
 
 // Server side of the **worker protocol** (client <-> worker). Dispatches every worker
-// method to an IWorkerHost and owns the JSON-RPC framing, so that the machine-wide worker
-// over a named pipe and a worker hosted in-proc over a DuplexStream speak an identical wire
-// protocol. Because the host awaits real work before returning, the responses for
+// method to an IWorkerHost and owns the JSON-RPC framing over the machine worker's named
+// pipe. Because the host awaits real work before returning, the responses for
 // recording.start/stop/cancel are naturally deferred until the recording is confirmed or
 // finalized — no special transfer mechanism is needed.
 internal static class WorkerServer
 {
-    // Reads worker-protocol requests from the stream and answers them until the peer
-    // closes the connection. Used by workers (such as the in-proc worker host) that serve
-    // a short sequence of requests over a single duplex stream.
-    public static async Task ServeAsync(Stream stream, IWorkerHost host, CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            if (!await HandleConnectionAsync(stream, host, cancellationToken).ConfigureAwait(false))
-            {
-                return;
-            }
-        }
-    }
-
     // Reads and answers a single worker-protocol request from the stream. Returns false
     // when the peer closed the stream without sending a request (nothing more to serve),
     // true after a request was answered.
@@ -50,6 +35,7 @@ internal static class WorkerServer
 
         JsonRpcResponse response = await DispatchAsync(request, host, cancellationToken).ConfigureAwait(false);
         await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+        host.CompleteRequest();
         return true;
     }
 
@@ -61,17 +47,20 @@ internal static class WorkerServer
                 host.Ping();
                 return JsonRpcCodec.CreateSuccess(request.Id, new PingResult { Ok = true }, WorkerProtocolJsonContext.Default.PingResult);
 
+            case WorkerMethods.TargetAttach:
+                return await AttachTargetAsync(request, host, cancellationToken).ConfigureAwait(false);
+
+            case WorkerMethods.TargetDetach:
+                return await DetachTargetAsync(request, host, cancellationToken).ConfigureAwait(false);
+
+            case WorkerMethods.TargetList:
+                return ListTargets(request, host);
+
             case WorkerMethods.RecordingStart:
                 return await StartAsync(request, host, cancellationToken).ConfigureAwait(false);
 
             case WorkerMethods.RecordingStatus:
-            {
-                TargetRequest parameters = ReadTarget(request);
-                return JsonRpcCodec.CreateSuccess(
-                    request.Id,
-                    new RecordingStatusResult { Recording = host.IsRecording(parameters.TargetName) },
-                    WorkerProtocolJsonContext.Default.RecordingStatusResult);
-            }
+                return RecordingStatus(request, host);
 
             case WorkerMethods.RecordingStop:
                 return await StopAsync(request, host, discard: false, cancellationToken).ConfigureAwait(false);
@@ -103,6 +92,69 @@ internal static class WorkerServer
             default:
                 return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Unknown method '{request.Method}'.");
         }
+    }
+
+    private static async Task<JsonRpcResponse> AttachTargetAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        TargetDescriptorRequest parameters = ReadTargetDescriptor(request);
+        try
+        {
+            await host.AttachTargetAsync(parameters, cancellationToken).ConfigureAwait(false);
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.TargetAlreadyAttached, exception.Message);
+        }
+    }
+
+    private static JsonRpcResponse RecordingStatus(JsonRpcRequest request, IWorkerHost host)
+    {
+        TargetRequest parameters = ReadTarget(request);
+        try
+        {
+            return JsonRpcCodec.CreateSuccess(
+                request.Id,
+                host.GetRecordingStatus(parameters.TargetName),
+                WorkerProtocolJsonContext.Default.RecordingStatusResult);
+        }
+        catch (AppCapException exception) when (exception.ExitCode == ExitCodes.UsageError)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.TargetNotAttached, exception.Message);
+        }
+        catch (Exception exception)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.InternalError, exception.Message);
+        }
+    }
+
+    private static async Task<JsonRpcResponse> DetachTargetAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        TargetRequest parameters = ReadTarget(request);
+        try
+        {
+            if (!await host.DetachTargetAsync(parameters.TargetName, cancellationToken).ConfigureAwait(false))
+            {
+                return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.TargetNotAttached, $"Target '{parameters.TargetName}' is not attached.");
+            }
+
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.InternalError, exception.Message);
+        }
+    }
+
+    private static JsonRpcResponse ListTargets(JsonRpcRequest request, IWorkerHost host)
+    {
+        AttachedTargetListResult result = new()
+        {
+            Targets = host.ListTargets()
+                .Select(static target => new AttachedTargetDto { TargetName = target.TargetName, ApplicationId = target.ApplicationId })
+                .ToArray(),
+        };
+        return JsonRpcCodec.CreateSuccess(request.Id, result, WorkerProtocolJsonContext.Default.AttachedTargetListResult);
     }
 
     private static async Task<JsonRpcResponse> StartAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)

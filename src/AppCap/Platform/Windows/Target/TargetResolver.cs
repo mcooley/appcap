@@ -36,6 +36,15 @@ public sealed class TargetResolver : ITargetResolver
         throw new AppCapException($"Window was not found for target '{TargetFormatter.Format(target)}'.");
     }
 
+    public Task<TargetWindow> ResolveRunningAsync(TargetApplication target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(
+            windowFinder.TryFindWindow(target) ??
+            throw new AppCapException($"Target '{TargetFormatter.Format(target)}' is attached, but its application is not running."));
+    }
+
     private async Task<TargetWindow?> ResolveInstalledAsync(TargetApplication target, CancellationToken cancellationToken)
     {
         targetLauncher.Launch(target);

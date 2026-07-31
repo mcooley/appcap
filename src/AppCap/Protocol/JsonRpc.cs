@@ -40,7 +40,7 @@ internal static class JsonRpcErrorCodes
 
     // No recording is running for the requested target, so a stop/cancel/screenshot
     // could not be served. This is distinct from a failure: the client treats it as
-    // "nothing to stop" or as a cue to fall back to an in-process capture.
+    // "nothing to stop".
     public const int NotRecording = -32002;
 
     // The requested input device type is not supported by the target.
@@ -57,6 +57,10 @@ internal static class JsonRpcErrorCodes
 
     // Input injection or input-device state management failed.
     public const int InputFailed = -32007;
+
+    public const int TargetAlreadyAttached = -32008;
+
+    public const int TargetNotAttached = -32009;
 }
 
 // A JSON-RPC 2.0 request object. "id" and "params" are stored as raw JSON so the

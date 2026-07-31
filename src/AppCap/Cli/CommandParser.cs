@@ -61,8 +61,8 @@ public static class CommandParser
         Option<string?> targetOption = new("--target")
         {
             Description = catalog is null
-                ? "Selects the configured target application."
-                : $"Selects the configured target application. Defaults to {catalog.Default.Name}.",
+                ? "Selects an attached target application."
+                : "Selects an attached target application. Required when multiple targets are attached.",
             HelpName = "target",
             Recursive = true,
         };
@@ -125,6 +125,59 @@ public static class CommandParser
 
         Option<string?> deviceOption = CreateDeviceOption();
         Argument<string> inputDeviceArgument = CreateInputDeviceArgument();
+
+        Argument<string?> targetNameArgument = new("name")
+        {
+            Description = "Specifies a configured target name.",
+            HelpName = "name",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        if (catalog is not null)
+        {
+            targetNameArgument.CompletionSources.Add(_ => catalog.Applications.Select(application => application.Name));
+            targetNameArgument.Validators.Add(result => ValidateTargetName(result, catalog));
+        }
+
+        Option<bool> noLaunchOption = new("--no-launch")
+        {
+            Description = "Attaches the target without launching its application.",
+        };
+        Command targetAttachCommand = new("attach", "Attaches a configured target and starts the worker.");
+        targetAttachCommand.Add(targetNameArgument);
+        targetAttachCommand.Add(noLaunchOption);
+        targetAttachCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new TargetAttachCommand(
+                    ResolveOptionalTarget(parseResult.GetValue(targetNameArgument), catalog),
+                    !parseResult.GetValue(noLaunchOption)),
+                cancellationToken));
+
+        Argument<string?> detachTargetNameArgument = new("name")
+        {
+            Description = "Specifies a configured target name.",
+            HelpName = "name",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        if (catalog is not null)
+        {
+            detachTargetNameArgument.CompletionSources.Add(_ => catalog.Applications.Select(application => application.Name));
+            detachTargetNameArgument.Validators.Add(result => ValidateTargetName(result, catalog));
+        }
+
+        Command targetDetachCommand = new("detach", "Detaches a configured target.");
+        targetDetachCommand.Add(detachTargetNameArgument);
+        targetDetachCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new TargetDetachCommand(ResolveOptionalTarget(parseResult.GetValue(detachTargetNameArgument), catalog)),
+                cancellationToken));
+
+        Command targetListCommand = new("list", "Lists configured targets and their attachment and running state.");
+        targetListCommand.SetAction((_, cancellationToken) => executeCommandAsync(new TargetListCommand(), cancellationToken));
+
+        Command targetCommand = new("target", "Manages target sessions.");
+        targetCommand.Add(targetAttachCommand);
+        targetCommand.Add(targetDetachCommand);
+        targetCommand.Add(targetListCommand);
 
         Command tapCommand = new("tap", "Injects a tap into the target window.");
         tapCommand.Add(coordinatesArgument);
@@ -310,6 +363,12 @@ public static class CommandParser
                 new RecordCancelCommand(ResolveTarget(parseResult, targetOption, catalog)),
                 cancellationToken));
 
+        Command recordStatusCommand = new("status", "Reports the current or most recent recording state.");
+        recordStatusCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new RecordStatusCommand(ResolveTarget(parseResult, targetOption, catalog)),
+                cancellationToken));
+
         Argument<string> recordCaptionArgument = new("text")
         {
             Description = "Specifies the caption text to show in the active recording.",
@@ -339,9 +398,11 @@ public static class CommandParser
         recordCommand.Add(recordStopCommand);
         recordCommand.Add(recordCancelCommand);
         recordCommand.Add(recordCaptionCommand);
+        recordCommand.Add(recordStatusCommand);
 
         rootCommand.SetAction(parseResult => new HelpAction().Invoke(parseResult));
         rootCommand.Add(targetOption);
+        rootCommand.Add(targetCommand);
         rootCommand.Add(tapCommand);
         rootCommand.Add(typeCommand);
         rootCommand.Add(inputDeviceCommand);
@@ -586,7 +647,7 @@ public static class CommandParser
         return crop;
     }
 
-    private static TargetApplication ResolveTarget(
+    private static TargetApplication? ResolveTarget(
         System.CommandLine.ParseResult parseResult,
         Option<string?> targetOption,
         TargetCatalog? catalog)
@@ -599,7 +660,31 @@ public static class CommandParser
         string? targetValue = parseResult.GetValue(targetOption);
         return targetValue is not null && catalog.TryParse(targetValue, out TargetApplication target)
             ? target
-            : catalog.Default;
+            : null;
+    }
+
+    private static TargetApplication? ResolveOptionalTarget(string? value, TargetCatalog? catalog)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (catalog is not null && catalog.TryParse(value, out TargetApplication target))
+        {
+            return target;
+        }
+
+        throw new AppCapException($"Unknown target '{value}'.", ExitCodes.UsageError);
+    }
+
+    private static void ValidateTargetName(ArgumentResult result, TargetCatalog catalog)
+    {
+        string? value = result.GetValueOrDefault<string?>();
+        if (value is not null && !catalog.TryParse(value, out _))
+        {
+            result.AddError($"Unknown target '{value}'.");
+        }
     }
 
     private static string? NormalizeOptionalText(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

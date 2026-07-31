@@ -16,7 +16,7 @@ public sealed class McpToolsTests
         await tools.TapAsync(12, 34, device: "touch");
 
         TapCommand command = Assert.IsType<TapCommand>(runner.Command);
-        Assert.Equal(Target, command.Target);
+        Assert.Null(command.Target);
         Assert.Equal(12, command.X);
         Assert.Equal(34, command.Y);
         Assert.Equal(InputDeviceType.Touch, command.DeviceType);
@@ -63,6 +63,28 @@ public sealed class McpToolsTests
         Assert.Equal("capture.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(12.5), command.TimeLimit);
         Assert.True(command.ExcludeCursor);
+    }
+
+    [Fact]
+    public async Task TargetSessionToolsMapToCanonicalCommands()
+    {
+        TestRunner runner = new();
+        using McpCommandExecutor executor = new(runner);
+        McpTools tools = new(new TargetCatalog([Target]), executor);
+
+        await tools.TargetAttachAsync("target", launch: false);
+        TargetAttachCommand attach = Assert.IsType<TargetAttachCommand>(runner.Command);
+        Assert.Equal(Target, attach.Target);
+        Assert.False(attach.Launch);
+
+        await tools.TargetDetachAsync();
+        Assert.Null(Assert.IsType<TargetDetachCommand>(runner.Command).Target);
+
+        await tools.TargetListAsync();
+        Assert.IsType<TargetListCommand>(runner.Command);
+
+        await tools.RecordStatusAsync();
+        Assert.IsType<RecordStatusCommand>(runner.Command);
     }
 
     private sealed class TestRunner : ICommandRunner

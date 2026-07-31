@@ -44,6 +44,52 @@ internal static class RecordingIpc
         }
     }
 
+    public static Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken) =>
+        SendAcknowledgedAsync(
+            WorkerMethods.TargetAttach,
+            target,
+            WorkerProtocolJsonContext.Default.TargetDescriptorRequest,
+            cancellationToken);
+
+    public static Task DetachTargetAsync(string targetName, CancellationToken cancellationToken) =>
+        SendAcknowledgedAsync(
+            WorkerMethods.TargetDetach,
+            new TargetRequest { TargetName = targetName },
+            WorkerProtocolJsonContext.Default.TargetRequest,
+            cancellationToken);
+
+    public static async Task<IReadOnlyList<TargetDescriptorRequest>> ListTargetsAsync(CancellationToken cancellationToken)
+    {
+        JsonRpcResponse? response;
+        try
+        {
+            response = await SendRequestAsync(WorkerMethods.TargetList, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is TimeoutException or IOException or JsonException)
+        {
+            return [];
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return [];
+        }
+
+        if (response?.Error is { } error)
+        {
+            throw CreateWorkerProtocolException(error);
+        }
+
+        if (response?.Result is not { } result)
+        {
+            return [];
+        }
+
+        AttachedTargetListResult? list = JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.AttachedTargetListResult);
+        return list?.Targets
+            .Select(static target => new TargetDescriptorRequest { TargetName = target.TargetName, ApplicationId = target.ApplicationId })
+            .ToArray() ?? [];
+    }
+
     // Asks the worker to start a recording for a target and returns once it confirms the
     // recording is running. Throws AppCapException with the worker's reason if the target
     // is already recording, the capture cannot start, or the worker does not answer.
@@ -89,14 +135,8 @@ internal static class RecordingIpc
     {
         try
         {
-            JsonRpcResponse? response = await SendTargetRequestAsync(WorkerMethods.RecordingStatus, targetName, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
-            if (response?.Result is not { } result)
-            {
-                return false;
-            }
-
-            RecordingStatusResult? status = JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.RecordingStatusResult);
-            return status?.Recording ?? false;
+            RecordingStatusResult status = await GetRecordingStatusAsync(targetName, cancellationToken).ConfigureAwait(false);
+            return status.Recording;
         }
         catch (TimeoutException)
         {
@@ -114,6 +154,23 @@ internal static class RecordingIpc
         {
             return false;
         }
+    }
+
+    public static async Task<RecordingStatusResult> GetRecordingStatusAsync(string targetName, CancellationToken cancellationToken)
+    {
+        JsonRpcResponse? response = await SendTargetRequestAsync(WorkerMethods.RecordingStatus, targetName, TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
+        if (response?.Error is { } error)
+        {
+            throw CreateWorkerProtocolException(error);
+        }
+
+        if (response?.Result is not { } result)
+        {
+            throw new AppCapException("The worker did not return recording status.");
+        }
+
+        return JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.RecordingStatusResult) ??
+            throw new AppCapException("The worker returned an empty recording status.");
     }
 
     // Sends a stop command to the worker, asking it to finish and save the target's
@@ -135,7 +192,7 @@ internal static class RecordingIpc
     // render any caption, and save it to the requested path. Returns true if the worker
     // acknowledged the screenshot, or false if the target is no longer recording (for
     // example, the recording ended between the status probe and this request), so the
-    // caller can fall back to an in-process capture.
+    // worker can report that the target is unavailable.
     public static async Task<bool> CaptureScreenshotAsync(string targetName, ScreenshotRequest screenshot, CancellationToken cancellationToken)
     {
         screenshot.TargetName = targetName;
@@ -171,7 +228,7 @@ internal static class RecordingIpc
         if (response.Error is { } error)
         {
             // The target stopped recording between the probe and the request: fall back to
-            // an in-process capture rather than surfacing an error.
+            // report that the requested target is unavailable.
             if (error.Code == JsonRpcErrorCodes.NotRecording)
             {
                 return false;
@@ -549,6 +606,15 @@ internal static class RecordingIpc
         System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsTypeInfo,
         CancellationToken cancellationToken)
     {
+        await SendAcknowledgedAsync(method, parameters, paramsTypeInfo, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SendAcknowledgedAsync<TParams>(
+        string method,
+        TParams parameters,
+        System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsTypeInfo,
+        CancellationToken cancellationToken)
+    {
         JsonRpcRequest request = JsonRpcCodec.CreateRequest(
             method,
             Interlocked.Increment(ref nextRequestId),
@@ -587,7 +653,9 @@ internal static class RecordingIpc
         JsonRpcErrorCodes.UnsupportedInputDevice or
         JsonRpcErrorCodes.InputDeviceAlreadyAttached or
         JsonRpcErrorCodes.InputDeviceNotAttached or
-        JsonRpcErrorCodes.InvalidInputDeviceSelection => ExitCodes.UsageError,
+        JsonRpcErrorCodes.InvalidInputDeviceSelection or
+        JsonRpcErrorCodes.TargetAlreadyAttached or
+        JsonRpcErrorCodes.TargetNotAttached => ExitCodes.UsageError,
         _ => ExitCodes.OperationalError,
     };
 }

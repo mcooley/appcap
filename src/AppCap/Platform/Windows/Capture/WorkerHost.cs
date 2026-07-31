@@ -1,15 +1,13 @@
+using System.Collections.Concurrent;
 using AppCap;
 using AppCap.Protocol.Target;
 using AppCap.Protocol.Worker;
-using System.Collections.Concurrent;
 
 namespace AppCap.Windows;
 
-// The machine-wide worker: a single per-user process, launched just-in-time by a client,
-// that multiplexes recording, screenshot, and input-device state for that user. It owns one
-// RecordingSession per recording target plus one WorkerTargetSession per target with attached
-// input devices, serves the worker protocol over its named pipe (RecordingIpc), and
-// self-terminates once it has been idle with no active recordings or attached devices.
+// The machine-wide worker: a single per-user process launched by the first target attach.
+// It multiplexes attached target sessions, recordings, screenshots, and input-device state,
+// serves the worker protocol over its named pipe, and stops after the last target detach.
 internal sealed class WorkerHost : IWorkerHost, IDisposable
 {
     public const string WorkerCommand = "--appcap-worker";
@@ -18,6 +16,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     private static readonly TimeSpan IdleCheckInterval = TimeSpan.FromSeconds(5);
 
     private readonly ConcurrentDictionary<string, RecordingSession> sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, RecordingStatusResult> recordingStatuses = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, WorkerTargetSession> targetSessions = new(StringComparer.Ordinal);
     private readonly ITargetResolver targetResolver;
     private readonly IWindowController windowController;
@@ -25,6 +24,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly CancellationTokenSource shutdown;
     private long lastActivityTicks = Environment.TickCount64;
+    private int shutdownAfterResponse;
     private bool disposed;
 
     private WorkerHost(CancellationToken cancellationToken)
@@ -80,11 +80,84 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         return true;
     }
 
+    public Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        cancellationToken.ThrowIfCancellationRequested();
+        MarkActivity();
+
+        WorkerTargetSession session = CreateTargetSession(target);
+        if (!targetSessions.TryAdd(target.TargetName, session))
+        {
+            session.Dispose();
+            throw new AppCapException($"Target '{target.TargetName}' is already attached.", ExitCodes.UsageError);
+        }
+
+        Volatile.Write(ref shutdownAfterResponse, 0);
+        recordingStatuses[target.TargetName] = new RecordingStatusResult();
+
+        return Task.CompletedTask;
+    }
+
+    public async Task<bool> DetachTargetAsync(string targetName, CancellationToken cancellationToken)
+    {
+        if (!targetSessions.TryRemove(targetName, out WorkerTargetSession? targetSession))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (sessions.TryGetValue(targetName, out RecordingSession? recording))
+            {
+                try
+                {
+                    await recording.StopAsync(discard: true, CancellationToken.None).ConfigureAwait(false);
+                }
+                finally
+                {
+                    sessions.TryRemove(new KeyValuePair<string, RecordingSession>(targetName, recording));
+                }
+            }
+        }
+        finally
+        {
+            recordingStatuses.TryRemove(targetName, out _);
+            targetSession.Dispose();
+            MarkActivity();
+        }
+
+        if (targetSessions.IsEmpty)
+        {
+            Volatile.Write(ref shutdownAfterResponse, 1);
+        }
+
+        return true;
+    }
+
+    public IReadOnlyList<TargetDescriptorRequest> ListTargets() =>
+        targetSessions
+            .Select(static entry => new TargetDescriptorRequest
+            {
+                TargetName = entry.Key,
+                ApplicationId = entry.Value.Application.Id,
+            })
+            .OrderBy(static target => target.TargetName, StringComparer.Ordinal)
+            .ToArray();
+
+    public void CompleteRequest()
+    {
+        if (Volatile.Read(ref shutdownAfterResponse) != 0 && targetSessions.IsEmpty)
+        {
+            shutdown.Cancel();
+        }
+    }
+
     public async Task StartRecordingAsync(RecordingStartRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
         MarkActivity();
-
+        _ = GetAttachedTargetSession(request.TargetName);
         if (request.TimeLimitSeconds <= 0)
         {
             throw new AppCapException("Recording time limit must be greater than zero.");
@@ -97,15 +170,28 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             throw new AppCapException($"A recording is already running for target '{request.TargetName}'.");
         }
 
+        recordingStatuses[request.TargetName] = new RecordingStatusResult
+        {
+            Recording = true,
+            Status = "recording",
+            OutputPath = request.OutputPath,
+        };
+
         try
         {
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, shutdown.Token);
             await session.StartAsync(linked.Token).ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             sessions.TryRemove(new KeyValuePair<string, RecordingSession>(request.TargetName, session));
             session.Dispose();
+            recordingStatuses[request.TargetName] = new RecordingStatusResult
+            {
+                Status = "failed",
+                OutputPath = request.OutputPath,
+                Error = exception.Message,
+            };
             MarkActivity();
             throw;
         }
@@ -117,6 +203,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     public async Task<bool> StopRecordingAsync(string targetName, bool discard, CancellationToken cancellationToken)
     {
         MarkActivity();
+        _ = GetAttachedTargetSession(targetName);
         if (!sessions.TryGetValue(targetName, out RecordingSession? session))
         {
             return false;
@@ -125,6 +212,11 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         try
         {
             await session.StopAsync(discard, cancellationToken).ConfigureAwait(false);
+            recordingStatuses[targetName] = new RecordingStatusResult
+            {
+                Status = discard ? "cancelled" : "stopped",
+                OutputPath = discard ? null : recordingStatuses.GetValueOrDefault(targetName)?.OutputPath,
+            };
         }
         finally
         {
@@ -138,10 +230,20 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         return true;
     }
 
-    public bool IsRecording(string targetName)
+    public RecordingStatusResult GetRecordingStatus(string targetName)
     {
         MarkActivity();
-        return sessions.ContainsKey(targetName);
+        _ = GetAttachedTargetSession(targetName);
+        RecordingStatusResult current = recordingStatuses.GetValueOrDefault(targetName) ?? new RecordingStatusResult();
+        if (current.Recording &&
+            sessions.TryGetValue(targetName, out RecordingSession? session) &&
+            session.CompletionReason != RecordingCompletionReason.Unknown)
+        {
+            current = CompletedRecordingStatus(session.CompletionReason, current.OutputPath);
+            recordingStatuses[targetName] = current;
+        }
+
+        return current;
     }
 
     public Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken)
@@ -149,6 +251,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(caption);
         cancellationToken.ThrowIfCancellationRequested();
         MarkActivity();
+        _ = GetAttachedTargetSession(targetName);
         if (!sessions.TryGetValue(targetName, out RecordingSession? session))
         {
             return Task.FromResult(false);
@@ -163,12 +266,17 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(request);
         MarkActivity();
 
-        if (!sessions.TryGetValue(request.TargetName, out RecordingSession? session))
+        CapturedFrame frame;
+        if (sessions.TryGetValue(request.TargetName, out RecordingSession? session))
         {
-            return false;
+            frame = await session.Target.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            WorkerTargetSession targetSession = GetAttachedTargetSession(request.TargetName);
+            frame = await targetSession.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
         }
 
-        CapturedFrame frame = await session.Target.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
         await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, request.Crop, cancellationToken).ConfigureAwait(false);
         MarkActivity();
         return true;
@@ -179,16 +287,9 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(target);
         MarkActivity();
 
-        WorkerTargetSession session = GetOrCreateTargetSession(target);
-        try
-        {
-            await session.AttachInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupTargetSessionIfIdle(target.TargetName, session);
-            MarkActivity();
-        }
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.AttachInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
     }
 
     public async Task RemoveInputDeviceAsync(TargetDescriptorRequest target, InputDeviceType deviceType, CancellationToken cancellationToken)
@@ -196,16 +297,9 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(target);
         MarkActivity();
 
-        WorkerTargetSession session = GetOrCreateTargetSession(target);
-        try
-        {
-            await session.RemoveInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupTargetSessionIfIdle(target.TargetName, session);
-            MarkActivity();
-        }
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.RemoveInputDeviceAsync(deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
     }
 
     public async Task<IReadOnlyList<InputDeviceStatus>> ListInputDevicesAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
@@ -213,16 +307,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(target);
         MarkActivity();
 
-        WorkerTargetSession session = GetOrCreateTargetSession(target);
-        try
-        {
-            return await session.ListInputDevicesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupTargetSessionIfIdle(target.TargetName, session);
-            MarkActivity();
-        }
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        IReadOnlyList<InputDeviceStatus> result = await session.ListInputDevicesAsync(cancellationToken).ConfigureAwait(false);
+        MarkActivity();
+        return result;
     }
 
     public async Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
@@ -230,16 +318,9 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(target);
         MarkActivity();
 
-        WorkerTargetSession session = GetOrCreateTargetSession(target);
-        try
-        {
-            await session.TapAsync(x, y, deviceType, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupTargetSessionIfIdle(target.TargetName, session);
-            MarkActivity();
-        }
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.TapAsync(x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
     }
 
     public async Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
@@ -247,16 +328,9 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(target);
         MarkActivity();
 
-        WorkerTargetSession session = GetOrCreateTargetSession(target);
-        try
-        {
-            await session.TypeAsync(textAndKeys, deviceType, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupTargetSessionIfIdle(target.TargetName, session);
-            MarkActivity();
-        }
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.TypeAsync(textAndKeys, deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
     }
 
     public void Dispose()
@@ -275,25 +349,43 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         shutdown.Dispose();
     }
 
-    // Watches each recording to completion (whether it was stopped or its window closed) so
-    // the session is removed and disposed once it finishes, keeping the multiplexing map in
-    // sync and letting the worker go idle when the last recording ends.
+    // Watches each recording to completion so the session is removed and its latest outcome
+    // remains available through record status.
     private async Task SuperviseAsync(string targetName, RecordingSession session)
     {
+        Exception? failure = null;
         try
         {
             await session.Completion.ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // A save failure is reported to the stopping client; here we only need to clean
-            // up the finished session.
+            failure = exception;
+        }
+
+        if (recordingStatuses.TryGetValue(targetName, out RecordingStatusResult? current) && current.Recording)
+        {
+            recordingStatuses[targetName] = failure is null
+                ? CompletedRecordingStatus(session.CompletionReason, current.OutputPath)
+                : new RecordingStatusResult { Status = "failed", OutputPath = current.OutputPath, Error = failure.Message };
         }
 
         sessions.TryRemove(new KeyValuePair<string, RecordingSession>(targetName, session));
         session.Dispose();
         MarkActivity();
     }
+
+    private static RecordingStatusResult CompletedRecordingStatus(RecordingCompletionReason reason, string? outputPath) => new()
+    {
+        Status = reason switch
+        {
+            RecordingCompletionReason.TimedOut => "timed-out",
+            RecordingCompletionReason.AppClosed => "app-closed",
+            RecordingCompletionReason.Cancelled => "cancelled",
+            _ => "stopped",
+        },
+        OutputPath = reason == RecordingCompletionReason.Cancelled ? null : outputPath,
+    };
 
     private async Task MonitorIdleAsync(CancellationToken cancellationToken)
     {
@@ -347,28 +439,18 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
 
     private void MarkActivity() => Volatile.Write(ref lastActivityTicks, Environment.TickCount64);
 
-    private WorkerTargetSession GetOrCreateTargetSession(TargetDescriptorRequest request) =>
-        targetSessions.GetOrAdd(
-            request.TargetName,
-            _ => new WorkerTargetSession(
-                new TargetApplication { Name = request.TargetName, Id = request.ApplicationId },
-                targetResolver,
-                windowController,
-                inputInjector,
-                keyboardInputInjector));
+    private WorkerTargetSession CreateTargetSession(TargetDescriptorRequest request) =>
+        new(
+            new TargetApplication { Name = request.TargetName, Id = request.ApplicationId },
+            targetResolver,
+            windowController,
+            inputInjector,
+            keyboardInputInjector);
 
-    private void CleanupTargetSessionIfIdle(string targetName, WorkerTargetSession session)
-    {
-        if (session.HasAttachedInputDevices)
-        {
-            return;
-        }
-
-        if (targetSessions.TryRemove(new KeyValuePair<string, WorkerTargetSession>(targetName, session)))
-        {
-            session.Dispose();
-        }
-    }
+    private WorkerTargetSession GetAttachedTargetSession(string targetName) =>
+        targetSessions.TryGetValue(targetName, out WorkerTargetSession? session)
+            ? session
+            : throw new AppCapException($"Target '{targetName}' is not attached.", ExitCodes.UsageError);
 
     private static async Task ObserveAsync(Task task)
     {

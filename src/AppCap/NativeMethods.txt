@@ -1,3 +1,4 @@
+PostMessage
 OpenProcess
 CloseHandle
 GetCurrentThreadId
@@ -7,6 +8,7 @@ GetPackageId
 PACKAGE_ID
 EnumWindows
 IsWindowVisible
+IsWindow
 GetWindowText
 GetWindowTextLength
 ShowWindow

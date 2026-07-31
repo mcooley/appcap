@@ -2,6 +2,8 @@ using AppCap.Protocol.Target;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
 using global::Windows.Graphics.DirectX.Direct3D11;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
 
 namespace AppCap.Windows;
 
@@ -21,6 +23,7 @@ internal sealed class RecordingSession : IDisposable
     private Task completion = Task.CompletedTask;
     private int stopRequested;
     private bool disposed;
+    private int completionReason;
 
     public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
     {
@@ -35,6 +38,8 @@ internal sealed class RecordingSession : IDisposable
     public ITarget Target => recordingTarget;
 
     public Task Completion => completion;
+
+    public RecordingCompletionReason CompletionReason => (RecordingCompletionReason)Volatile.Read(ref completionReason);
 
     public void AddCaption(string text) => writer.AddCaption(text);
 
@@ -58,10 +63,14 @@ internal sealed class RecordingSession : IDisposable
         _ = StopAtTimeLimitAsync();
     }
 
-    public async Task<bool> StopAsync(bool discard, CancellationToken cancellationToken)
+    public Task<bool> StopAsync(bool discard, CancellationToken cancellationToken) =>
+        StopAsync(discard, discard ? RecordingCompletionReason.Cancelled : RecordingCompletionReason.Stopped, cancellationToken);
+
+    public async Task<bool> StopAsync(bool discard, RecordingCompletionReason reason, CancellationToken cancellationToken)
     {
         if (Interlocked.CompareExchange(ref stopRequested, 1, 0) == 0)
         {
+            Volatile.Write(ref completionReason, (int)reason);
             CancelTimeLimit();
             if (discard)
             {
@@ -139,8 +148,13 @@ internal sealed class RecordingSession : IDisposable
             writer.AddFrame(new Direct3DRecordingFrame(frame));
         }
 
-        void OnClosed(GraphicsCaptureItem sender, object args) => writer.CompleteFrames();
+        void OnClosed(GraphicsCaptureItem sender, object args)
+        {
+            CompleteForAppClosure();
+        }
 
+        using CancellationTokenSource windowMonitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task windowMonitor = MonitorTargetWindowAsync(windowMonitorCancellation.Token);
         framePool.FrameArrived += OnFrameArrived;
         item.Closed += OnClosed;
         try
@@ -154,10 +168,34 @@ internal sealed class RecordingSession : IDisposable
         }
         finally
         {
+            await windowMonitorCancellation.CancelAsync().ConfigureAwait(false);
+            await windowMonitor.ConfigureAwait(false);
             framePool.FrameArrived -= OnFrameArrived;
             item.Closed -= OnClosed;
             writer.CompleteFrames();
         }
+    }
+
+    private async Task MonitorTargetWindowAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (PInvoke.IsWindow(new HWND(window.Handle)))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            }
+
+            CompleteForAppClosure();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void CompleteForAppClosure()
+    {
+        Interlocked.CompareExchange(ref completionReason, (int)RecordingCompletionReason.AppClosed, (int)RecordingCompletionReason.Unknown);
+        writer.CompleteFrames();
     }
 
     private async Task CompleteAsync()
@@ -177,6 +215,7 @@ internal sealed class RecordingSession : IDisposable
 
         if (Interlocked.CompareExchange(ref stopRequested, 1, 0) == 0)
         {
+            Interlocked.CompareExchange(ref completionReason, (int)RecordingCompletionReason.AppClosed, (int)RecordingCompletionReason.Unknown);
             try
             {
                 await writer.StopAsync(discard: false, CancellationToken.None).ConfigureAwait(false);
@@ -199,7 +238,7 @@ internal sealed class RecordingSession : IDisposable
         try
         {
             await Task.Delay(timeLimit, timeLimitCancellation.Token).ConfigureAwait(false);
-            await StopAsync(discard: false, CancellationToken.None).ConfigureAwait(false);
+            await StopAsync(discard: false, RecordingCompletionReason.TimedOut, CancellationToken.None).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (timeLimitCancellation.IsCancellationRequested)
         {
@@ -216,4 +255,13 @@ internal sealed class RecordingSession : IDisposable
         {
         }
     }
+}
+
+internal enum RecordingCompletionReason
+{
+    Unknown,
+    Stopped,
+    Cancelled,
+    TimedOut,
+    AppClosed,
 }

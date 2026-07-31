@@ -1,15 +1,11 @@
 using AppCap;
-using AppCap.Protocol;
 using AppCap.Protocol.Worker;
 
 namespace AppCap.Windows;
 
-// Client-side IScreenshotCapture that asks a worker to capture and save a screenshot over
-// the worker protocol. If a recording is running for the target it asks the recording
-// worker (over the named pipe) so no second capture session is started; otherwise it hosts
-// a worker in-process over an in-proc transport. Either way the *worker* owns capturing the
-// frame, rendering the caption, and writing the file — the client only supplies the
-// destination path and options and waits for the acknowledgement.
+// Client-side IScreenshotCapture that asks the attached machine worker to capture and save
+// a screenshot. The worker reuses a recording frame when available and otherwise captures
+// through the attached target session.
 public sealed class WorkerScreenshotClient : IScreenshotCapture
 {
     public async Task CapturePngAsync(TargetWindow window, string outputPath, bool includeCursor, string? caption, CropRectangle? crop, CancellationToken cancellationToken)
@@ -29,82 +25,9 @@ public sealed class WorkerScreenshotClient : IScreenshotCapture
             Crop = crop,
         };
 
-        string targetName = window.Application.Name;
-        if (await RecordingIpc.IsRecordingAsync(targetName, cancellationToken).ConfigureAwait(false))
+        if (!await RecordingIpc.CaptureScreenshotAsync(window.Application.Name, request, cancellationToken).ConfigureAwait(false))
         {
-            if (await RecordingIpc.CaptureScreenshotAsync(targetName, request, cancellationToken).ConfigureAwait(false))
-            {
-                return;
-            }
-
-            // The recording ended between the status probe and the request; fall back to
-            // capturing in-process.
-        }
-
-        await CaptureInProcessAsync(window, request, cancellationToken).ConfigureAwait(false);
-    }
-
-    // Hosts a worker in-process over an in-proc transport and issues a single screenshot
-    // request against it, so the non-recording path uses the very same protocol and codec
-    // as the recording path — only the transport differs. The in-proc worker captures from
-    // a window target directly and saves the file.
-    private static async Task CaptureInProcessAsync(TargetWindow window, ScreenshotRequest request, CancellationToken cancellationToken)
-    {
-        (Stream client, Stream server) = InProcDuplexTransport.CreatePair();
-        using CancellationTokenSource hostCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        InProcScreenshotHost worker = new(new WindowCaptureTarget(window));
-        Task serve = WorkerServer.ServeAsync(server, worker, hostCancellation.Token);
-        try
-        {
-            JsonRpcRequest screenshotRequest = JsonRpcCodec.CreateRequest(
-                WorkerMethods.Screenshot,
-                1,
-                request,
-                WorkerProtocolJsonContext.Default.ScreenshotRequest);
-            await JsonRpcCodec.WriteRequestAsync(client, screenshotRequest, cancellationToken).ConfigureAwait(false);
-            JsonRpcResponse? response = await JsonRpcCodec.ReadResponseAsync(client, cancellationToken).ConfigureAwait(false);
-            EnsureAcknowledged(response);
-        }
-        finally
-        {
-            client.Dispose();
-            await hostCancellation.CancelAsync().ConfigureAwait(false);
-            await DrainServeAsync(serve).ConfigureAwait(false);
-        }
-    }
-
-    private static void EnsureAcknowledged(JsonRpcResponse? response)
-    {
-        if (response is null)
-        {
-            throw new AppCapException("The worker did not acknowledge the screenshot.");
-        }
-
-        if (response.Error is { } error)
-        {
-            throw new AppCapException(error.Message);
-        }
-
-        if (response.Result is not { } result)
-        {
-            throw new AppCapException("The worker returned an empty screenshot response.");
-        }
-
-        ScreenshotResult? acknowledgement = JsonRpcCodec.ReadResult(result, WorkerProtocolJsonContext.Default.ScreenshotResult);
-        if (acknowledgement is not { Acknowledged: true })
-        {
-            throw new AppCapException("The worker did not acknowledge the screenshot.");
-        }
-    }
-
-    private static async Task DrainServeAsync(Task serve)
-    {
-        try
-        {
-            await serve.ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
+            throw new AppCapException($"Target '{window.Application.Name}' is not attached.", ExitCodes.UsageError);
         }
     }
 }

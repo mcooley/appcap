@@ -14,18 +14,14 @@ public sealed class InputDeviceCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
-    public void RemovePreventsTapUntilTouchIsReattached()
+    public void TapReattachesRemovedTouchDevice()
     {
         AttachInputDevices("touch");
         Context.Run("inputdevice", "remove", "touch").AssertSuccess();
 
-        CommandResult unavailable = Context.Run("tap", "-x", "150", "-y", "130");
-        Assert.NotEqual(0, unavailable.ExitCode);
-        Assert.Contains("No 'touch' input device is attached", unavailable.StandardError, StringComparison.Ordinal);
-
-        Context.Run("inputdevice", "attach", "touch").AssertSuccess();
         Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         Context.Run("tap", "--device", "touch", "-x", "150", "-y", "130").AssertSuccess();
+        Assert.Contains("touch: attached", Context.Run("inputdevice", "list").StandardOutput, StringComparison.Ordinal);
     }
 
     [E2EFact]

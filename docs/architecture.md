@@ -7,16 +7,16 @@ an Android phone from a Windows machine).
 
 ## Three components
 
-The system is divided into three components. All three ship in the **same executable**
-and can run in the **same process**, but they communicate over protocols that can be
-**remoted**, so any component can be moved to another process or another machine without
-changing the others.
+The system is divided into three components. All three ship in the **same executable**.
+The client and worker always run in separate processes; the worker and a local target can
+share a process. Protocol boundaries allow a target to move to another process or machine
+without changing the client.
 
 ```
   ┌────────┐   client<->worker    ┌────────┐   worker<->target   ┌────────┐
   │ Client │ ───────────────────▶ │ Worker │ ──────────────────▶ │ Target │
-  │CLI/MCP │   named pipe /       │        │   in-proc /         │ (OS    │
-  └────────┘   in-proc duplex     └────────┘   remote transport  │  capture)
+  │CLI/MCP │   named pipe         │        │   in-proc /         │ (OS    │
+  └────────┘                      └────────┘   remote transport  │  capture)
                                                                   └────────┘
 ```
 
@@ -32,11 +32,11 @@ does not own capture, input, recording, or file-writing behavior. Like the CLI, 
 connect to the long-lived worker process shared by other client instances. The MCP
 process itself lives only as long as its stdio client connection.
 
-Both frontends are deliberately thin: they parse their respective interfaces, resolve
-the target, send one or more high-level requests to a worker, return the result, and
-exit. A client does **not** perform media encoding, image rendering, or OS capture
-itself; that belongs to the worker and target. The MCP screenshot tool may read the PNG
-produced by the worker to return the protocol's image content result.
+Both frontends are deliberately thin: they parse their respective interfaces, resolve an
+attached target, send high-level requests to the worker, return the result, and exit. A
+client does **not** perform media encoding, image rendering, or OS capture itself; that
+belongs to the worker and target. The MCP screenshot tool may read the PNG produced by
+the worker to return the protocol's image content result.
 
 Many client instances can run at once (each CLI or MCP invocation is a client).
 
@@ -48,21 +48,19 @@ targets to obtain frames and to inject input.
 
 Lifecycle:
 
-- The worker is **launched just-in-time** by a client when one is needed. It is **not**
-  a persistent daemon.
+- The first `target attach` launches the worker. It is **not** a persistent daemon.
 - There is **one worker per machine (per user)**, and that single worker **multiplexes
   multiple targets/recordings concurrently**. A client that needs a worker first pings
   the well-known per-user pipe; if no worker answers it takes a launch lock, starts one
   worker process, and waits for it to become reachable. Subsequent clients reuse the same
-  worker. Each recording runs as an independent `RecordingSession` keyed by target name.
-- The worker **self-terminates when idle**. When it has no active recordings or attached
-  target input devices for an idle interval it exits, so a worker never runs indefinitely
-  even if clients go away without stopping their recordings.
-
-When no long-running background work is required (for example, taking a single
-screenshot while nothing is recording), the client **hosts the worker in its own
-process** and talks to it over an in-proc transport instead of launching a separate
-process. The code path is otherwise identical.
+  worker. Each attached target owns its input-device state, active recording, and latest
+  recording outcome.
+- Attachment owns worker lifetime. Recording and input commands never launch or keep the
+  worker alive. Detaching a target cancels its recording and removes its devices; the
+  worker exits immediately after acknowledging the last detach.
+- Attached and running are independent states. Closing an app ends an active recording
+  but leaves its target attached. Operational commands do not relaunch it; a later
+  explicit detach ends the session.
 
 ### Target
 
@@ -81,19 +79,16 @@ protocols.
 
 ### Client ↔ Worker
 
-- **Transport:** a Windows **named pipe** when the worker is a separate process, or an
-  **in-proc duplex stream** when the client hosts the worker in-process. The same
-  request/response code runs over either transport.
+- **Transport:** a Windows **named pipe** to the separate machine worker process.
 - **Design philosophy:** **internal and optimized for development simplicity.** It is
   **not documented for third parties** and carries **no backwards- or forwards-
   compatibility guarantees** — the client and worker are always built and shipped
   together, so the protocol can change freely.
-- **Payloads:** high-level operations — `recording.status`, `recording.stop`,
-  `recording.cancel`, and `screenshot` (capture a frame, render an optional caption, and
-  save the file). The worker does the work and returns a small acknowledgement.
+- **Payloads:** target attachment and high-level operations such as `recording.status`,
+  `recording.stop`, `recording.cancel`, and `screenshot`. The worker does the work and
+  returns status or a small acknowledgement.
 - **Code:** `WorkerProtocol` / `WorkerMethods` under `src/AppCap/Protocol`, driven by the
-  client through `RecordingIpc` and served by the worker (`WorkerHost` over its pipe, or
-  the in-proc `InProcScreenshotHost`).
+  client through `RecordingIpc` and served by `WorkerHost` over its pipe.
 
 ### Worker ↔ Target
 
@@ -109,16 +104,10 @@ protocols.
 - **Code:** `TargetProtocol` / `TargetMethods` and the reference server `TargetServer`
   under `src/AppCap/Protocol`; `WindowsTargetHost` implements the local target.
 
-## In-proc reuse and the frame-handoff optimization
+## Worker-target in-proc reuse and frame handoff
 
-A core goal is to **minimize divergence between the in-proc and remote code paths** by
-reusing the remoting code in-proc:
-
-- The **client↔worker** boundary always uses the protocol and a transport. In-proc it
-  runs over an in-memory duplex stream that reuses the exact JSON-RPC codec and framing
-  used over the named pipe (`InProcDuplexTransport`). The client is equally thin whether
-  the worker is local-in-proc or a separate process.
-- The **worker↔target** boundary always uses the documented target protocol. In-proc it
+A core goal is to minimize divergence between local and remote target paths. The
+**worker↔target** boundary always uses the documented target protocol. In-proc it
   runs over an in-memory duplex stream; a remote target would replace that transport
   while preserving the same messages. The video capture path remains optimized by passing
   GPU surfaces in-process.
@@ -140,37 +129,26 @@ caption and writes the output file.
 
 ## Putting it together: request flows
 
-### `appcap screenshot` with no recording running
+### `appcap screenshot`
 
-1. **Client** resolves the target and hosts a **worker in-proc** (over an in-proc duplex
-   stream), backed by an in-proc **`WindowCaptureTarget`**.
-2. Client sends a `screenshot` request (output path, cursor, caption) over the
-   **client↔worker** protocol.
-3. **Worker** asks its **target** for a frame, renders the caption, and writes the PNG.
-4. Worker returns an acknowledgement; the client exits.
-
-### `appcap screenshot` while a recording is running
-
-1. **Client** detects a recording worker for the target and connects to it over the
-   named pipe.
-2. Client sends the same `screenshot` request over the **client↔worker** protocol.
-3. The recording **worker** serves the screenshot from its **existing capture session**
-   (its live in-proc target) — no second capture session is started — then renders and
-   saves the file.
+1. **Client** selects an attached target and sends a `screenshot` request over the named
+  pipe.
+2. If recording is active, the **worker** serves the screenshot from its existing capture
+  session. Otherwise it captures a frame through the attached target session.
+3. The worker renders the caption, writes the PNG, and acknowledges the request.
 
 ### `appcap record start` / `stop`
 
-1. **Client** ensures the machine-wide **worker** is running (ping the per-user pipe;
-   launch one under a lock if none answers), then sends `recording.start` for its target
-   and exits once the worker confirms the recording is live.
+1. **Client** selects an attached target, sends `recording.start`, and exits once the
+  already-running worker confirms the recording is live.
 2. The **worker** creates a `RecordingSession` for that target, running an in-proc
    **`RecordingCaptureTarget`** whose surfaces feed directly into the media encoder (the
    optimized in-proc frame handoff). One worker can host many such sessions at once; it
    serves `recording.status` / `recording.stop` / `recording.cancel` / `screenshot`
    (each keyed by target name) over its pipe.
-3. A later **client** (`record stop`) connects over the pipe and asks the worker to
-   finalize (or discard) that target's recording. When the worker has no active recordings
-   or attached input devices for its idle interval it self-terminates.
+3. A later **client** can stop, cancel, or query status. Timeout and app closure finalize
+  the recording without detaching the target; the latest outcome remains queryable until
+  another recording starts or the target is detached.
 
 ## Not yet built (TODO)
 

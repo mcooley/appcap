@@ -88,7 +88,7 @@ The repository includes a packaged NativeAOT Win32 test app in `tests/AppCap.Tes
 
 ## Target Configuration
 
-Targets are represented by `TargetApplication`, which pairs a target name with an application `id`. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. When `--target` is omitted, the first configured target is used.
+Targets are represented by `TargetApplication`, which pairs a target name with an application `id`. At startup, `ConfigLoader` reads `appcap.config.json` from next to the executable and builds a `TargetCatalog`. Commands operate on attached targets; when `--target` is omitted, exactly one target must be attached.
 
 In the future, we may generalize this further to support unpackaged applications and other platforms.
 

@@ -15,7 +15,7 @@ public static class McpServerApplication
         HostApplicationBuilder builder = Host.CreateApplicationBuilder([]);
         builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
         builder.Services.AddSingleton(catalog);
-        builder.Services.AddSingleton<ICommandRunner>(_ => CommandServices.CreateRunner());
+        builder.Services.AddSingleton<ICommandRunner>(_ => CommandServices.CreateRunner(catalog));
         builder.Services.AddSingleton<McpCommandExecutor>();
         builder.Services
             .AddMcpServer()

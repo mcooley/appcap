@@ -3,8 +3,8 @@ using AppCap.Protocol.Worker;
 namespace AppCap.Windows;
 
 // Client-side recording orchestration. Recording work is owned by the machine-wide worker
-// process (one per user, multiplexing every target); this controller ensures that worker is
-// running — launching it just-in-time if not — and then drives it over the worker protocol.
+// process (one per user, multiplexing every attached target). Target attachment owns worker
+// startup; this controller only drives an existing worker over the worker protocol.
 // It resolves the target window on the client side (a window handle is valid across
 // processes on the same desktop) and passes the descriptor to the worker.
 public sealed class RecordingController : IRecordingController
@@ -26,8 +26,6 @@ public sealed class RecordingController : IRecordingController
         {
             Directory.CreateDirectory(outputDirectory);
         }
-
-        await WorkerProcessController.EnsureWorkerRunningAsync(cancellationToken).ConfigureAwait(false);
 
         RecordingStartRequest request = new()
         {
@@ -78,6 +76,13 @@ public sealed class RecordingController : IRecordingController
         {
             throw new AppCapException($"No recording is running for target '{TargetFormatter.Format(target)}'.");
         }
+    }
+
+    public async Task<RecordingStatus> GetStatusAsync(TargetApplication target, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        RecordingStatusResult status = await RecordingIpc.GetRecordingStatusAsync(target.Name, cancellationToken).ConfigureAwait(false);
+        return new RecordingStatus(status.Status, status.OutputPath, status.Error);
     }
 
 }

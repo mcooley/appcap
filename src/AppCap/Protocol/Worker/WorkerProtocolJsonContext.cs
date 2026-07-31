@@ -15,6 +15,8 @@ namespace AppCap.Protocol.Worker;
 [JsonSerializable(typeof(TargetRequest))]
 [JsonSerializable(typeof(CaptionRequest))]
 [JsonSerializable(typeof(TargetDescriptorRequest))]
+[JsonSerializable(typeof(AttachedTargetDto))]
+[JsonSerializable(typeof(AttachedTargetListResult))]
 [JsonSerializable(typeof(InputDeviceRequest))]
 [JsonSerializable(typeof(PointerInputRequest))]
 [JsonSerializable(typeof(KeyboardInputRequest))]

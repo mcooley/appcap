@@ -28,7 +28,7 @@ internal sealed class WorkerTargetSession : IDisposable
         this.keyboardInputInjector = keyboardInputInjector;
     }
 
-    public bool HasAttachedInputDevices => attachments?.HasAttachedDevices ?? false;
+    public TargetApplication Application => application;
 
     public Task AttachInputDeviceAsync(InputDeviceType deviceType, CancellationToken cancellationToken) =>
         ExecuteAsync((client, token) => client.AttachInputDeviceAsync(deviceType, token), cancellationToken);
@@ -40,10 +40,25 @@ internal sealed class WorkerTargetSession : IDisposable
         ExecuteAsync((client, token) => client.ListInputDevicesAsync(token), cancellationToken);
 
     public Task TapAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync((client, token) => client.TapAsync(x, y, deviceType, token), cancellationToken);
+        ExecuteAsync(
+            async (client, token) =>
+            {
+                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Touch, token).ConfigureAwait(false);
+                await client.TapAsync(x, y, deviceType, token).ConfigureAwait(false);
+            },
+            cancellationToken);
 
     public Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync((client, token) => client.TypeAsync(textAndKeys, deviceType, token), cancellationToken);
+        ExecuteAsync(
+            async (client, token) =>
+            {
+                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Keyboard, token).ConfigureAwait(false);
+                await client.TypeAsync(textAndKeys, deviceType, token).ConfigureAwait(false);
+            },
+            cancellationToken);
+
+    public Task<CapturedFrame> CaptureFrameAsync(bool includeCursor, CancellationToken cancellationToken) =>
+        ExecuteAsync((client, token) => client.CaptureFrameAsync(includeCursor, token), cancellationToken);
 
     public void Dispose()
     {
@@ -73,7 +88,7 @@ internal sealed class WorkerTargetSession : IDisposable
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            TargetWindow window = await targetResolver.ResolveAsync(application, cancellationToken).ConfigureAwait(false);
+            TargetWindow window = await targetResolver.ResolveRunningAsync(application, cancellationToken).ConfigureAwait(false);
             await using InProcTargetProtocolSession session = await CreateProtocolSessionAsync(window, cancellationToken).ConfigureAwait(false);
             return await operation(session.Client, cancellationToken).ConfigureAwait(false);
         }
@@ -98,6 +113,21 @@ internal sealed class WorkerTargetSession : IDisposable
         {
             await session.DisposeAsync().ConfigureAwait(false);
             throw;
+        }
+    }
+
+    private static async Task EnsureInputDeviceAttachedAsync(TargetClient client, InputDeviceType requiredDevice, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<InputDeviceStatus> devices = await client.ListInputDevicesAsync(cancellationToken).ConfigureAwait(false);
+        InputDeviceStatus? device = devices.FirstOrDefault(candidate => candidate.DeviceType == requiredDevice);
+        if (device is null)
+        {
+            throw new AppCapException($"Input device '{requiredDevice}' is not supported by the target.");
+        }
+
+        if (!device.Attached)
+        {
+            await client.AttachInputDeviceAsync(requiredDevice, cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -154,6 +154,18 @@ public sealed class CommandRunnerTests
         Assert.Equal(Target, services.RecordingController.CancelTarget);
     }
 
+    [Fact]
+    public async Task RecordStatusFormatsLatestOutcome()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+        services.RecordingController.Status = new RecordingStatus("timed-out", @"C:\captures\test.mp4");
+
+        CommandExecutionResult result = await runner.RunAsync(new RecordStatusCommand(Target), CancellationToken.None);
+
+        Assert.Equal($"status: timed-out{Environment.NewLine}output: C:\\captures\\test.mp4", result.Output);
+    }
+
     private sealed class TestServices
     {
         public TargetWindow Window { get; } = new(Target, 123);
@@ -202,6 +214,9 @@ public sealed class CommandRunnerTests
             RequestedTarget = target;
             return Task.FromResult(window);
         }
+
+        public Task<TargetWindow> ResolveRunningAsync(TargetApplication target, CancellationToken cancellationToken) =>
+            ResolveAsync(target, cancellationToken);
     }
 
     private sealed class TestWindowController : IWindowController
@@ -301,6 +316,8 @@ public sealed class CommandRunnerTests
 
     private sealed class TestRecordingController : IRecordingController
     {
+        public RecordingStatus Status { get; set; } = new("never-started");
+
         public TargetWindow? StartWindow { get; private set; }
 
         public string? OutputPath { get; private set; }
@@ -347,6 +364,9 @@ public sealed class CommandRunnerTests
             Caption = caption;
             return Task.CompletedTask;
         }
+
+        public Task<RecordingStatus> GetStatusAsync(TargetApplication target, CancellationToken cancellationToken) =>
+            Task.FromResult(Status);
     }
 
 }

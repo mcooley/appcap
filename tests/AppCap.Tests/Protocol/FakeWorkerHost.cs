@@ -1,7 +1,7 @@
+using System.Collections.Concurrent;
 using AppCap;
 using AppCap.Protocol;
 using AppCap.Protocol.Worker;
-using System.Collections.Concurrent;
 
 namespace AppCap.Tests;
 
@@ -11,6 +11,7 @@ internal sealed class FakeWorkerHost : IWorkerHost
 
     private readonly ConcurrentDictionary<string, byte> recordings = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, InputDeviceAttachmentRegistry> inputDevices = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, TargetDescriptorRequest> attachedTargets = new(StringComparer.Ordinal);
 
     public FakeWorkerHost(IEnumerable<string>? recording = null)
     {
@@ -53,6 +54,26 @@ internal sealed class FakeWorkerHost : IWorkerHost
 
     public bool Ping() => true;
 
+    public Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    {
+        if (!attachedTargets.TryAdd(target.TargetName, target))
+        {
+            throw new AppCapException($"Target '{target.TargetName}' is already attached.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> DetachTargetAsync(string targetName, CancellationToken cancellationToken) =>
+        Task.FromResult(attachedTargets.TryRemove(targetName, out _));
+
+    public IReadOnlyList<TargetDescriptorRequest> ListTargets() =>
+        attachedTargets.Values.OrderBy(static target => target.TargetName, StringComparer.Ordinal).ToArray();
+
+    public void CompleteRequest()
+    {
+    }
+
     public Task StartRecordingAsync(RecordingStartRequest request, CancellationToken cancellationToken)
     {
         LastStart = request;
@@ -90,7 +111,12 @@ internal sealed class FakeWorkerHost : IWorkerHost
         return recordings.TryRemove(targetName, out _);
     }
 
-    public bool IsRecording(string targetName) => recordings.ContainsKey(targetName);
+    public RecordingStatusResult GetRecordingStatus(string targetName) =>
+        new()
+        {
+            Recording = recordings.ContainsKey(targetName),
+            Status = recordings.ContainsKey(targetName) ? "recording" : "never-started",
+        };
 
     public Task<bool> AddCaptionAsync(string targetName, string caption, CancellationToken cancellationToken)
     {

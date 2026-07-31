@@ -17,23 +17,40 @@ internal sealed class McpTools
         this.executor = executor;
     }
 
+    [McpServerTool(Name = "target_attach", OpenWorld = false), Description("Attaches a configured target and starts the worker.")]
+    public Task<string> TargetAttachAsync(
+        [Description("Configured target name. Auto-selects a running target when omitted.")] string? target = null,
+        [Description("Launches the target application when true.")] bool launch = true,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(new TargetAttachCommand(ResolveTarget(target), launch), cancellationToken);
+
+    [McpServerTool(Name = "target_detach", OpenWorld = false), Description("Detaches a target, cancelling its recording and removing its input devices.")]
+    public Task<string> TargetDetachAsync(
+        [Description("Configured target name. Uses the only attached target when omitted.")] string? target = null,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(new TargetDetachCommand(ResolveTarget(target)), cancellationToken);
+
+    [McpServerTool(Name = "target_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists all configured targets and their attachment and running state.")]
+    public Task<string> TargetListAsync(CancellationToken cancellationToken = default) =>
+        RunAsync(new TargetListCommand(), cancellationToken);
+
     [McpServerTool(Name = "inputdevice_attach", OpenWorld = false), Description("Attaches an input device to a configured target application.")]
     public Task<string> InputDeviceAttachAsync(
         [Description("Input device identifier, such as touch or keyboard. Use inputdevice_list to find available devices.")] string device,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new InputDeviceAttachCommand(ResolveTarget(target), ParseDevice(device)), cancellationToken);
 
     [McpServerTool(Name = "inputdevice_remove", OpenWorld = false), Description("Removes an attached input device from a configured target application.")]
     public Task<string> InputDeviceRemoveAsync(
-        [Description("Input device identifier, such as touch or keyboard. Use inputdevice_attach first.")] string device,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Input device identifier, such as touch or keyboard.")] string device,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new InputDeviceRemoveCommand(ResolveTarget(target), ParseDevice(device)), cancellationToken);
 
     [McpServerTool(Name = "inputdevice_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists supported input devices and their attachment state for a configured target application.")]
     public Task<string> InputDeviceListAsync(
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new InputDeviceListCommand(ResolveTarget(target)), cancellationToken);
 
@@ -41,8 +58,8 @@ internal sealed class McpTools
     public Task<string> TapAsync(
         [Description("Horizontal coordinate in pixels.")] int x,
         [Description("Vertical coordinate in pixels.")] int y,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
-        [Description("Optional input device identifier. Uses touch when omitted. Use inputdevice_attach first.")] string? device = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        [Description("Optional input device identifier. Attaches and uses touch when omitted.")] string? device = null,
         CancellationToken cancellationToken = default)
     {
         if (x < 0 || y < 0)
@@ -56,8 +73,8 @@ internal sealed class McpTools
     [McpServerTool(Name = "type", OpenWorld = false), Description("Types text into the target window.")]
     public Task<string> TypeAsync(
         [Description("Literal text and WebDriver/Playwright-style bracketed keys, for example hello[Enter] or [Control+A].")] string textAndKeys,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
-        [Description("Optional input device identifier. Uses keyboard when omitted. Use inputdevice_attach first.")] string? device = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        [Description("Optional input device identifier. Attaches and uses keyboard when omitted.")] string? device = null,
         CancellationToken cancellationToken = default)
     {
         if (!KeyboardSequenceParser.TryParse(textAndKeys, out IReadOnlyList<KeyboardAction> actions, out string? errorMessage))
@@ -72,7 +89,7 @@ internal sealed class McpTools
     public Task<string> ResizeAsync(
         [Description("Window width in pixels.")] int width,
         [Description("Window height in pixels.")] int height,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default)
     {
         if (width <= 0 || height <= 0)
@@ -85,7 +102,7 @@ internal sealed class McpTools
 
     [McpServerTool(Name = "screenshot", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Takes a PNG screenshot of the target window. Returns MCP image content unless outputPath is specified.")]
     public async Task<ContentBlock> ScreenshotAsync(
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         [Description("When set, writes the PNG to this path and returns the path instead of image content.")] string? outputPath = null,
         [Description("Excludes the cursor from the screenshot when true.")] bool excludeCursor = false,
         [Description("Optional caption text rendered over the screenshot.")] string? caption = null,
@@ -123,7 +140,7 @@ internal sealed class McpTools
     [McpServerTool(Name = "record_start", OpenWorld = false), Description("Starts recording the target window to an MP4 file.")]
     public Task<string> RecordStartAsync(
         [Description("Output MP4 file path.")] string outputPath,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         [Description("Recording time limit in minutes. Fractional minutes are supported.")] double timeLimitMinutes = 30,
         [Description("Excludes the cursor from the recording when true.")] bool excludeCursor = false,
         [Description("Optional crop rectangle in target-window pixels.")] CropRectangle? crop = null,
@@ -147,7 +164,7 @@ internal sealed class McpTools
     [McpServerTool(Name = "record_caption", OpenWorld = false), Description("Shows a caption in the active recording for three seconds.")]
     public Task<string> RecordCaptionAsync(
         [Description("Caption text to show.")] string text,
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -160,15 +177,21 @@ internal sealed class McpTools
 
     [McpServerTool(Name = "record_stop", OpenWorld = false), Description("Stops and saves the active recording for a target application.")]
     public Task<string> RecordStopAsync(
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new RecordStopCommand(ResolveTarget(target)), cancellationToken);
 
     [McpServerTool(Name = "record_cancel", Destructive = true, OpenWorld = false), Description("Stops the active recording and discards its output file.")]
     public Task<string> RecordCancelAsync(
-        [Description("Configured target name. Uses the default target when omitted.")] string? target = null,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new RecordCancelCommand(ResolveTarget(target)), cancellationToken);
+
+    [McpServerTool(Name = "record_status", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Reports the current or most recent recording state for an attached target.")]
+    public Task<string> RecordStatusAsync(
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(new RecordStatusCommand(ResolveTarget(target)), cancellationToken);
 
     private async Task<string> RunAsync(AppCapCommand command, CancellationToken cancellationToken)
     {
@@ -182,11 +205,11 @@ internal sealed class McpTools
         }
     }
 
-    private TargetApplication ResolveTarget(string? name)
+    private TargetApplication? ResolveTarget(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            return catalog.Default;
+            return null;
         }
 
         if (catalog.TryParse(name, out TargetApplication target))

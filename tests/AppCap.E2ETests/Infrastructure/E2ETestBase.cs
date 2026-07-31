@@ -7,6 +7,7 @@ public abstract class E2ETestBase : IDisposable
         E2EHelpers.CloseAppCapProcesses();
         E2EHelpers.CloseTestAppProcesses();
         Context = E2EContext.Current;
+        Context.RunUnscoped("target", "attach", Context.Target).AssertSuccess();
     }
 
     protected E2EContext Context { get; }

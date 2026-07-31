@@ -185,7 +185,7 @@ internal sealed class InputDeviceAttachmentRegistry
             {
                 throw new ProtocolErrorException(
                     JsonRpcErrorCodes.InputDeviceNotAttached,
-                    $"No '{requiredDeviceType}' input device is attached for target '{targetName}'. Run 'appcap --target {targetName} inputdevice attach {requiredDeviceType}' first.");
+                    $"No '{requiredDeviceType}' input device is attached for target '{targetName}'.");
             }
 
             return requiredDeviceType;
@@ -207,5 +207,5 @@ internal sealed class InputDeviceAttachmentRegistry
     private ProtocolErrorException CreateNotAttachedError(InputDeviceType deviceType) =>
         new(
             JsonRpcErrorCodes.InputDeviceNotAttached,
-            $"Input device '{deviceType}' is not attached for target '{targetName}'. Run 'appcap --target {targetName} inputdevice attach {deviceType}' first.");
+            $"Input device '{deviceType}' is not attached for target '{targetName}'.");
 }

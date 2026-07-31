@@ -1,8 +1,8 @@
-using AppCap.Protocol.Worker;
-using AppCap.Windows;
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using AppCap.Protocol.Worker;
+using AppCap.Windows;
 
 namespace AppCap.Tests;
 
@@ -67,6 +67,50 @@ public sealed class RecordingIpcTests : IDisposable
     }
 
     [Fact]
+    public async Task TargetAttachmentRoundTripsThroughWorker()
+    {
+        TargetDescriptorRequest target = new() { TargetName = "notepad", ApplicationId = "Microsoft.Notepad_8wekyb3d8bbwe!App" };
+        FakeWorkerHost host = new();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(host, cts.Token);
+        try
+        {
+            await RecordingIpc.AttachTargetAsync(target, cts.Token);
+
+            TargetDescriptorRequest attached = Assert.Single(await RecordingIpc.ListTargetsAsync(cts.Token));
+            Assert.Equal(target.TargetName, attached.TargetName);
+            Assert.Equal(target.ApplicationId, attached.ApplicationId);
+
+            await RecordingIpc.DetachTargetAsync(target.TargetName, cts.Token);
+            Assert.Empty(await RecordingIpc.ListTargetsAsync(cts.Token));
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateTargetAttachmentIsAUsageError()
+    {
+        TargetDescriptorRequest target = new() { TargetName = "notepad", ApplicationId = "Microsoft.Notepad_8wekyb3d8bbwe!App" };
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(new FakeWorkerHost(), cts.Token);
+        try
+        {
+            await RecordingIpc.AttachTargetAsync(target, cts.Token);
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() => RecordingIpc.AttachTargetAsync(target, cts.Token));
+
+            Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+            Assert.Contains("already attached", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
     public async Task ClientReachesWorkerForTarget()
     {
         string target = Guid.NewGuid().ToString();
@@ -79,7 +123,7 @@ public sealed class RecordingIpcTests : IDisposable
             Assert.True(await RecordingIpc.IsRecordingAsync(target, cts.Token));
 
             Assert.True(await RecordingIpc.SendStopAsync(target, cts.Token));
-            Assert.False(host.IsRecording(target));
+            Assert.False(host.GetRecordingStatus(target).Recording);
         }
         finally
         {

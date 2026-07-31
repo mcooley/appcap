@@ -3,14 +3,17 @@ namespace AppCap.Windows;
 
 public static class CommandServices
 {
-    public static ICommandRunner CreateRunner()
+    public static ICommandRunner CreateRunner(TargetCatalog catalog)
     {
+        WindowFinder windowFinder = new();
+        TargetResolver targetResolver = new(windowFinder, new TargetLauncher());
         WindowController windowController = new();
         return new CommandRunner(
-            new TargetResolver(new WindowFinder(), new TargetLauncher()),
+            targetResolver,
             windowController,
             new WorkerInputController(),
             new WorkerScreenshotClient(),
-            new RecordingController());
+            new RecordingController(),
+            new TargetSessionController(catalog, windowFinder, targetResolver));
     }
 }

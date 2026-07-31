@@ -7,17 +7,29 @@ namespace AppCap.Windows;
 
 public sealed class KeyboardInputInjector : IKeyboardInputInjector
 {
+    private static readonly TimeSpan FallbackDispatchDelay = TimeSpan.FromMilliseconds(10);
     private const uint WmChar = 0x0102;
     private const uint WmKeyDown = 0x0100;
     private const uint WmKeyUp = 0x0101;
     private const uint WmSysKeyDown = 0x0104;
     private const uint WmSysKeyUp = 0x0105;
 
-    public Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
+    public async Task TypeAsync(TargetWindow window, IReadOnlyList<KeyboardAction> actions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(actions);
         cancellationToken.ThrowIfCancellationRequested();
+
+        INPUT[] inputs = [.. actions.SelectMany(static action => action switch
+        {
+            TextKeyboardAction text => CreateUnicodeInputs(text.Text),
+            KeyPressKeyboardAction keyPress => CreateKeyPressInputs(keyPress),
+            _ => throw new AppCapException("Unsupported keyboard action."),
+        })];
+        if (TrySendInputs(inputs))
+        {
+            return;
+        }
 
         foreach (KeyboardAction action in actions)
         {
@@ -25,26 +37,21 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
             switch (action)
             {
                 case TextKeyboardAction text:
-                    SendText(window, text.Text);
+                    SendTextMessages(window, text.Text);
                     break;
                 case KeyPressKeyboardAction keyPress:
-                    SendKeyPress(window, keyPress);
+                    SendKeyPressMessages(window, keyPress);
                     break;
                 default:
                     throw new AppCapException("Unsupported keyboard action.");
             }
-        }
 
-        return Task.CompletedTask;
+            await Task.Delay(FallbackDispatchDelay, cancellationToken).ConfigureAwait(false);
+        }
     }
 
-    private static void SendText(TargetWindow window, string text)
+    private static void SendTextMessages(TargetWindow window, string text)
     {
-        if (TrySendInputs(CreateUnicodeInputs(text)))
-        {
-            return;
-        }
-
         foreach (char character in text)
         {
             SendCharMessage(window, character);
@@ -63,17 +70,6 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
         }
 
         return inputs;
-    }
-
-    private static void SendKeyPress(TargetWindow window, KeyPressKeyboardAction keyPress)
-    {
-        INPUT[] inputs = CreateKeyPressInputs(keyPress);
-        if (TrySendInputs(inputs))
-        {
-            return;
-        }
-
-        SendKeyPressMessages(window, keyPress);
     }
 
     internal static INPUT[] CreateKeyPressInputs(KeyPressKeyboardAction keyPress)
@@ -112,7 +108,7 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
     private static void SendCharMessage(TargetWindow window, char character)
     {
         HWND hwnd = new(window.Handle);
-        _ = PInvoke.SendMessage(hwnd, WmChar, new WPARAM((nuint)character), new LPARAM(0));
+        _ = PInvoke.PostMessage(hwnd, WmChar, new WPARAM((nuint)character), new LPARAM(0));
     }
 
     private static void SendKeyPressMessages(TargetWindow window, KeyPressKeyboardAction keyPress)
@@ -140,7 +136,7 @@ public sealed class KeyboardInputInjector : IKeyboardInputInjector
             ? (isKeyUp ? WmSysKeyUp : WmSysKeyDown)
             : (isKeyUp ? WmKeyUp : WmKeyDown);
         LPARAM lParam = new((nint)(isKeyUp ? 0xC0000001u : 0x00000001u));
-        _ = PInvoke.SendMessage(hwnd, message, new WPARAM((nuint)key), lParam);
+        _ = PInvoke.PostMessage(hwnd, message, new WPARAM((nuint)key), lParam);
     }
 
     private static INPUT UnicodeInput(char character, bool isKeyUp) => new()
