@@ -130,6 +130,31 @@ public sealed class CliApplicationTests
     }
 
     [Theory]
+    [InlineData("mouseto", 123, 456)]
+    [InlineData("click", 321, 654)]
+    public async Task MouseCommandsParseCoordinatesAndDevice(string commandName, int x, int y)
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["--target", "calculator", commandName, $"{x},{y}", "--device", "mouse"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        AppCapCommand command = Assert.IsAssignableFrom<AppCapCommand>(runner.Command);
+        (int actualX, int actualY, InputDeviceType? deviceType) = command switch
+        {
+            MouseMoveCommand move => (move.X, move.Y, move.DeviceType),
+            MouseClickCommand click => (click.X, click.Y, click.DeviceType),
+            _ => throw new Xunit.Sdk.XunitException($"Unexpected command type {command.GetType().Name}."),
+        };
+        Assert.Equal((x, y, (InputDeviceType?)InputDeviceType.Mouse), (actualX, actualY, deviceType));
+    }
+
+    [Theory]
     [InlineData("tap")]
     [InlineData("tap", "-x", "5")]
     [InlineData("tap", "123,456", "-x", "5", "-y", "7")]

@@ -28,6 +28,18 @@ public sealed class WorkerInputController : IInputController
         await RecordingIpc.TapAsync(CreateTargetRequest(target), x, y, deviceType, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task MoveMouseAsync(TargetApplication target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        await RecordingIpc.MoveMouseAsync(CreateTargetRequest(target), x, y, deviceType, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ClickMouseAsync(TargetApplication target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        await RecordingIpc.ClickMouseAsync(CreateTargetRequest(target), x, y, deviceType, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task TypeAsync(TargetApplication target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);

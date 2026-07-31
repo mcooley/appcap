@@ -241,11 +241,14 @@ public sealed class RecordingIpcTests : IDisposable
         try
         {
             await RecordingIpc.AttachInputDeviceAsync(request, InputDeviceType.Touch, cts.Token);
+            await RecordingIpc.AttachInputDeviceAsync(request, InputDeviceType.Mouse, cts.Token);
             IReadOnlyList<InputDeviceStatus> devices = await RecordingIpc.ListInputDevicesAsync(request, cts.Token);
             await RecordingIpc.TapAsync(request, 150, 130, deviceType: null, cts.Token);
+            await RecordingIpc.MoveMouseAsync(request, 160, 140, InputDeviceType.Mouse, cts.Token);
+            await RecordingIpc.ClickMouseAsync(request, 170, 150, InputDeviceType.Mouse, cts.Token);
 
             Assert.Equal(target, host.LastInputDeviceAttach!.TargetName);
-            Assert.Equal("touch", host.LastInputDeviceAttach.DeviceType);
+            Assert.Equal("mouse", host.LastInputDeviceAttach.DeviceType);
             Assert.Collection(
                 devices,
                 device =>
@@ -257,10 +260,17 @@ public sealed class RecordingIpcTests : IDisposable
                 {
                     Assert.Equal(InputDeviceType.Keyboard, device.DeviceType);
                     Assert.False(device.Attached);
+                },
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Mouse, device.DeviceType);
+                    Assert.True(device.Attached);
                 });
             Assert.Equal(target, host.LastTap!.Value.Target.TargetName);
             Assert.Equal(150, host.LastTap.Value.X);
             Assert.Equal(130, host.LastTap.Value.Y);
+            Assert.Equal((160, 140, (InputDeviceType?)InputDeviceType.Mouse), (host.LastMouseMove!.Value.X, host.LastMouseMove.Value.Y, host.LastMouseMove.Value.DeviceType));
+            Assert.Equal((170, 150, (InputDeviceType?)InputDeviceType.Mouse), (host.LastMouseClick!.Value.X, host.LastMouseClick.Value.Y, host.LastMouseClick.Value.DeviceType));
         }
         finally
         {

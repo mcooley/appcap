@@ -50,6 +50,20 @@ public sealed class CommandRunnerTests
     }
 
     [Fact]
+    public async Task MouseCommandsDelegateCoordinatesAndDeviceSelection()
+    {
+        TestServices services = new();
+        CommandRunner runner = services.CreateRunner();
+
+        await runner.RunAsync(new MouseMoveCommand(Target, 80, 40, InputDeviceType.Mouse), CancellationToken.None);
+        await runner.RunAsync(new MouseClickCommand(Target, 90, 50, InputDeviceType.Mouse), CancellationToken.None);
+
+        Assert.Equal((Target, 80, 40, InputDeviceType.Mouse), services.InputController.MouseMove);
+        Assert.Equal((Target, 90, 50, InputDeviceType.Mouse), services.InputController.MouseClick);
+        Assert.Null(services.TargetResolver.RequestedTarget);
+    }
+
+    [Fact]
     public async Task TypeDelegatesRawTextAndDeviceSelection()
     {
         TestServices services = new();
@@ -257,6 +271,10 @@ public sealed class CommandRunnerTests
 
         public (TargetApplication Target, int X, int Y, InputDeviceType? DeviceType)? Tap { get; private set; }
 
+        public (TargetApplication Target, int X, int Y, InputDeviceType? DeviceType)? MouseMove { get; private set; }
+
+        public (TargetApplication Target, int X, int Y, InputDeviceType? DeviceType)? MouseClick { get; private set; }
+
         public (TargetApplication Target, string TextAndKeys, InputDeviceType? DeviceType)? Type { get; private set; }
 
         public AppCapException? FailTapWith { get; set; }
@@ -284,6 +302,18 @@ public sealed class CommandRunnerTests
             }
 
             Tap = (target, x, y, deviceType);
+            return Task.CompletedTask;
+        }
+
+        public Task MoveMouseAsync(TargetApplication target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+        {
+            MouseMove = (target, x, y, deviceType);
+            return Task.CompletedTask;
+        }
+
+        public Task ClickMouseAsync(TargetApplication target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+        {
+            MouseClick = (target, x, y, deviceType);
             return Task.CompletedTask;
         }
 

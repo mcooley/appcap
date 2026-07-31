@@ -70,6 +70,38 @@ internal sealed class McpTools
         return RunAsync(new TapCommand(ResolveTarget(target), x, y, ParseOptionalDevice(device)), cancellationToken);
     }
 
+    [McpServerTool(Name = "mouseto", OpenWorld = false), Description("Moves the mouse cursor to pixel coordinates relative to the top-left of the target window.")]
+    public Task<string> MouseMoveAsync(
+        [Description("Horizontal coordinate in pixels.")] int x,
+        [Description("Vertical coordinate in pixels.")] int y,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        [Description("Optional input device identifier. Attaches and uses mouse when omitted.")] string? device = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (x < 0 || y < 0)
+        {
+            throw new McpException("Mouse coordinates must be nonnegative.");
+        }
+
+        return RunAsync(new MouseMoveCommand(ResolveTarget(target), x, y, ParseOptionalDevice(device)), cancellationToken);
+    }
+
+    [McpServerTool(Name = "click", OpenWorld = false), Description("Moves the mouse cursor and performs a primary click at pixel coordinates relative to the top-left of the target window.")]
+    public Task<string> MouseClickAsync(
+        [Description("Horizontal coordinate in pixels.")] int x,
+        [Description("Vertical coordinate in pixels.")] int y,
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        [Description("Optional input device identifier. Attaches and uses mouse when omitted.")] string? device = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (x < 0 || y < 0)
+        {
+            throw new McpException("Mouse coordinates must be nonnegative.");
+        }
+
+        return RunAsync(new MouseClickCommand(ResolveTarget(target), x, y, ParseOptionalDevice(device)), cancellationToken);
+    }
+
     [McpServerTool(Name = "type", OpenWorld = false), Description("Types text into the target window.")]
     public Task<string> TypeAsync(
         [Description("Literal text and WebDriver/Playwright-style bracketed keys, for example hello[Enter] or [Control+A].")] string textAndKeys,

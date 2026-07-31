@@ -5,7 +5,7 @@ namespace AppCap.Tests;
 
 internal sealed class FakeTarget : ITargetHost
 {
-    private static readonly InputDeviceType[] SupportedDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard];
+    private static readonly InputDeviceType[] SupportedDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard, InputDeviceType.Mouse];
     private readonly CapturedFrame frame;
     private readonly InputDeviceAttachmentRegistry attachments = new("fake-target", SupportedDevices);
 
@@ -21,6 +21,10 @@ internal sealed class FakeTarget : ITargetHost
     public InputDeviceType? LastRemovedDeviceType { get; private set; }
 
     public (int X, int Y, InputDeviceType? DeviceType)? LastTap { get; private set; }
+
+    public (int X, int Y, InputDeviceType? DeviceType)? LastMouseMove { get; private set; }
+
+    public (int X, int Y, InputDeviceType? DeviceType)? LastMouseClick { get; private set; }
 
     public (string TextAndKeys, InputDeviceType? DeviceType)? LastType { get; private set; }
 
@@ -55,6 +59,20 @@ internal sealed class FakeTarget : ITargetHost
     {
         _ = attachments.Select(InputDeviceType.Touch, deviceType, "tap");
         LastTap = (x, y, deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        _ = attachments.Select(InputDeviceType.Mouse, deviceType, "mouseto");
+        LastMouseMove = (x, y, deviceType);
+        return Task.CompletedTask;
+    }
+
+    public Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        _ = attachments.Select(InputDeviceType.Mouse, deviceType, "click");
+        LastMouseClick = (x, y, deviceType);
         return Task.CompletedTask;
     }
 

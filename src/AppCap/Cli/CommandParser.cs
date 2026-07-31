@@ -211,6 +211,21 @@ public static class CommandParser
                 cancellationToken);
         });
 
+        Command mouseMoveCommand = CreatePointerCommand(
+            "mouseto",
+            "Moves the mouse cursor within the target window.",
+            static (target, x, y, deviceType) => new MouseMoveCommand(target, x, y, deviceType),
+            targetOption,
+            catalog,
+            executeCommandAsync);
+        Command mouseClickCommand = CreatePointerCommand(
+            "click",
+            "Moves the mouse cursor and performs a primary click within the target window.",
+            static (target, x, y, deviceType) => new MouseClickCommand(target, x, y, deviceType),
+            targetOption,
+            catalog,
+            executeCommandAsync);
+
         Argument<string> typeTextArgument = new("text-and-keys")
         {
             Description = "Specifies the text and bracketed key presses to inject into the target window.",
@@ -404,12 +419,65 @@ public static class CommandParser
         rootCommand.Add(targetOption);
         rootCommand.Add(targetCommand);
         rootCommand.Add(tapCommand);
+        rootCommand.Add(mouseMoveCommand);
+        rootCommand.Add(mouseClickCommand);
         rootCommand.Add(typeCommand);
         rootCommand.Add(inputDeviceCommand);
         rootCommand.Add(resizeCommand);
         rootCommand.Add(screenshotCommand);
         rootCommand.Add(recordCommand);
         return rootCommand;
+    }
+
+    private static Command CreatePointerCommand(
+        string name,
+        string description,
+        Func<TargetApplication?, int, int, InputDeviceType?, AppCapCommand> commandFactory,
+        Option<string?> targetOption,
+        TargetCatalog? catalog,
+        Func<AppCapCommand, CancellationToken, Task> executeCommandAsync)
+    {
+        Option<int?> xOption = OptionalIntegerOption("-x", "pixels", "Sets the horizontal coordinate in pixels within the target window.", value => value >= 0);
+        Option<int?> yOption = OptionalIntegerOption("-y", "pixels", "Sets the vertical coordinate in pixels within the target window.", value => value >= 0);
+        Argument<CoordinatePair?> coordinates = new("coordinates")
+        {
+            Description = "Specifies the coordinates as x,y.",
+            HelpName = "x,y",
+        };
+        coordinates.CustomParser = ParseCoordinates;
+        Option<string?> device = CreateDeviceOption();
+
+        Command command = new(name, description);
+        command.Add(coordinates);
+        command.Add(xOption);
+        command.Add(yOption);
+        command.Add(device);
+        command.Validators.Add(result =>
+        {
+            bool hasCoordinates = result.GetResult(coordinates)?.Tokens.Count > 0;
+            bool hasX = result.GetResult(xOption)?.Tokens.Count > 0;
+            bool hasY = result.GetResult(yOption)?.Tokens.Count > 0;
+            if (hasCoordinates && (hasX || hasY))
+            {
+                result.AddError("Specify coordinates either as x,y or with -x and -y, not both.");
+            }
+            else if (!hasCoordinates && (!hasX || !hasY))
+            {
+                result.AddError("Coordinates are required. Specify x,y or both -x and -y.");
+            }
+        });
+        command.SetAction((parseResult, cancellationToken) =>
+        {
+            CoordinatePair? pair = parseResult.GetValue(coordinates);
+            return executeCommandAsync(
+                commandFactory(
+                    ResolveTarget(parseResult, targetOption, catalog),
+                    pair?.X ?? parseResult.GetValue(xOption) ?? throw MissingCoordinatesException(),
+                    pair?.Y ?? parseResult.GetValue(yOption) ?? throw MissingCoordinatesException(),
+                    ParseOptionalDeviceType(parseResult.GetValue(device))),
+                cancellationToken);
+        });
+        return command;
     }
 
     internal static bool StartsWithDirective(IReadOnlyList<string> args) =>

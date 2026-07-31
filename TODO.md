@@ -13,13 +13,11 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Input
 
-- Add mouse wheel or scroll support.
+- Better foreground window handling
+- Timing controller for keyboard and pointer input.
 - Add drag support.
 - Add gamepad input support.
 - Add broader key-name coverage for `appcap type` if real workflows need it.
-- Add optional timing controls for type and pointer input.
-- Add a `mouse` input device before restoring pointer-hover support.
-- See if we can detach input devices and allow the worker process to shut down when MCP server dies
 
 ## Video Capture
 

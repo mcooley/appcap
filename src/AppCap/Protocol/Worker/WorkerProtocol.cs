@@ -57,6 +57,8 @@ internal static class WorkerMethods
     public const string InputDeviceRemove = "input_device.remove";
     public const string InputDeviceList = "input_device.list";
     public const string InputTap = "input.tap";
+    public const string InputMouseMove = "input.mouseto";
+    public const string InputMouseClick = "input.click";
     public const string InputType = "input.type";
 }
 
@@ -272,6 +274,9 @@ internal interface IWorkerHost
 
     Task TapAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
 
+    Task MoveMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
+
+    Task ClickMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
 
     Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken);
 }

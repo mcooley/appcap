@@ -48,6 +48,24 @@ internal sealed class WorkerTargetSession : IDisposable
             },
             cancellationToken);
 
+    public Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            async (client, token) =>
+            {
+                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Mouse, token).ConfigureAwait(false);
+                await client.MoveMouseAsync(x, y, deviceType, token).ConfigureAwait(false);
+            },
+            cancellationToken);
+
+    public Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        ExecuteAsync(
+            async (client, token) =>
+            {
+                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Mouse, token).ConfigureAwait(false);
+                await client.ClickMouseAsync(x, y, deviceType, token).ConfigureAwait(false);
+            },
+            cancellationToken);
+
     public Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
         ExecuteAsync(
             async (client, token) =>

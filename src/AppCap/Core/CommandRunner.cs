@@ -47,6 +47,12 @@ public sealed class CommandRunner : ICommandRunner
             case TapCommand tap:
                 await TapAsync(tap, cancellationToken).ConfigureAwait(false);
                 break;
+            case MouseMoveCommand mouseMove:
+                await MoveMouseAsync(mouseMove, cancellationToken).ConfigureAwait(false);
+                break;
+            case MouseClickCommand mouseClick:
+                await ClickMouseAsync(mouseClick, cancellationToken).ConfigureAwait(false);
+                break;
             case TypeCommand type:
                 await TypeAsync(type, cancellationToken).ConfigureAwait(false);
                 break;
@@ -126,6 +132,18 @@ public sealed class CommandRunner : ICommandRunner
     {
         TargetApplication target = await ResolveCommandTargetAsync(command.Target, cancellationToken).ConfigureAwait(false);
         await inputController.TapAsync(target, command.X, command.Y, command.DeviceType, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task MoveMouseAsync(MouseMoveCommand command, CancellationToken cancellationToken)
+    {
+        TargetApplication target = await ResolveCommandTargetAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        await inputController.MoveMouseAsync(target, command.X, command.Y, command.DeviceType, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ClickMouseAsync(MouseClickCommand command, CancellationToken cancellationToken)
+    {
+        TargetApplication target = await ResolveCommandTargetAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        await inputController.ClickMouseAsync(target, command.X, command.Y, command.DeviceType, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task TypeAsync(TypeCommand command, CancellationToken cancellationToken)

@@ -77,6 +77,14 @@ internal static class TargetServer
                 await HandleTapAsync(stream, request, target, cancellationToken).ConfigureAwait(false);
                 return;
 
+            case TargetMethods.MouseMove:
+                await HandleMouseMoveAsync(stream, request, target, cancellationToken).ConfigureAwait(false);
+                return;
+
+            case TargetMethods.MouseClick:
+                await HandleMouseClickAsync(stream, request, target, cancellationToken).ConfigureAwait(false);
+                return;
+
             case TargetMethods.Type:
                 await HandleTypeAsync(stream, request, target, cancellationToken).ConfigureAwait(false);
                 return;
@@ -166,6 +174,26 @@ internal static class TargetServer
         JsonRpcResponse response = await ExecuteInputCommandAsync(
             request,
             token => target.TapAsync(parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), token),
+            cancellationToken).ConfigureAwait(false);
+        await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleMouseMoveAsync(Stream stream, JsonRpcRequest request, ITargetHost target, CancellationToken cancellationToken)
+    {
+        PointerInputParams parameters = JsonRpcCodec.ReadParams(request.Params, TargetProtocolJsonContext.Default.PointerInputParams) ?? new PointerInputParams();
+        JsonRpcResponse response = await ExecuteInputCommandAsync(
+            request,
+            token => target.MoveMouseAsync(parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), token),
+            cancellationToken).ConfigureAwait(false);
+        await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task HandleMouseClickAsync(Stream stream, JsonRpcRequest request, ITargetHost target, CancellationToken cancellationToken)
+    {
+        PointerInputParams parameters = JsonRpcCodec.ReadParams(request.Params, TargetProtocolJsonContext.Default.PointerInputParams) ?? new PointerInputParams();
+        JsonRpcResponse response = await ExecuteInputCommandAsync(
+            request,
+            token => target.ClickMouseAsync(parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), token),
             cancellationToken).ConfigureAwait(false);
         await JsonRpcCodec.WriteResponseAsync(stream, response, cancellationToken).ConfigureAwait(false);
     }

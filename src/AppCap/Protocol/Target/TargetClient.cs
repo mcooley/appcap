@@ -53,6 +53,12 @@ internal sealed class TargetClient
     public Task TapAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
         SendPointerInputAsync(TargetMethods.Tap, x, y, deviceType, cancellationToken);
 
+    public Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendPointerInputAsync(TargetMethods.MouseMove, x, y, deviceType, cancellationToken);
+
+    public Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendPointerInputAsync(TargetMethods.MouseClick, x, y, deviceType, cancellationToken);
+
     public Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
         SendAcknowledgedAsync(
             TargetMethods.Type,

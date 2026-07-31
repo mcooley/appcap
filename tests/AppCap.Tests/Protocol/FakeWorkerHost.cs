@@ -7,7 +7,7 @@ namespace AppCap.Tests;
 
 internal sealed class FakeWorkerHost : IWorkerHost
 {
-    private static readonly InputDeviceType[] SupportedInputDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard];
+    private static readonly InputDeviceType[] SupportedInputDevices = [InputDeviceType.Touch, InputDeviceType.Keyboard, InputDeviceType.Mouse];
 
     private readonly ConcurrentDictionary<string, byte> recordings = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, InputDeviceAttachmentRegistry> inputDevices = new(StringComparer.Ordinal);
@@ -39,6 +39,10 @@ internal sealed class FakeWorkerHost : IWorkerHost
     public TargetDescriptorRequest? LastInputDeviceList { get; private set; }
 
     public (TargetDescriptorRequest Target, int X, int Y, InputDeviceType? DeviceType)? LastTap { get; private set; }
+
+    public (TargetDescriptorRequest Target, int X, int Y, InputDeviceType? DeviceType)? LastMouseMove { get; private set; }
+
+    public (TargetDescriptorRequest Target, int X, int Y, InputDeviceType? DeviceType)? LastMouseClick { get; private set; }
 
     public (TargetDescriptorRequest Target, string TextAndKeys, InputDeviceType? DeviceType)? LastType { get; private set; }
 
@@ -168,6 +172,22 @@ internal sealed class FakeWorkerHost : IWorkerHost
         LastTap = (target, x, y, deviceType);
         ThrowIfInputFailed();
         _ = GetRegistry(target.TargetName).Select(InputDeviceType.Touch, deviceType, "tap");
+        return Task.CompletedTask;
+    }
+
+    public Task MoveMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        LastMouseMove = (target, x, y, deviceType);
+        ThrowIfInputFailed();
+        _ = GetRegistry(target.TargetName).Select(InputDeviceType.Mouse, deviceType, "mouseto");
+        return Task.CompletedTask;
+    }
+
+    public Task ClickMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        LastMouseClick = (target, x, y, deviceType);
+        ThrowIfInputFailed();
+        _ = GetRegistry(target.TargetName).Select(InputDeviceType.Mouse, deviceType, "click");
         return Task.CompletedTask;
     }
 

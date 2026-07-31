@@ -319,6 +319,26 @@ internal static class RecordingIpc
             WorkerProtocolJsonContext.Default.PointerInputRequest,
             cancellationToken);
 
+    public static Task MoveMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendPointerInputAsync(WorkerMethods.InputMouseMove, target, x, y, deviceType, cancellationToken);
+
+    public static Task ClickMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendPointerInputAsync(WorkerMethods.InputMouseClick, target, x, y, deviceType, cancellationToken);
+
+    private static Task SendPointerInputAsync(string method, TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
+        SendAcknowledgedInputAsync(
+            method,
+            new PointerInputRequest
+            {
+                TargetName = target.TargetName,
+                ApplicationId = target.ApplicationId,
+                X = x,
+                Y = y,
+                DeviceType = deviceType?.ToString(),
+            },
+            WorkerProtocolJsonContext.Default.PointerInputRequest,
+            cancellationToken);
+
     public static Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
         SendAcknowledgedInputAsync(
             WorkerMethods.InputType,

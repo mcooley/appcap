@@ -13,7 +13,7 @@ internal static class TargetProtocol
 {
     // The version of the AppCap target protocol described by these types. Bump this when
     // the wire contract changes so a worker and target can negotiate or reject mismatches.
-    public const string Version = "3.0";
+    public const string Version = "4.0";
 }
 
 // The JSON-RPC method names understood by a target.
@@ -30,6 +30,8 @@ internal static class TargetMethods
     public const string RemoveInputDevice = "target.input_device.remove";
     public const string ListInputDevices = "target.input_device.list";
     public const string Tap = "target.input.tap";
+    public const string MouseMove = "target.input.mouseto";
+    public const string MouseClick = "target.input.click";
     public const string Type = "target.input.type";
 }
 
@@ -144,6 +146,9 @@ internal interface ITargetHost : ITarget
 
     Task TapAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
 
+    Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
+
+    Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken);
 
     Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken);
 }

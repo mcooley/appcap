@@ -323,6 +323,24 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         MarkActivity();
     }
 
+    public async Task MoveMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.MoveMouseAsync(x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
+    }
+
+    public async Task ClickMouseAsync(TargetDescriptorRequest target, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MarkActivity();
+        WorkerTargetSession session = GetAttachedTargetSession(target.TargetName);
+        await session.ClickMouseAsync(x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        MarkActivity();
+    }
+
     public async Task TypeAsync(TargetDescriptorRequest target, string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);

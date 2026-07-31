@@ -10,7 +10,7 @@ versioned**, because a target may be implemented by a **different tool on a diff
 machine or OS** — for example, a worker on Windows capturing from an Android device. A
 worker drives a target unchanged whether it is in-proc or remote.
 
-- Protocol version: **3.0** (`TargetProtocol.Version`)
+- Protocol version: **4.0** (`TargetProtocol.Version`)
 - Message format: **JSON-RPC 2.0** (<https://www.jsonrpc.org/specification>)
 
 > **In-proc note.** When the target runs in the same process as the worker (the common
@@ -58,7 +58,7 @@ Request:
 Response:
 
 ```json
-{ "jsonrpc": "2.0", "id": 1, "result": { "protocolVersion": "3.0", "supportedInputDevices": ["touch", "keyboard"] } }
+{ "jsonrpc": "2.0", "id": 1, "result": { "protocolVersion": "4.0", "supportedInputDevices": ["touch", "keyboard", "mouse"] } }
 ```
 
 ### `target.capture_frame`
@@ -91,7 +91,7 @@ If the capture fails, the target returns a `-32001` error with the reason in `me
 ### Input devices and injection
 
 A target owns its attached input devices. Each supported device type may be attached at
-most once. Current Windows targets support `touch` and `keyboard`.
+most once. Current Windows targets support `touch`, `keyboard`, and `mouse`.
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -99,13 +99,17 @@ most once. Current Windows targets support `touch` and `keyboard`.
 | `target.input_device.remove` | `deviceType` | acknowledgement |
 | `target.input_device.list` | none | supported device types and attachment state |
 | `target.input.tap` | `x`, `y`, optional `deviceType` | acknowledgement |
+| `target.input.mouseto` | `x`, `y`, optional `deviceType` | acknowledgement |
+| `target.input.click` | `x`, `y`, optional `deviceType` | acknowledgement |
 | `target.input.type` | `textAndKeys`, optional `deviceType` | acknowledgement |
 
-`tap` requires an attached `touch` device; `type` requires an attached `keyboard`
-device. AppCap's worker queries device state and attaches the required device automatically
-before these operations. Explicit attachment remains part of the protocol for targets with
-multiple meaningful devices. When `deviceType` is omitted, the target selects the attached
-device required by the operation. Supplying a different type is an error.
+`tap` requires an attached `touch` device; `mouseto` and `click` require an
+attached `mouse` device; `type` requires an attached `keyboard` device. Pointer coordinates
+are pixels relative to the top-left of the target. AppCap's worker queries device state and
+attaches the required device automatically before these operations. Explicit attachment
+remains part of the protocol for targets with multiple meaningful devices. When
+`deviceType` is omitted, the target selects the attached device required by the operation.
+Supplying a different type is an error.
 
 Example attachment request:
 
@@ -116,7 +120,7 @@ Example attachment request:
 Example device-list response:
 
 ```json
-{ "jsonrpc": "2.0", "id": 4, "result": { "devices": [{ "deviceType": "touch", "attached": true }, { "deviceType": "keyboard", "attached": false }] } }
+{ "jsonrpc": "2.0", "id": 4, "result": { "devices": [{ "deviceType": "touch", "attached": true }, { "deviceType": "keyboard", "attached": false }, { "deviceType": "mouse", "attached": false }] } }
 ```
 
 > **Performance note.** `target.capture_frame` serializes pixels, which is appropriate

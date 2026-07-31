@@ -16,6 +16,10 @@ public sealed record InputDeviceListCommand(TargetApplication? Target) : AppCapC
 
 public sealed record TapCommand(TargetApplication? Target, int X, int Y, InputDeviceType? DeviceType = null) : AppCapCommand;
 
+public sealed record MouseMoveCommand(TargetApplication? Target, int X, int Y, InputDeviceType? DeviceType = null) : AppCapCommand;
+
+public sealed record MouseClickCommand(TargetApplication? Target, int X, int Y, InputDeviceType? DeviceType = null) : AppCapCommand;
+
 public sealed record TypeCommand(
     TargetApplication? Target,
     string TextAndKeys,

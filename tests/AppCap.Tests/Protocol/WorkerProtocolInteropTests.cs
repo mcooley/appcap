@@ -128,11 +128,13 @@ public sealed class WorkerProtocolInteropTests : IDisposable
             using (JsonDocument document = JsonDocument.Parse(listReply))
             {
                 JsonElement devices = document.RootElement.GetProperty("result").GetProperty("devices");
-                Assert.Equal(2, devices.GetArrayLength());
+                Assert.Equal(3, devices.GetArrayLength());
                 Assert.Equal("touch", devices[0].GetProperty("deviceType").GetString());
                 Assert.True(devices[0].GetProperty("attached").GetBoolean());
                 Assert.Equal("keyboard", devices[1].GetProperty("deviceType").GetString());
                 Assert.False(devices[1].GetProperty("attached").GetBoolean());
+                Assert.Equal("mouse", devices[2].GetProperty("deviceType").GetString());
+                Assert.False(devices[2].GetProperty("attached").GetBoolean());
             }
 
             string tapReply = await SendRawAsync(

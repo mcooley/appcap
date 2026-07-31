@@ -5,12 +5,13 @@ public sealed class InputDeviceCommandE2ETests : E2ETestBase
     [E2EFact]
     public void ListReportsWindowsInputDevices()
     {
-        AttachInputDevices("touch", "keyboard");
+        AttachInputDevices("touch", "keyboard", "mouse");
         CommandResult result = Context.Run("inputdevice", "list");
 
         result.AssertSuccess();
         Assert.Contains("touch: attached", result.StandardOutput, StringComparison.Ordinal);
         Assert.Contains("keyboard: attached", result.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("mouse: attached", result.StandardOutput, StringComparison.Ordinal);
     }
 
     [E2EFact]
@@ -32,8 +33,18 @@ public sealed class InputDeviceCommandE2ETests : E2ETestBase
         Assert.NotEqual(0, duplicate.ExitCode);
         Assert.Contains("already attached", duplicate.StandardError, StringComparison.OrdinalIgnoreCase);
 
-        CommandResult unsupported = Context.Run("inputdevice", "attach", "mouse");
+        CommandResult unsupported = Context.Run("inputdevice", "attach", "gamepad");
         Assert.NotEqual(0, unsupported.ExitCode);
         Assert.Contains("not supported", unsupported.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [E2EFact]
+    public void MouseCommandsAutomaticallyAttachMouseDevice()
+    {
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("mouseto", "150,130").AssertSuccess();
+        Context.Run("click", "150,130").AssertSuccess();
+
+        Assert.Contains("mouse: attached", Context.Run("inputdevice", "list").StandardOutput, StringComparison.Ordinal);
     }
 }

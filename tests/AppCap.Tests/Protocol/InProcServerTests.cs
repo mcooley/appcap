@@ -21,7 +21,7 @@ public sealed class InProcServerTests
             TargetClient targetClient = new(client);
             TargetStatusResult status = await targetClient.GetStatusAsync(cts.Token);
             Assert.Equal(TargetProtocol.Version, status!.ProtocolVersion);
-            Assert.Equal(["touch", "keyboard"], status.SupportedInputDevices);
+            Assert.Equal(["touch", "keyboard", "mouse"], status.SupportedInputDevices);
 
             CapturedFrame captured = await targetClient.CaptureFrameAsync(includeCursor: true, cts.Token);
             Assert.Equal(2, captured.Width);
@@ -31,6 +31,7 @@ public sealed class InProcServerTests
 
             await targetClient.AttachInputDeviceAsync(InputDeviceType.Touch, cts.Token);
             await targetClient.AttachInputDeviceAsync(InputDeviceType.Keyboard, cts.Token);
+            await targetClient.AttachInputDeviceAsync(InputDeviceType.Mouse, cts.Token);
             IReadOnlyList<InputDeviceStatus> devices = await targetClient.ListInputDevicesAsync(cts.Token);
             Assert.Collection(
                 devices,
@@ -43,13 +44,22 @@ public sealed class InProcServerTests
                 {
                     Assert.Equal(InputDeviceType.Keyboard, device.DeviceType);
                     Assert.True(device.Attached);
+                },
+                device =>
+                {
+                    Assert.Equal(InputDeviceType.Mouse, device.DeviceType);
+                    Assert.True(device.Attached);
                 });
 
             await targetClient.TapAsync(10, 20, null, cts.Token);
+            await targetClient.MoveMouseAsync(30, 40, null, cts.Token);
+            await targetClient.ClickMouseAsync(50, 60, null, cts.Token);
             await targetClient.TypeAsync("abc[Enter]", null, cts.Token);
 
-            Assert.Equal(InputDeviceType.Keyboard, target.LastAttachedDeviceType);
+            Assert.Equal(InputDeviceType.Mouse, target.LastAttachedDeviceType);
             Assert.Equal((10, 20, (InputDeviceType?)null), target.LastTap);
+            Assert.Equal((30, 40, (InputDeviceType?)null), target.LastMouseMove);
+            Assert.Equal((50, 60, (InputDeviceType?)null), target.LastMouseClick);
             Assert.Equal(("abc[Enter]", (InputDeviceType?)null), target.LastType);
         }
         finally

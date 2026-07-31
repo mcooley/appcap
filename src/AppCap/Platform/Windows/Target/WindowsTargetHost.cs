@@ -5,7 +5,7 @@ namespace AppCap.Windows;
 
 internal sealed class WindowsTargetHost : ITargetHost
 {
-    private static readonly InputDeviceType[] SupportedDeviceTypes = [InputDeviceType.Touch, InputDeviceType.Keyboard];
+    private static readonly InputDeviceType[] SupportedDeviceTypes = [InputDeviceType.Touch, InputDeviceType.Keyboard, InputDeviceType.Mouse];
 
     private readonly TargetWindow window;
     private readonly IWindowController windowController;
@@ -64,6 +64,18 @@ internal sealed class WindowsTargetHost : ITargetHost
         await inputInjector.TapAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        (int screenX, int screenY) = await ResolvePointerAsync("mouseto", InputDeviceType.Mouse, x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        await inputInjector.MoveMouseAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+    {
+        (int screenX, int screenY) = await ResolvePointerAsync("click", InputDeviceType.Mouse, x, y, deviceType, cancellationToken).ConfigureAwait(false);
+        await inputInjector.ClickMouseAsync(window, screenX, screenY, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(textAndKeys);
@@ -78,8 +90,17 @@ internal sealed class WindowsTargetHost : ITargetHost
     }
 
     private async Task<(int ScreenX, int ScreenY)> ResolvePointerAsync(string commandName, int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken)
+        => await ResolvePointerAsync(commandName, InputDeviceType.Touch, x, y, deviceType, cancellationToken).ConfigureAwait(false);
+
+    private async Task<(int ScreenX, int ScreenY)> ResolvePointerAsync(
+        string commandName,
+        InputDeviceType requiredDeviceType,
+        int x,
+        int y,
+        InputDeviceType? deviceType,
+        CancellationToken cancellationToken)
     {
-        _ = attachments.Select(InputDeviceType.Touch, deviceType, commandName);
+        _ = attachments.Select(requiredDeviceType, deviceType, commandName);
         await windowController.BringToForegroundAsync(window, cancellationToken).ConfigureAwait(false);
 
         WindowBounds bounds = await windowController.GetBoundsAsync(window, cancellationToken).ConfigureAwait(false);

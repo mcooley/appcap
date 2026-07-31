@@ -23,6 +23,22 @@ public sealed class McpToolsTests
     }
 
     [Fact]
+    public async Task MouseToolsMapArgumentsToCanonicalCommands()
+    {
+        TestRunner runner = new();
+        using McpCommandExecutor executor = new(runner);
+        McpTools tools = new(new TargetCatalog([Target]), executor);
+
+        await tools.MouseMoveAsync(12, 34, device: "mouse");
+        MouseMoveCommand move = Assert.IsType<MouseMoveCommand>(runner.Command);
+        Assert.Equal((12, 34, InputDeviceType.Mouse), (move.X, move.Y, move.DeviceType));
+
+        await tools.MouseClickAsync(56, 78, device: "mouse");
+        MouseClickCommand click = Assert.IsType<MouseClickCommand>(runner.Command);
+        Assert.Equal((56, 78, InputDeviceType.Mouse), (click.X, click.Y, click.DeviceType));
+    }
+
+    [Fact]
     public async Task CommandOutputIsReturnedAsToolText()
     {
         TestRunner runner = new() { Result = new CommandExecutionResult("touch: attached") };

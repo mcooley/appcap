@@ -86,6 +86,12 @@ internal static class WorkerServer
             case WorkerMethods.InputTap:
                 return await TapAsync(request, host, cancellationToken).ConfigureAwait(false);
 
+            case WorkerMethods.InputMouseMove:
+                return await MouseMoveAsync(request, host, cancellationToken).ConfigureAwait(false);
+
+            case WorkerMethods.InputMouseClick:
+                return await MouseClickAsync(request, host, cancellationToken).ConfigureAwait(false);
+
             case WorkerMethods.InputType:
                 return await TypeAsync(request, host, cancellationToken).ConfigureAwait(false);
 
@@ -300,6 +306,42 @@ internal static class WorkerServer
         try
         {
             await host.TapAsync(parameters, parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), cancellationToken).ConfigureAwait(false);
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (ProtocolErrorException exception)
+        {
+            return JsonRpcCodec.CreateError(request.Id, exception.ErrorCode, exception.Message);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.InputFailed, exception.Message);
+        }
+    }
+
+    private static async Task<JsonRpcResponse> MouseMoveAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        PointerInputRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.PointerInputRequest) ?? new PointerInputRequest();
+        try
+        {
+            await host.MoveMouseAsync(parameters, parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), cancellationToken).ConfigureAwait(false);
+            return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
+        }
+        catch (ProtocolErrorException exception)
+        {
+            return JsonRpcCodec.CreateError(request.Id, exception.ErrorCode, exception.Message);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return JsonRpcCodec.CreateError(request.Id, JsonRpcErrorCodes.InputFailed, exception.Message);
+        }
+    }
+
+    private static async Task<JsonRpcResponse> MouseClickAsync(JsonRpcRequest request, IWorkerHost host, CancellationToken cancellationToken)
+    {
+        PointerInputRequest parameters = JsonRpcCodec.ReadParams(request.Params, WorkerProtocolJsonContext.Default.PointerInputRequest) ?? new PointerInputRequest();
+        try
+        {
+            await host.ClickMouseAsync(parameters, parameters.X, parameters.Y, ParseOptionalDeviceType(parameters.DeviceType), cancellationToken).ConfigureAwait(false);
             return JsonRpcCodec.CreateSuccess(request.Id, new RecordingCommandResult { Acknowledged = true }, WorkerProtocolJsonContext.Default.RecordingCommandResult);
         }
         catch (ProtocolErrorException exception)
