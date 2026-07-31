@@ -107,12 +107,31 @@ internal sealed class RecordingSession : IDisposable
             2,
             item.Size);
         using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
+        int captureWidth = item.Size.Width;
+        int captureHeight = item.Size.Height;
 
         void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
         {
             Direct3D11CaptureFrame? frame = sender.TryGetNextFrame();
             if (frame is null)
             {
+                return;
+            }
+
+            if (frame.ContentSize.Width != captureWidth || frame.ContentSize.Height != captureHeight)
+            {
+                captureWidth = frame.ContentSize.Width;
+                captureHeight = frame.ContentSize.Height;
+                frame.Dispose();
+                if (captureWidth > 0 && captureHeight > 0)
+                {
+                    sender.Recreate(
+                        deviceLease.Device,
+                        DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                        2,
+                        new global::Windows.Graphics.SizeInt32(captureWidth, captureHeight));
+                }
+
                 return;
             }
 

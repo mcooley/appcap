@@ -25,6 +25,8 @@ internal sealed class RecordingWriter : IDisposable
     private readonly object captionGate = new();
     private Task encodeTask = Task.CompletedTask;
     private CropRectangle? effectiveCrop;
+    private int outputWidth;
+    private int outputHeight;
     private IRecordingSurface? latestSurface;
     private IRecordingCaption? caption;
     private TimeSpan captionStartTime;
@@ -86,6 +88,8 @@ internal sealed class RecordingWriter : IDisposable
 
         started = true;
         (int width, int height) = ConfigureOutputSize(sourceWidth, sourceHeight);
+        outputWidth = width;
+        outputHeight = height;
         encodeTask = encoder.EncodeAsync(outputPath, width, height, GetNextSample, cancellationToken);
 
         Task confirmed = await Task.WhenAny(firstFrameArrived.Task, encodeTask).ConfigureAwait(false);
@@ -173,9 +177,7 @@ internal sealed class RecordingWriter : IDisposable
                 using (frame)
                 {
                     latestSurface?.Dispose();
-                    latestSurface = effectiveCrop is { } cropRectangle
-                        ? composer.Crop(frame.Surface, cropRectangle)
-                        : composer.Copy(frame.Surface);
+                    latestSurface = ComposeFrame(frame.Surface);
                     lastSampleTime = frame.Timestamp;
                     ApplyPendingCaption(frame.Timestamp, latestSurface.Width, latestSurface.Height);
                     float opacity = GetCaptionOpacity(frame.Timestamp);
@@ -250,6 +252,43 @@ internal sealed class RecordingWriter : IDisposable
             ? composer.Copy(latestSurface)
             : caption.Render(latestSurface, captionOpacity);
         return new RecordingSample(surface, timestamp, captionOpacity);
+    }
+
+    private IRecordingSurface ComposeFrame(IRecordingSurface surface)
+    {
+        IRecordingSurface? cropped = null;
+        try
+        {
+            IRecordingSurface source = surface;
+            if (effectiveCrop is { } requestedCrop)
+            {
+                CropRectangle? availableCrop = IntersectCrop(requestedCrop, surface.Width, surface.Height);
+                if (availableCrop is not null)
+                {
+                    cropped = composer.Crop(surface, availableCrop.Value);
+                    source = cropped;
+                }
+            }
+
+            return source.Width == outputWidth && source.Height == outputHeight
+                ? composer.Copy(source)
+                : composer.Fit(source, outputWidth, outputHeight);
+        }
+        finally
+        {
+            cropped?.Dispose();
+        }
+    }
+
+    private static CropRectangle? IntersectCrop(CropRectangle crop, int width, int height)
+    {
+        int right = Math.Min(crop.X + crop.Width, width);
+        int bottom = Math.Min(crop.Y + crop.Height, height);
+        int croppedWidth = right - crop.X;
+        int croppedHeight = bottom - crop.Y;
+        return croppedWidth > 0 && croppedHeight > 0
+            ? new CropRectangle(crop.X, crop.Y, croppedWidth, croppedHeight)
+            : null;
     }
 
     private void ApplyPendingCaption(TimeSpan frameTime, int width, int height)
@@ -361,6 +400,8 @@ internal interface IRecordingSurfaceComposer
 
     IRecordingSurface Crop(IRecordingSurface surface, CropRectangle crop);
 
+    IRecordingSurface Fit(IRecordingSurface surface, int width, int height);
+
     IRecordingCaption CreateCaption(int width, int height, string text);
 }
 
@@ -411,6 +452,12 @@ internal sealed class Direct3DRecordingSurfaceComposer : IRecordingSurfaceCompos
     {
         Direct3DRecordingSurface direct3D = GetDirect3D(surface);
         return new Direct3DRecordingSurface(CaptionRenderer.Crop(direct3D.NativeSurface, crop), crop.Width, crop.Height);
+    }
+
+    public IRecordingSurface Fit(IRecordingSurface surface, int width, int height)
+    {
+        Direct3DRecordingSurface direct3D = GetDirect3D(surface);
+        return new Direct3DRecordingSurface(CaptionRenderer.Fit(direct3D.NativeSurface, width, height), width, height);
     }
 
     public IRecordingCaption CreateCaption(int width, int height, string text) => new Direct3DRecordingCaption(width, height, text);

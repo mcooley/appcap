@@ -129,6 +129,23 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         return CreateSurfaceFromTexture(croppedTexture.Get());
     }
 
+    public static IDirect3DSurface Fit(IDirect3DSurface sourceSurface, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(sourceSurface);
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
+
+        using ComPtr<ID3D11Texture2D> sourceTexture = GetTexture(sourceSurface);
+        sourceTexture.Get()->GetDesc(out D3D11_TEXTURE2D_DESC textureDescription);
+        using ComPtr<ID3D11Device> device = GetDevice(sourceTexture.Get());
+        using ComPtr<ID3D11Texture2D> fittedTexture = CreateRenderableTexture(device.Get(), textureDescription, (uint)width, (uint)height);
+        using ComPtr<IDXGISurface> sourceDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)sourceTexture.Get());
+        using ComPtr<IDXGISurface> fittedDxgiSurface = QueryInterface<IDXGISurface>((IUnknown*)fittedTexture.Get());
+
+        RenderFit(sourceDxgiSurface.Get(), fittedDxgiSurface.Get(), textureDescription, width, height);
+        return CreateSurfaceFromTexture(fittedTexture.Get());
+    }
+
     public void Dispose()
     {
         textLayout.Dispose();
@@ -183,6 +200,60 @@ internal sealed unsafe class CaptionRenderer : IDisposable
         renderTarget.Get()->BeginDraw();
         renderTarget.Get()->DrawTextLayout(new D2D_POINT_2F { x = originX + 2, y = originY + 2 }, textLayout.Get(), (ID2D1Brush*)shadowBrush.Get(), D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
         renderTarget.Get()->DrawTextLayout(new D2D_POINT_2F { x = originX, y = originY }, textLayout.Get(), (ID2D1Brush*)textBrush.Get(), D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+        renderTarget.Get()->EndDraw().ThrowOnFailure();
+    }
+
+    private static void RenderFit(
+        IDXGISurface* sourceSurface,
+        IDXGISurface* destinationSurface,
+        D3D11_TEXTURE2D_DESC sourceDescription,
+        int width,
+        int height)
+    {
+        PInvoke.D2D1CreateFactory(D2D1_FACTORY_TYPE.D2D1_FACTORY_TYPE_SINGLE_THREADED, typeof(ID2D1Factory).GUID, null, out void* factoryPointer).ThrowOnFailure();
+        using ComPtr<ID2D1Factory> factory = new((ID2D1Factory*)factoryPointer);
+        D2D1_RENDER_TARGET_PROPERTIES properties = new()
+        {
+            type = D2D1_RENDER_TARGET_TYPE.D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            pixelFormat = new D2D1_PIXEL_FORMAT
+            {
+                format = sourceDescription.Format,
+                alphaMode = D2D1_ALPHA_MODE.D2D1_ALPHA_MODE_IGNORE,
+            },
+            dpiX = 96,
+            dpiY = 96,
+            usage = D2D1_RENDER_TARGET_USAGE.D2D1_RENDER_TARGET_USAGE_NONE,
+            minLevel = D2D1_FEATURE_LEVEL.D2D1_FEATURE_LEVEL_DEFAULT,
+        };
+        ID2D1RenderTarget* renderTargetPointer = null;
+        factory.Get()->CreateDxgiSurfaceRenderTarget(destinationSurface, properties, &renderTargetPointer).ThrowOnFailure();
+        using ComPtr<ID2D1RenderTarget> renderTarget = new(renderTargetPointer);
+
+        D2D1_BITMAP_PROPERTIES bitmapProperties = new()
+        {
+            pixelFormat = properties.pixelFormat,
+            dpiX = 96,
+            dpiY = 96,
+        };
+        ID2D1Bitmap* bitmapPointer = null;
+        Guid surfaceId = typeof(IDXGISurface).GUID;
+        renderTarget.Get()->CreateSharedBitmap(&surfaceId, sourceSurface, &bitmapProperties, &bitmapPointer).ThrowOnFailure();
+        using ComPtr<ID2D1Bitmap> bitmap = new(bitmapPointer);
+
+        float scale = Math.Min(width / (float)sourceDescription.Width, height / (float)sourceDescription.Height);
+        float fittedWidth = sourceDescription.Width * scale;
+        float fittedHeight = sourceDescription.Height * scale;
+        D2D_RECT_F destination = new()
+        {
+            left = (width - fittedWidth) / 2,
+            top = (height - fittedHeight) / 2,
+            right = (width + fittedWidth) / 2,
+            bottom = (height + fittedHeight) / 2,
+        };
+        D2D1_COLOR_F black = new() { r = 0, g = 0, b = 0, a = 1 };
+        renderTarget.Get()->BeginDraw();
+        renderTarget.Get()->Clear(&black);
+        renderTarget.Get()->DrawBitmap(bitmap.Get(), &destination, 1, D2D1_BITMAP_INTERPOLATION_MODE.D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, null);
         renderTarget.Get()->EndDraw().ThrowOnFailure();
     }
 

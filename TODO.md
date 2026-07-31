@@ -23,7 +23,6 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Video Capture
 
-- Gracefully handle resize while recording is running
 - Add recording pause/resume commands--while paused, keep capturing but drop the frames
 - Add recording speed commands--set speed to 0.25x or 4x, for example
 - Double check that RedrawWindow is necessary and matches what reference screen capture tools do

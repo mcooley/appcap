@@ -157,6 +157,30 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task ResizingWindowContinuesRecordingWithLetterboxing()
+    {
+        string path = Context.NewOutputPath("resized.mp4");
+
+        Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
+        Context.Run("record", "start", "--output", path).AssertSuccess();
+        await Task.Delay(500);
+        Context.Run("resize", "--width", "480", "--height", "640").AssertSuccess();
+        await Task.Delay(1000);
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        VideoInfo video = await E2EHelpers.ReadVideoInfoAsync(path);
+        TimeSpan duration = await E2EHelpers.ReadVideoDurationAsync(path);
+        PixelColor sideBar = await E2EHelpers.ReadVideoPixelAsync(path, duration - TimeSpan.FromMilliseconds(100), 4, video.Height / 2);
+        PixelColor content = await E2EHelpers.ReadVideoPixelAsync(path, duration - TimeSpan.FromMilliseconds(100), video.Width / 2, video.Height / 2);
+
+        Assert.Equal(640, video.Width);
+        Assert.Equal(480, video.Height);
+        PixelAssertions.AssertColorNear(new PixelColor(0, 0, 0), sideBar);
+        PixelAssertions.AssertColorNotNear(new PixelColor(0, 0, 0), content);
+    }
+
+    [E2EFact]
     public async Task RecordTimeLimitSavesMp4File()
     {
         string path = Context.NewOutputPath("time-limited.mp4");

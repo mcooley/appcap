@@ -42,6 +42,26 @@ public sealed class RecordingWriterTests
     }
 
     [Fact]
+    public async Task FitsResizedFramesIntoOriginalVideoDimensions()
+    {
+        string path = NewOutputPath();
+        FakeRecordingEncoder encoder = new(writeOutput: true);
+        FakeSurfaceComposer composer = new();
+        using RecordingWriter writer = new(path, crop: null, encoder, composer);
+        writer.AddFrame(new FakeFrame(640, 480, TimeSpan.Zero));
+        writer.AddFrame(new FakeFrame(480, 640, TimeSpan.FromMilliseconds(500)));
+        writer.AddFrame(new FakeFrame(1280, 360, TimeSpan.FromSeconds(1)));
+        writer.CompleteFrames();
+
+        await writer.StartAsync(640, 480, CancellationToken.None);
+        await writer.StopAsync(discard: false, CancellationToken.None);
+
+        Assert.Equal((640, 480), encoder.OutputSize);
+        Assert.Equal([(480, 640, 640, 480), (1280, 360, 640, 480)], composer.Fits);
+        Assert.All(encoder.Samples, sample => Assert.Equal((640, 480), sample.Size));
+    }
+
+    [Fact]
     public async Task FinishesCaptionFadeAndWritesBlankTailAfterCaptureCompletes()
     {
         string path = NewOutputPath();
@@ -98,7 +118,7 @@ public sealed class RecordingWriterTests
             {
                 using (sample.Surface)
                 {
-                    Samples.Add(new RecordedSample(sample.Timestamp, sample.CaptionOpacity));
+                    Samples.Add(new RecordedSample(sample.Timestamp, sample.CaptionOpacity, (sample.Surface.Width, sample.Surface.Height)));
                 }
             }
 
@@ -122,6 +142,8 @@ public sealed class RecordingWriterTests
     {
         public List<CropRectangle> Crops { get; } = [];
 
+        public List<(int SourceWidth, int SourceHeight, int Width, int Height)> Fits { get; } = [];
+
         public List<string> Captions { get; } = [];
 
         public IRecordingSurface Copy(IRecordingSurface surface) => new FakeSurface(surface.Width, surface.Height);
@@ -130,6 +152,12 @@ public sealed class RecordingWriterTests
         {
             Crops.Add(crop);
             return new FakeSurface(crop.Width, crop.Height);
+        }
+
+        public IRecordingSurface Fit(IRecordingSurface surface, int width, int height)
+        {
+            Fits.Add((surface.Width, surface.Height, width, height));
+            return new FakeSurface(width, height);
         }
 
         public IRecordingCaption CreateCaption(int width, int height, string text)
@@ -168,5 +196,5 @@ public sealed class RecordingWriterTests
         }
     }
 
-    private sealed record RecordedSample(TimeSpan Timestamp, float CaptionOpacity);
+    private sealed record RecordedSample(TimeSpan Timestamp, float CaptionOpacity, (int Width, int Height) Size);
 }
