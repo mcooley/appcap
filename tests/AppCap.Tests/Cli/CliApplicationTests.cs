@@ -40,6 +40,19 @@ public sealed class CliApplicationTests
     }
 
     [Fact]
+    public async Task TargetLaunchParsesOptionalName()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        Assert.Equal(ExitCodes.Success, await CliApplication.RunAsync(["target", "launch", "notepad"], Catalog, runner, console));
+        Assert.Equal("notepad", Assert.IsType<TargetLaunchCommand>(runner.Command).Target!.Name);
+
+        Assert.Equal(ExitCodes.Success, await CliApplication.RunAsync(["target", "launch"], Catalog, runner, console));
+        Assert.Null(Assert.IsType<TargetLaunchCommand>(runner.Command).Target);
+    }
+
+    [Fact]
     public async Task TargetDetachAndListParse()
     {
         RecordingRunner runner = new();

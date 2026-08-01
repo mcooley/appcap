@@ -95,6 +95,55 @@ public sealed class TargetSessionControllerTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task LaunchRequiresAttachmentAndDelegatesToResolver()
+    {
+        TestTargetResolver resolver = new();
+        TargetSessionController controller = new(new TargetCatalog([First, Second]), new TestWindowFinder(), resolver);
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(new FakeWorkerHost(), cts.Token);
+        try
+        {
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() => controller.LaunchAsync(First, cts.Token));
+            Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+            Assert.Contains("not attached", exception.Message, StringComparison.Ordinal);
+            Assert.Null(resolver.RequestedTarget);
+
+            await RecordingIpc.AttachTargetAsync(CreateRequest(First), cts.Token);
+            Assert.Equal(First, await controller.LaunchAsync(target: null, cts.Token));
+            Assert.Equal(First, resolver.RequestedTarget);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
+    [Fact]
+    public async Task LaunchRejectsTargetThatIsAlreadyRunning()
+    {
+        TestWindowFinder windowFinder = new();
+        windowFinder.SetRunning(First);
+        TestTargetResolver resolver = new();
+        TargetSessionController controller = new(new TargetCatalog([First, Second]), windowFinder, resolver);
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));
+        Task<bool> server = RecordingIpc.RunServerAsync(new FakeWorkerHost(), cts.Token);
+        try
+        {
+            await RecordingIpc.AttachTargetAsync(CreateRequest(First), cts.Token);
+
+            AppCapException exception = await Assert.ThrowsAsync<AppCapException>(() => controller.LaunchAsync(First, cts.Token));
+
+            Assert.Equal(ExitCodes.UsageError, exception.ExitCode);
+            Assert.Equal("Target 'first' is already running.", exception.Message);
+            Assert.Null(resolver.RequestedTarget);
+        }
+        finally
+        {
+            await ShutdownAsync(cts, server);
+        }
+    }
+
     private static TargetDescriptorRequest CreateRequest(TargetApplication target) =>
         new() { TargetName = target.Name, ApplicationId = target.Id };
 
@@ -122,8 +171,13 @@ public sealed class TargetSessionControllerTests : IDisposable
 
     private sealed class TestTargetResolver : ITargetResolver
     {
-        public Task<TargetWindow> ResolveAsync(TargetApplication target, CancellationToken cancellationToken) =>
-            Task.FromResult(new TargetWindow(target, 123));
+        public TargetApplication? RequestedTarget { get; private set; }
+
+        public Task<TargetWindow> ResolveAsync(TargetApplication target, CancellationToken cancellationToken)
+        {
+            RequestedTarget = target;
+            return Task.FromResult(new TargetWindow(target, 123));
+        }
 
         public Task<TargetWindow> ResolveRunningAsync(TargetApplication target, CancellationToken cancellationToken) =>
             Task.FromResult(new TargetWindow(target, 123));

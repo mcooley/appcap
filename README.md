@@ -32,13 +32,16 @@ targets. Operational commands never launch a closed app.
 
 ```powershell
 appcap target list
+appcap target launch calculator
 appcap target detach calculator
 ```
 
 `target list` shows every configured target and independently reports whether it is
-attached and whether its app is running. Detaching cancels any recording, removes input
-devices, and stops the worker after the last target is detached. Closing an app does not
-detach its target.
+attached and whether its app is running. `target launch` starts an attached target that
+was attached with `--no-launch` or whose app has closed; it uses the only attached target
+when the name is omitted. Detaching cancels any recording, removes input devices, and
+stops the worker after the last target is detached. Closing an app does not detach its
+target.
 
 ### Configuration file
 

@@ -32,6 +32,8 @@ public sealed class CommandRunner : ICommandRunner
         {
             case TargetAttachCommand targetAttach:
                 return await AttachTargetAsync(targetAttach, cancellationToken).ConfigureAwait(false);
+            case TargetLaunchCommand targetLaunch:
+                return await LaunchTargetAsync(targetLaunch, cancellationToken).ConfigureAwait(false);
             case TargetDetachCommand targetDetach:
                 return await DetachTargetAsync(targetDetach, cancellationToken).ConfigureAwait(false);
             case TargetListCommand:
@@ -87,6 +89,12 @@ public sealed class CommandRunner : ICommandRunner
     {
         TargetApplication target = await GetTargetSessionController().AttachAsync(command.Target, command.Launch, cancellationToken).ConfigureAwait(false);
         return new CommandExecutionResult($"Attached target '{target.Name}'.");
+    }
+
+    private async Task<CommandExecutionResult> LaunchTargetAsync(TargetLaunchCommand command, CancellationToken cancellationToken)
+    {
+        TargetApplication target = await GetTargetSessionController().LaunchAsync(command.Target, cancellationToken).ConfigureAwait(false);
+        return new CommandExecutionResult($"Launched target '{target.Name}'.");
     }
 
     private async Task<CommandExecutionResult> DetachTargetAsync(TargetDetachCommand command, CancellationToken cancellationToken)

@@ -152,6 +152,25 @@ public static class CommandParser
                     !parseResult.GetValue(noLaunchOption)),
                 cancellationToken));
 
+        Argument<string?> launchTargetNameArgument = new("name")
+        {
+            Description = "Specifies a configured target name.",
+            HelpName = "name",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        if (catalog is not null)
+        {
+            launchTargetNameArgument.CompletionSources.Add(_ => catalog.Applications.Select(application => application.Name));
+            launchTargetNameArgument.Validators.Add(result => ValidateTargetName(result, catalog));
+        }
+
+        Command targetLaunchCommand = new("launch", "Launches an attached target application.");
+        targetLaunchCommand.Add(launchTargetNameArgument);
+        targetLaunchCommand.SetAction((parseResult, cancellationToken) =>
+            executeCommandAsync(
+                new TargetLaunchCommand(ResolveOptionalTarget(parseResult.GetValue(launchTargetNameArgument), catalog)),
+                cancellationToken));
+
         Argument<string?> detachTargetNameArgument = new("name")
         {
             Description = "Specifies a configured target name.",
@@ -176,6 +195,7 @@ public static class CommandParser
 
         Command targetCommand = new("target", "Manages target sessions.");
         targetCommand.Add(targetAttachCommand);
+        targetCommand.Add(targetLaunchCommand);
         targetCommand.Add(targetDetachCommand);
         targetCommand.Add(targetListCommand);
 

@@ -24,6 +24,12 @@ internal sealed class McpTools
         CancellationToken cancellationToken = default) =>
         RunAsync(new TargetAttachCommand(ResolveTarget(target), launch), cancellationToken);
 
+    [McpServerTool(Name = "target_launch", OpenWorld = false), Description("Launches an attached target application if it is not running.")]
+    public Task<string> TargetLaunchAsync(
+        [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(new TargetLaunchCommand(ResolveTarget(target)), cancellationToken);
+
     [McpServerTool(Name = "target_detach", OpenWorld = false), Description("Detaches a target, cancelling its recording and removing its input devices.")]
     public Task<string> TargetDetachAsync(
         [Description("Configured target name. Uses the only attached target when omitted.")] string? target = null,

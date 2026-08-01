@@ -93,6 +93,9 @@ public sealed class McpToolsTests
         Assert.Equal(Target, attach.Target);
         Assert.False(attach.Launch);
 
+        await tools.TargetLaunchAsync("target");
+        Assert.Equal(Target, Assert.IsType<TargetLaunchCommand>(runner.Command).Target);
+
         await tools.TargetDetachAsync();
         Assert.Null(Assert.IsType<TargetDetachCommand>(runner.Command).Target);
 

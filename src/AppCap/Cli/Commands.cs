@@ -4,6 +4,8 @@ public abstract record AppCapCommand;
 
 public sealed record TargetAttachCommand(TargetApplication? Target, bool Launch) : AppCapCommand;
 
+public sealed record TargetLaunchCommand(TargetApplication? Target) : AppCapCommand;
+
 public sealed record TargetDetachCommand(TargetApplication? Target) : AppCapCommand;
 
 public sealed record TargetListCommand : AppCapCommand;

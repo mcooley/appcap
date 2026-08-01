@@ -58,6 +58,18 @@ public sealed class TargetSessionController : ITargetSessionController
         return selected;
     }
 
+    public async Task<TargetApplication> LaunchAsync(TargetApplication? target, CancellationToken cancellationToken)
+    {
+        TargetApplication selected = await ResolveAsync(target, cancellationToken).ConfigureAwait(false);
+        if (windowFinder.TryFindWindow(selected) is not null)
+        {
+            throw new AppCapException($"Target '{selected.Name}' is already running.", ExitCodes.UsageError);
+        }
+
+        _ = await targetResolver.ResolveAsync(selected, cancellationToken).ConfigureAwait(false);
+        return selected;
+    }
+
     public async Task<IReadOnlyList<TargetSessionStatus>> ListAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<TargetDescriptorRequest> attached = await RecordingIpc.ListTargetsAsync(cancellationToken).ConfigureAwait(false);
