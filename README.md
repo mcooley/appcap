@@ -190,3 +190,7 @@ Captions appear immediately, remain visible for 3 seconds, then fade out. You ca
 `failed`, or `never-started`, together with the output path or failure message when
 applicable. The latest outcome is retained until another recording starts or the target
 is detached.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
