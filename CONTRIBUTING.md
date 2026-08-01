@@ -67,20 +67,7 @@ finally {
 }
 ```
 
-`APPCAP_E2E_EXECUTABLE` can point to any previously-built `appcap.exe`; setting it is the only requirement to enable the E2E tests. Before running, the test harness copies the executable (and its published output directory) to a fresh temporary directory alongside its own `appcap.config.json` (defining the `testapp` and `testapp-secondary` targets), so the original publish directory is left untouched.
-
-The MCP conformance script uses the same previously-built executable and does not build
-AppCap itself:
-
-```powershell
-$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'appcap.exe'
-try {
-	powershell -ExecutionPolicy Bypass -File tests/run-mcp-conformance.ps1
-}
-finally {
-	Remove-Item Env:\APPCAP_E2E_EXECUTABLE -ErrorAction SilentlyContinue
-}
-```
+`APPCAP_E2E_EXECUTABLE` can point to any previously-built `appcap.exe`. Before running, the test harness copies the executable (and its published output directory) to a fresh temporary directory alongside its own `appcap.config.json` (defining the `testapp` and `testapp-secondary` targets), so the original publish directory is left untouched.
 
 The repository includes a packaged NativeAOT Win32 test app in `tests/AppCap.TestApp`. It exposes deterministic colored regions for pointer, keyboard, screenshot, and coordinate assertions. The packaging script writes one unsigned MSIX package to `artifacts/testapp` with primary and secondary applications that share the same executable but have distinct application IDs and AUMIDs. The `-Install` switch registers the generated package layout for local developer testing. The executable's window title includes the active manifest application ID.
 

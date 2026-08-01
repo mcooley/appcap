@@ -14,8 +14,17 @@ This is the developer backlog for `appcap`. Keep this file focused on implementa
 
 ## Input
 
-- Timing controller for keyboard and pointer input.
-- Add drag support.
+- Timing controller for keyboard and pointer input. Address issue where touchpad gestures sometimes do not converge today
+- Add complete mouse/pointer capabilities:
+   - middle and right click
+   - double-click (with awareness of system accessibility settings)
+   - coordinate click and keyboard (shift-click)
+   - scrolling
+   - injection of well-known touchpad gestures via API
+   - drag and release
+   - replay of complex pointer movements
+   - click within a bounding box, as an alternative to clicking an exact point
+- Make sure we're doing the best we can to avoid input into non-target windows--cancel input if target loses foreground, etc.
 - Add gamepad input support.
 - Add broader key-name coverage for `appcap type` if real workflows need it.
 
@@ -41,3 +50,9 @@ See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔
 ## Platform Support
 
 - Generalize to cover other platforms, like MacOS
+- Ensure we fail gracefully on older versions of Windows that lack some of the input-injection and audio capture APIs we use
+
+## General
+
+- Add CI build and release
+- Add E2E test run in CI
