@@ -34,7 +34,7 @@ internal static class E2EHelpers
         string? executablePath = GetExecutablePathEnvironmentVariable();
         if (string.IsNullOrWhiteSpace(executablePath))
         {
-            throw new InvalidOperationException("Set APPCAP_E2E_EXECUTABLE to a previously-built AppCap.exe path to run end-to-end tests.");
+            throw new InvalidOperationException("Set APPCAP_E2E_EXECUTABLE to a previously-built appcap.exe path to run end-to-end tests.");
         }
 
         return executablePath;

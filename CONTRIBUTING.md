@@ -13,7 +13,7 @@ Useful commands from the repository root:
 
 ```powershell
 dotnet build src/AppCap/AppCap.csproj
-dotnet test appcap.slnx
+dotnet test AppCap.slnx
 dotnet publish src/AppCap/AppCap.csproj -c Release -r win-x64 -o publish/win-x64
 ```
 
@@ -37,7 +37,7 @@ Typical validation sequence:
 ```powershell
 dotnet build src/AppCap/AppCap.csproj
 dotnet test tests/AppCap.Tests/AppCap.Tests.csproj --filter <RelevantTestClassOrName>
-dotnet test appcap.slnx
+dotnet test AppCap.slnx
 dotnet publish src/AppCap/AppCap.csproj -c Release -r win-x64 -o publish/win-x64
 ```
 
@@ -58,7 +58,7 @@ $publishDirectory = Join-Path $PWD 'publish/win-x64'
 dotnet publish src/AppCap/AppCap.csproj -c Release -r win-x64 -o $publishDirectory
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed.' }
 
-$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'AppCap.exe'
+$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'appcap.exe'
 try {
 	dotnet test tests/AppCap.E2ETests/AppCap.E2ETests.csproj
 }
@@ -73,7 +73,7 @@ The MCP conformance script uses the same previously-built executable and does no
 AppCap itself:
 
 ```powershell
-$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'AppCap.exe'
+$env:APPCAP_E2E_EXECUTABLE = Join-Path $publishDirectory 'appcap.exe'
 try {
 	powershell -ExecutionPolicy Bypass -File tests/run-mcp-conformance.ps1
 }

@@ -95,7 +95,7 @@ public sealed class E2EFactAttribute : FactAttribute
     {
         if (string.IsNullOrWhiteSpace(E2EHelpers.GetExecutablePathEnvironmentVariable()))
         {
-            Skip = "Set APPCAP_E2E_EXECUTABLE to a previously-built AppCap.exe path to run end-to-end tests.";
+            Skip = "Set APPCAP_E2E_EXECUTABLE to a previously-built appcap.exe path to run end-to-end tests.";
         }
     }
 }
