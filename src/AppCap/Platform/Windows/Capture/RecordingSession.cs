@@ -1,41 +1,28 @@
-using AppCap.Protocol.Target;
-using global::Windows.Graphics.Capture;
-using global::Windows.Graphics.DirectX;
-using global::Windows.Graphics.DirectX.Direct3D11;
-using global::Windows.Win32;
-using global::Windows.Win32.Foundation;
-
 namespace AppCap.Windows;
 
-// Owns the graphics-capture lifetime and forwards captured frames to RecordingWriter,
-// which independently composes captions/crops and writes the final recording.
+// Owns recording output while an attached target's graphics capture continues independently.
 internal sealed class RecordingSession : IDisposable
 {
-    private readonly TargetWindow window;
-    private readonly RecordingCaptureTarget recordingTarget;
+    private readonly AttachedCaptureSession captureSession;
     private readonly RecordingWriter writer;
-    private readonly CancellationTokenSource captureCancellation;
+    private readonly CancellationToken cancellationToken;
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TaskCompletionSource finalizationCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TimeSpan timeLimit;
     private readonly bool includeCursor;
-    private Task captureTask = Task.CompletedTask;
     private Task completion = Task.CompletedTask;
     private int stopRequested;
     private bool disposed;
     private int completionReason;
 
-    public RecordingSession(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
+    public RecordingSession(AttachedCaptureSession captureSession, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
     {
-        this.window = window;
+        this.captureSession = captureSession;
         this.timeLimit = timeLimit;
         this.includeCursor = includeCursor;
-        recordingTarget = new RecordingCaptureTarget(window);
+        this.cancellationToken = cancellationToken;
         writer = new RecordingWriter(outputPath, crop);
-        captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
-
-    public ITarget Target => recordingTarget;
 
     public Task Completion => completion;
 
@@ -45,20 +32,17 @@ internal sealed class RecordingSession : IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!GraphicsCaptureSession.IsSupported())
+        captureSession.AttachWriter(writer, includeCursor);
+        try
         {
-            throw new AppCapException("Recording capture is not supported on this Windows version.");
+            await writer.StartAsync(captureSession.Width, captureSession.Height, this.cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            captureSession.DetachWriter(writer);
+            throw;
         }
 
-        GraphicsCaptureItem item = GraphicsCaptureItemFactory.CreateForWindow(window.Handle);
-        if (item.Size.Width <= 0 || item.Size.Height <= 0)
-        {
-            throw new AppCapException("Target window could not be captured.");
-        }
-
-        Task writerStart = writer.StartAsync(item.Size.Width, item.Size.Height, captureCancellation.Token);
-        captureTask = CaptureAsync(item, captureCancellation.Token);
-        await writerStart.ConfigureAwait(false);
         completion = CompleteAsync();
         _ = StopAtTimeLimitAsync();
     }
@@ -72,12 +56,7 @@ internal sealed class RecordingSession : IDisposable
         {
             Volatile.Write(ref completionReason, (int)reason);
             CancelTimeLimit();
-            if (discard)
-            {
-                captureCancellation.Cancel();
-            }
-
-            writer.CompleteFrames();
+            captureSession.DetachWriter(writer);
         }
 
         try
@@ -103,99 +82,7 @@ internal sealed class RecordingSession : IDisposable
         disposed = true;
         CancelTimeLimit();
         timeLimitCancellation.Dispose();
-        captureCancellation.Dispose();
         writer.Dispose();
-    }
-
-    private async Task CaptureAsync(GraphicsCaptureItem item, CancellationToken cancellationToken)
-    {
-        using Direct3DDeviceLease deviceLease = Direct3DDeviceFactory.CreateDevice();
-        using Direct3D11CaptureFramePool framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
-            deviceLease.Device,
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            2,
-            item.Size);
-        using GraphicsCaptureSession session = framePool.CreateCaptureSession(item);
-        int captureWidth = item.Size.Width;
-        int captureHeight = item.Size.Height;
-
-        void OnFrameArrived(Direct3D11CaptureFramePool sender, object args)
-        {
-            Direct3D11CaptureFrame? frame = sender.TryGetNextFrame();
-            if (frame is null)
-            {
-                return;
-            }
-
-            if (frame.ContentSize.Width != captureWidth || frame.ContentSize.Height != captureHeight)
-            {
-                captureWidth = frame.ContentSize.Width;
-                captureHeight = frame.ContentSize.Height;
-                frame.Dispose();
-                if (captureWidth > 0 && captureHeight > 0)
-                {
-                    sender.Recreate(
-                        deviceLease.Device,
-                        DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                        2,
-                        new global::Windows.Graphics.SizeInt32(captureWidth, captureHeight));
-                }
-
-                return;
-            }
-
-            recordingTarget.OfferFrame(frame);
-            writer.AddFrame(new Direct3DRecordingFrame(frame));
-        }
-
-        void OnClosed(GraphicsCaptureItem sender, object args)
-        {
-            CompleteForAppClosure();
-        }
-
-        using CancellationTokenSource windowMonitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task windowMonitor = MonitorTargetWindowAsync(windowMonitorCancellation.Token);
-        framePool.FrameArrived += OnFrameArrived;
-        item.Closed += OnClosed;
-        try
-        {
-            session.IsCursorCaptureEnabled = includeCursor;
-            session.StartCapture();
-            await writer.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (captureCancellation.IsCancellationRequested)
-        {
-        }
-        finally
-        {
-            await windowMonitorCancellation.CancelAsync().ConfigureAwait(false);
-            await windowMonitor.ConfigureAwait(false);
-            framePool.FrameArrived -= OnFrameArrived;
-            item.Closed -= OnClosed;
-            writer.CompleteFrames();
-        }
-    }
-
-    private async Task MonitorTargetWindowAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (PInvoke.IsWindow(new HWND(window.Handle)))
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
-            }
-
-            CompleteForAppClosure();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    private void CompleteForAppClosure()
-    {
-        Interlocked.CompareExchange(ref completionReason, (int)RecordingCompletionReason.AppClosed, (int)RecordingCompletionReason.Unknown);
-        writer.CompleteFrames();
     }
 
     private async Task CompleteAsync()
@@ -203,9 +90,9 @@ internal sealed class RecordingSession : IDisposable
         Exception? failure = null;
         try
         {
-            await Task.WhenAll(captureTask, writer.Completion).ConfigureAwait(false);
+            await writer.Completion.ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (captureCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (CompletionReason == RecordingCompletionReason.Cancelled)
         {
         }
         catch (Exception exception)

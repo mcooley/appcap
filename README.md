@@ -80,7 +80,7 @@ If the configuration file is missing or malformed, `appcap` prints a friendly er
 ### Input devices
 
 Targets expose the input devices they support. The Windows target currently supports
-`touch`, `keyboard`, and `mouse`. Input commands automatically attach the device they need:
+`touch`, `keyboard`, and `mouse`.
 
 ```powershell
 appcap --target calculator inputdevice list
@@ -100,7 +100,7 @@ appcap --target calculator tap 151,684
 appcap --target calculator tap --device touch -x 151 -y 684
 ```
 
-`tap` attaches a `touch` input device.
+`tap` requires the target's `touch` input device to be attached.
 
 ### Mouse
 
@@ -112,7 +112,7 @@ appcap --target calculator mouseto 151,684
 appcap --target calculator click --device mouse -x 151 -y 684
 ```
 
-Both commands attach a `mouse` input device.
+Both commands require the target's `mouse` input device to be attached.
 
 ### Type
 
@@ -129,7 +129,7 @@ Bracketed keys use WebDriver/Playwright-style key names, for example `[Escape]`,
 
 Use `[[` and `]]` for literal square brackets.
 
-`type` attaches and uses `keyboard` by default. `--device` explicitly selects it.
+`type` uses the attached `keyboard` device by default. `--device` explicitly selects it.
 
 ### Resize
 

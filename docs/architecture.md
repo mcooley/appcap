@@ -53,11 +53,14 @@ Lifecycle:
   multiple targets/recordings concurrently**. A client that needs a worker first pings
   the well-known per-user pipe; if no worker answers it takes a launch lock, starts one
   worker process, and waits for it to become reachable. Subsequent clients reuse the same
-  worker. Each attached target owns its input-device state, active recording, and latest
-  recording outcome.
+  worker. Each attached target owns a continuously running graphics-capture session,
+  input-device state, active recording, and latest recording outcome. If an attached
+  target is stopped, the worker starts capture when its application is launched later.
 - Attachment owns worker lifetime. Recording and input commands never launch or keep the
   worker alive. Detaching a target cancels its recording and removes its devices; the
   worker exits immediately after acknowledging the last detach.
+- The Windows target automatically attaches its touch, keyboard, and mouse devices when
+  the target is attached.
 - Attached and running are independent states. Closing an app ends an active recording
   but leaves its target attached. Operational commands do not relaunch it; a later
   explicit detach ends the session.
@@ -133,22 +136,21 @@ caption and writes the output file.
 
 1. **Client** selects an attached target and sends a `screenshot` request over the named
   pipe.
-2. If recording is active, the **worker** serves the screenshot from its existing capture
-  session. Otherwise it captures a frame through the attached target session.
+2. The **worker** serves the screenshot from the target's attachment-owned capture
+  session, whether or not frames are currently being saved to a recording.
 3. The worker renders the caption, writes the PNG, and acknowledges the request.
 
 ### `appcap record start` / `stop`
 
 1. **Client** selects an attached target, sends `recording.start`, and exits once the
   already-running worker confirms the recording is live.
-2. The **worker** creates a `RecordingSession` for that target, running an in-proc
-   **`RecordingCaptureTarget`** whose surfaces feed directly into the media encoder (the
-   optimized in-proc frame handoff). One worker can host many such sessions at once; it
-   serves `recording.status` / `recording.stop` / `recording.cancel` / `screenshot`
-   (each keyed by target name) over its pipe.
-3. A later **client** can stop, cancel, or query status. Timeout and app closure finalize
-  the recording without detaching the target; the latest outcome remains queryable until
-  another recording starts or the target is detached.
+2. The **worker** creates a `RecordingSession` that subscribes a media writer to the
+   target's already-running `AttachedCaptureSession`. The in-proc target hands GPU
+   surfaces directly to the writer without a copy.
+3. A later **client** can stop, cancel, or query status. Stop, cancel, and timeout detach
+  and finalize only the writer; graphics capture keeps running until target detach or app
+  closure. The latest recording outcome remains queryable until another recording starts
+  or the target is detached.
 
 ## Not yet built (TODO)
 
@@ -169,5 +171,5 @@ further restructuring.
 | Shared protocol primitives | `src/AppCap/Protocol` (`JsonRpc`, `JsonRpcCodec`, `DuplexStream`, `InProcDuplexTransport`) |
 | Client↔Worker protocol | `src/AppCap/Protocol` (`WorkerProtocol`), `RecordingIpc` |
 | Worker↔Target protocol | `src/AppCap/Protocol` (`TargetProtocol`, `TargetServer`, `ITarget`), documented in `docs/target-protocol.md` |
-| Worker (encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`WorkerHost`, `RecordingSession`, `ScreenshotWriter`, `CaptionRenderer`) |
+| Worker (capture, encoding, rendering, file I/O) | `src/AppCap/Platform/Windows/Capture` (`WorkerHost`, `AttachedCaptureSession`, `RecordingSession`, `ScreenshotWriter`, `CaptionRenderer`) |
 | Target (OS capture + input) | `src/AppCap/Platform/Windows/Capture` (`WindowCaptureTarget`, `RecordingCaptureTarget`, Graphics Capture / D3D helpers), `src/AppCap/Platform/Windows/Input` |

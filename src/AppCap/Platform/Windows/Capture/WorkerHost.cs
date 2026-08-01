@@ -80,7 +80,7 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         return true;
     }
 
-    public Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
+    public async Task AttachTargetAsync(TargetDescriptorRequest target, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(target);
         cancellationToken.ThrowIfCancellationRequested();
@@ -95,8 +95,17 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
 
         Volatile.Write(ref shutdownAfterResponse, 0);
         recordingStatuses[target.TargetName] = new RecordingStatusResult();
-
-        return Task.CompletedTask;
+        try
+        {
+            await session.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            targetSessions.TryRemove(new KeyValuePair<string, WorkerTargetSession>(target.TargetName, session));
+            recordingStatuses.TryRemove(target.TargetName, out _);
+            session.Dispose();
+            throw;
+        }
     }
 
     public async Task<bool> DetachTargetAsync(string targetName, CancellationToken cancellationToken)
@@ -157,13 +166,14 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     {
         ArgumentNullException.ThrowIfNull(request);
         MarkActivity();
-        _ = GetAttachedTargetSession(request.TargetName);
+        WorkerTargetSession targetSession = GetAttachedTargetSession(request.TargetName);
         if (request.TimeLimitSeconds <= 0)
         {
             throw new AppCapException("Recording time limit must be greater than zero.");
         }
 
-        RecordingSession session = new(BuildWindow(request), request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), request.IncludeCursor, request.Crop, shutdown.Token);
+        AttachedCaptureSession captureSession = await targetSession.GetCaptureSessionAsync(BuildWindow(request), cancellationToken).ConfigureAwait(false);
+        RecordingSession session = new(captureSession, request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), request.IncludeCursor, request.Crop, shutdown.Token);
         if (!sessions.TryAdd(request.TargetName, session))
         {
             session.Dispose();
@@ -266,16 +276,8 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         ArgumentNullException.ThrowIfNull(request);
         MarkActivity();
 
-        CapturedFrame frame;
-        if (sessions.TryGetValue(request.TargetName, out RecordingSession? session))
-        {
-            frame = await session.Target.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            WorkerTargetSession targetSession = GetAttachedTargetSession(request.TargetName);
-            frame = await targetSession.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
-        }
+        WorkerTargetSession targetSession = GetAttachedTargetSession(request.TargetName);
+        CapturedFrame frame = await targetSession.CaptureFrameAsync(request.IncludeCursor, cancellationToken).ConfigureAwait(false);
 
         await ScreenshotWriter.WriteAsync(frame, request.OutputPath, request.Caption, request.Crop, cancellationToken).ConfigureAwait(false);
         MarkActivity();

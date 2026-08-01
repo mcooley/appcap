@@ -57,7 +57,6 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     {
         string path = Context.NewOutputPath("recording.mp4");
 
-        AttachInputDevices("touch");
         Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         Context.Run("record", "start", "--output", path).AssertSuccess();
         await Task.Delay(500);
@@ -207,7 +206,6 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     {
         string path = Context.NewOutputPath("closed-window.mp4");
 
-        AttachInputDevices("touch");
         Context.Run("resize", "--width", "640", "--height", "480").AssertSuccess();
         Context.Run("record", "start", "--output", path).AssertSuccess();
         await Task.Delay(500);

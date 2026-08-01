@@ -11,7 +11,11 @@ internal sealed class WorkerTargetSession : IDisposable
     private readonly IInputInjector inputInjector;
     private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly SemaphoreSlim gate = new(1, 1);
-    private InputDeviceAttachmentRegistry? attachments;
+    private readonly SemaphoreSlim captureGate = new(1, 1);
+    private readonly CancellationTokenSource lifetimeCancellation = new();
+    private readonly InputDeviceAttachmentRegistry attachments;
+    private AttachedCaptureSession? captureSession;
+    private Task captureMonitor = Task.CompletedTask;
     private bool disposed;
 
     public WorkerTargetSession(
@@ -26,9 +30,25 @@ internal sealed class WorkerTargetSession : IDisposable
         this.windowController = windowController;
         this.inputInjector = inputInjector;
         this.keyboardInputInjector = keyboardInputInjector;
+        attachments = new InputDeviceAttachmentRegistry(application.Name, WindowsTargetHost.SupportedInputDeviceTypes);
+        foreach (InputDeviceType deviceType in WindowsTargetHost.SupportedInputDeviceTypes)
+        {
+            attachments.Attach(deviceType);
+        }
     }
 
     public TargetApplication Application => application;
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        TargetWindow? window = await TryResolveRunningAsync(cancellationToken).ConfigureAwait(false);
+        if (window is not null)
+        {
+            _ = await EnsureCaptureSessionAsync(window, cancellationToken).ConfigureAwait(false);
+        }
+
+        captureMonitor = MonitorCaptureAsync(lifetimeCancellation.Token);
+    }
 
     public Task AttachInputDeviceAsync(InputDeviceType deviceType, CancellationToken cancellationToken) =>
         ExecuteAsync((client, token) => client.AttachInputDeviceAsync(deviceType, token), cancellationToken);
@@ -40,43 +60,26 @@ internal sealed class WorkerTargetSession : IDisposable
         ExecuteAsync((client, token) => client.ListInputDevicesAsync(token), cancellationToken);
 
     public Task TapAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync(
-            async (client, token) =>
-            {
-                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Touch, token).ConfigureAwait(false);
-                await client.TapAsync(x, y, deviceType, token).ConfigureAwait(false);
-            },
-            cancellationToken);
+        ExecuteAsync((client, token) => client.TapAsync(x, y, deviceType, token), cancellationToken);
 
     public Task MoveMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync(
-            async (client, token) =>
-            {
-                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Mouse, token).ConfigureAwait(false);
-                await client.MoveMouseAsync(x, y, deviceType, token).ConfigureAwait(false);
-            },
-            cancellationToken);
+        ExecuteAsync((client, token) => client.MoveMouseAsync(x, y, deviceType, token), cancellationToken);
 
     public Task ClickMouseAsync(int x, int y, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync(
-            async (client, token) =>
-            {
-                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Mouse, token).ConfigureAwait(false);
-                await client.ClickMouseAsync(x, y, deviceType, token).ConfigureAwait(false);
-            },
-            cancellationToken);
+        ExecuteAsync((client, token) => client.ClickMouseAsync(x, y, deviceType, token), cancellationToken);
 
     public Task TypeAsync(string textAndKeys, InputDeviceType? deviceType, CancellationToken cancellationToken) =>
-        ExecuteAsync(
-            async (client, token) =>
-            {
-                await EnsureInputDeviceAttachedAsync(client, InputDeviceType.Keyboard, token).ConfigureAwait(false);
-                await client.TypeAsync(textAndKeys, deviceType, token).ConfigureAwait(false);
-            },
-            cancellationToken);
+        ExecuteAsync((client, token) => client.TypeAsync(textAndKeys, deviceType, token), cancellationToken);
 
-    public Task<CapturedFrame> CaptureFrameAsync(bool includeCursor, CancellationToken cancellationToken) =>
-        ExecuteAsync((client, token) => client.CaptureFrameAsync(includeCursor, token), cancellationToken);
+    public async Task<CapturedFrame> CaptureFrameAsync(bool includeCursor, CancellationToken cancellationToken)
+    {
+        TargetWindow window = await targetResolver.ResolveRunningAsync(application, cancellationToken).ConfigureAwait(false);
+        AttachedCaptureSession capture = await GetCaptureSessionAsync(window, cancellationToken).ConfigureAwait(false);
+        return await capture.CaptureFrameAsync(includeCursor, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<AttachedCaptureSession> GetCaptureSessionAsync(TargetWindow window, CancellationToken cancellationToken) =>
+        EnsureCaptureSessionAsync(window, cancellationToken);
 
     public void Dispose()
     {
@@ -86,7 +89,90 @@ internal sealed class WorkerTargetSession : IDisposable
         }
 
         disposed = true;
+        lifetimeCancellation.Cancel();
+        try
+        {
+            captureMonitor.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (lifetimeCancellation.IsCancellationRequested)
+        {
+        }
+
+        captureSession?.Dispose();
+        lifetimeCancellation.Dispose();
+        captureGate.Dispose();
         gate.Dispose();
+    }
+
+    private async Task MonitorCaptureAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                try
+                {
+                    TargetWindow? window = await TryResolveRunningAsync(cancellationToken).ConfigureAwait(false);
+                    if (window is not null)
+                    {
+                        _ = await EnsureCaptureSessionAsync(window, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task<TargetWindow?> TryResolveRunningAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await targetResolver.ResolveRunningAsync(application, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AppCapException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<AttachedCaptureSession> EnsureCaptureSessionAsync(TargetWindow window, CancellationToken cancellationToken)
+    {
+        await captureGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (captureSession is not null &&
+                captureSession.WindowHandle == window.Handle &&
+                !captureSession.Completion.IsCompleted)
+            {
+                return captureSession;
+            }
+
+            captureSession?.Dispose();
+            AttachedCaptureSession replacement = new(window, lifetimeCancellation.Token);
+            try
+            {
+                await replacement.StartAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                replacement.Dispose();
+                throw;
+            }
+
+            captureSession = replacement;
+            return replacement;
+        }
+        finally
+        {
+            captureGate.Release();
+        }
     }
 
     private async Task ExecuteAsync(Func<TargetClient, CancellationToken, Task> operation, CancellationToken cancellationToken)
@@ -118,7 +204,6 @@ internal sealed class WorkerTargetSession : IDisposable
 
     private async Task<InProcTargetProtocolSession> CreateProtocolSessionAsync(TargetWindow window, CancellationToken cancellationToken)
     {
-        attachments ??= new InputDeviceAttachmentRegistry(application.Name, WindowsTargetHost.SupportedInputDeviceTypes);
         WindowsTargetHost host = new(window, windowController, inputInjector, keyboardInputInjector, attachments);
         InProcTargetProtocolSession session = new(host, cancellationToken);
         try
@@ -134,21 +219,6 @@ internal sealed class WorkerTargetSession : IDisposable
         }
     }
 
-    private static async Task EnsureInputDeviceAttachedAsync(TargetClient client, InputDeviceType requiredDevice, CancellationToken cancellationToken)
-    {
-        IReadOnlyList<InputDeviceStatus> devices = await client.ListInputDevicesAsync(cancellationToken).ConfigureAwait(false);
-        InputDeviceStatus? device = devices.FirstOrDefault(candidate => candidate.DeviceType == requiredDevice);
-        if (device is null)
-        {
-            throw new AppCapException($"Input device '{requiredDevice}' is not supported by the target.");
-        }
-
-        if (!device.Attached)
-        {
-            await client.AttachInputDeviceAsync(requiredDevice, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
     private void ValidateStatus(TargetStatusResult status)
     {
         if (!string.Equals(status.ProtocolVersion, TargetProtocol.Version, StringComparison.Ordinal))
@@ -157,7 +227,7 @@ internal sealed class WorkerTargetSession : IDisposable
                 $"Target '{application.Name}' speaks target protocol {status.ProtocolVersion}, but the worker requires {TargetProtocol.Version}.");
         }
 
-        string[] expected = attachments?.SupportedDevices.Select(static device => device.ToString()).ToArray() ?? [];
+        string[] expected = attachments.SupportedDevices.Select(static device => device.ToString()).ToArray();
         string[] actual = status.SupportedInputDevices ?? [];
         if (!actual.SequenceEqual(expected, StringComparer.Ordinal))
         {
