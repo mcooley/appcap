@@ -9,7 +9,7 @@ public sealed class TypeCommandE2ETests : E2ETestBase
         Context.Run("type", "[End][Enter]AppCap test").AssertSuccess();
 
         string title = E2EHelpers.WaitForTestAppWindowTitle(TimeSpan.FromSeconds(5));
-        Assert.Equal("AppCap E2E Test App | typed:\\rAppCap test", title);
+        Assert.Equal("AppCap E2E Test App (App) | typed:\\rAppCap test", title);
         Assert.Contains("keyboard: attached", Context.Run("inputdevice", "list").StandardOutput, StringComparison.Ordinal);
     }
 }

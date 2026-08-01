@@ -23,7 +23,7 @@ internal static class E2EHelpers
         string deployedExecutablePath = DeployExecutable(fullExecutablePath);
 
         string outputDirectory = Path.Combine(Path.GetTempPath(), "appcap-e2e", Guid.NewGuid().ToString("N"));
-        return new E2EContext("testapp", deployedExecutablePath, outputDirectory);
+        return new E2EContext("testapp", "testapp-secondary", deployedExecutablePath, outputDirectory);
     }
 
     internal static string? GetExecutablePathEnvironmentVariable() =>
@@ -168,6 +168,34 @@ internal static class E2EHelpers
         }
 
         throw new TimeoutException($"The E2E test app did not report typed text within {timeout.TotalSeconds} seconds. Last window title: '{title}'.");
+    }
+
+    public static IReadOnlyList<string> WaitForTestAppWindowTitles(int expectedCount, TimeSpan timeout)
+    {
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        string[] titles = [];
+        while (stopwatch.Elapsed < timeout)
+        {
+            titles = Process.GetProcessesByName("AppCap.TestApp")
+                .Select(process =>
+                {
+                    using (process)
+                    {
+                        return process.MainWindowTitle;
+                    }
+                })
+                .Where(title => !string.IsNullOrEmpty(title))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            if (titles.Length == expectedCount)
+            {
+                return titles;
+            }
+
+            Thread.Sleep(50);
+        }
+
+        throw new TimeoutException($"Expected {expectedCount} E2E test app windows within {timeout.TotalSeconds} seconds. Last titles: '{string.Join("', '", titles)}'.");
     }
 
     public static void CloseAppCapProcesses()

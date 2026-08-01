@@ -7,9 +7,10 @@ public sealed class E2EContext
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(40);
     private static readonly Lazy<E2EContext> CurrentContext = new(E2EHelpers.CreateContext);
 
-    internal E2EContext(string target, string executablePath, string outputDirectory)
+    internal E2EContext(string target, string secondaryTarget, string executablePath, string outputDirectory)
     {
         Target = target;
+        SecondaryTarget = secondaryTarget;
         ExecutablePath = executablePath;
         OutputDirectory = outputDirectory;
     }
@@ -17,6 +18,8 @@ public sealed class E2EContext
     public static E2EContext Current => CurrentContext.Value;
 
     public string Target { get; }
+
+    public string SecondaryTarget { get; }
 
     public string ExecutablePath { get; }
 
@@ -29,8 +32,11 @@ public sealed class E2EContext
     }
 
     internal CommandResult Run(params string[] arguments)
+        => RunFor(Target, arguments);
+
+    internal CommandResult RunFor(string target, params string[] arguments)
     {
-        List<string> fullArguments = ["--target", Target];
+        List<string> fullArguments = ["--target", target];
         fullArguments.AddRange(arguments);
         return RunCore(fullArguments);
     }

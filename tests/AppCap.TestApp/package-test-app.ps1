@@ -22,6 +22,7 @@ if (-not $makeAppx) {
 
 Get-Process -Name 'AppCap.TestApp' -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item $publishDirectory, $packageDirectory -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item (Join-Path $OutputDirectory 'package-secondary'), (Join-Path $OutputDirectory 'AppCap.E2ETestApp.Secondary.msix') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $publishDirectory, $packageDirectory, $assetsDirectory -Force | Out-Null
 
 dotnet publish $projectPath -c $Configuration -r win-x64 -o $publishDirectory
@@ -61,9 +62,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($Install) {
+    foreach ($identityName in 'AppCap.E2ETestApp', 'AppCap.E2ETestApp.Secondary') {
+        Get-AppxPackage -Name $identityName | Remove-AppxPackage
+    }
     Add-AppxPackage -Register (Join-Path $packageDirectory 'AppxManifest.xml') -ForceApplicationShutdown
 }
 
 Write-Host "MSIX: $msixPath"
 Write-Host "Package layout: $packageDirectory"
-Write-Host 'Target: testapp'
+Write-Host 'Targets: testapp, testapp-secondary'

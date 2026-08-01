@@ -3,6 +3,28 @@ namespace AppCap.E2ETests;
 public sealed class TargetSessionCommandE2ETests : E2ETestBase
 {
     [E2EFact]
+    public void CommandsSelectBetweenMultiplePackagedTargets()
+    {
+        Context.RunUnscoped("target", "attach", Context.SecondaryTarget).AssertSuccess();
+
+        CommandResult list = Context.RunUnscoped("target", "list");
+        list.AssertSuccess();
+        Assert.Contains($"{Context.Target}: attached, running", list.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains($"{Context.SecondaryTarget}: attached, running", list.StandardOutput, StringComparison.Ordinal);
+
+        CommandResult ambiguous = Context.RunUnscoped("screenshot", "--output", Context.NewOutputPath("ambiguous.png"));
+        Assert.NotEqual(0, ambiguous.ExitCode);
+        Assert.Contains("Multiple targets are attached", ambiguous.StandardError, StringComparison.Ordinal);
+
+        Context.RunFor(Context.Target, "type", "primary").AssertSuccess();
+        Context.RunFor(Context.SecondaryTarget, "type", "secondary").AssertSuccess();
+
+        IReadOnlyList<string> titles = E2EHelpers.WaitForTestAppWindowTitles(2, TimeSpan.FromSeconds(5));
+        Assert.Contains("AppCap E2E Test App (App) | typed:primary", titles);
+        Assert.Contains("AppCap E2E Test App (Secondary) | typed:secondary", titles);
+    }
+
+    [E2EFact]
     public void LaunchStartsAttachedStoppedTarget()
     {
         Context.RunUnscoped("target", "detach").AssertSuccess();

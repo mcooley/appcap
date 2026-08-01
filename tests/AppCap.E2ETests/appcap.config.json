@@ -2,6 +2,9 @@
     "targets": {
         "testapp": {
             "id": "appcap.e2etestapp_6tt0djjd38yk4!app"
+        },
+        "testapp-secondary": {
+            "id": "appcap.e2etestapp_6tt0djjd38yk4!secondary"
         }
     }
 }

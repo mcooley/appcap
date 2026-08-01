@@ -41,7 +41,3 @@ See [`docs/architecture.md`](docs/architecture.md) for the client ↔ worker ↔
 ## Platform Support
 
 - Generalize to cover other platforms, like MacOS
-
-## Testing
-
-- Expand the purpose-built E2E test app with multiple package identities, so targeting behavior can be tested across multiple installed apps

@@ -15,7 +15,7 @@ internal static unsafe class WindowApplication
     private const int InitialWidth = 640;
     private const int InitialHeight = 480;
     private const string ClassName = "AppCapE2ETestAppWindow";
-    private const string Title = "AppCap E2E Test App";
+    private static readonly string Title = $"AppCap E2E Test App ({GetCurrentApplicationId()})";
 
     private static readonly delegate* unmanaged[Stdcall]<HWND, uint, WPARAM, LPARAM, LRESULT> WindowProcedure = &WndProc;
     private static readonly RECT ClickRect = new() { left = 80, top = 80, right = 220, bottom = 180 };
@@ -218,6 +218,27 @@ internal static unsafe class WindowApplication
     private static int GetY(LPARAM lParam) => unchecked((short)(((nint)lParam.Value >> 16) & 0xffff));
 
     private static COLORREF Rgb(byte red, byte green, byte blue) => new(red | ((uint)green << 8) | ((uint)blue << 16));
+
+    private static string GetCurrentApplicationId()
+    {
+        uint length = 0;
+        WIN32_ERROR result = PInvoke.GetCurrentApplicationUserModelId(ref length, []);
+        if (result != WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER || length == 0)
+        {
+            return "Unpackaged";
+        }
+
+        char[] buffer = new char[length];
+        result = PInvoke.GetCurrentApplicationUserModelId(ref length, buffer);
+        if (result != WIN32_ERROR.NO_ERROR)
+        {
+            return "Unpackaged";
+        }
+
+        string applicationUserModelId = new(buffer, 0, Math.Max(0, checked((int)length) - 1));
+        int separator = applicationUserModelId.LastIndexOf('!');
+        return separator >= 0 ? applicationUserModelId[(separator + 1)..] : applicationUserModelId;
+    }
 }
 
 internal static unsafe class GameInputProbe
