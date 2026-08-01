@@ -5,7 +5,7 @@
 ## Installing
 `appcap` is a single-file executable. Copy the exe to your target machine along with an `appcap.config.json` file (see [Targets](#targets)) and run it from the command line.
 
-### MCP Server
+## MCP Server
 
 AppCap provides a stdio Model Context Protocol server with the same operations as
 the CLI. Configure an MCP host to launch `appcap mcp`. Like the rest of the cli, configure targets with an
@@ -21,7 +21,7 @@ Start a session by attaching a configured target:
 appcap target attach calculator
 ```
 
-Attachment starts the shared worker process. By default it also launches the app when it
+Attaching starts a session for the target. By default it also launches the app when it
 is not running. Use `--no-launch` to attach session state without launching it. If the
 name is omitted, AppCap chooses the first running configured target, or the first
 configured target when none are running, and prints the selected name.
@@ -39,9 +39,8 @@ appcap target detach calculator
 `target list` shows every configured target and independently reports whether it is
 attached and whether its app is running. `target launch` starts an attached target that
 was attached with `--no-launch` or whose app has closed; it uses the only attached target
-when the name is omitted. Detaching cancels any recording, removes input devices, and
-stops the worker after the last target is detached. Closing an app does not detach its
-target.
+when the name is omitted. Detaching cancels any recording and removes input devices.
+Closing an app does not detach its target.
 
 ### Configuration file
 

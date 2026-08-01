@@ -142,7 +142,7 @@ public static class CommandParser
         {
             Description = "Attaches the target without launching its application.",
         };
-        Command targetAttachCommand = new("attach", "Attaches a configured target and starts the worker.");
+        Command targetAttachCommand = new("attach", "Attaches a configured target.");
         targetAttachCommand.Add(targetNameArgument);
         targetAttachCommand.Add(noLaunchOption);
         targetAttachCommand.SetAction((parseResult, cancellationToken) =>
@@ -428,7 +428,7 @@ public static class CommandParser
 
         Command recordCommand = new(
             "record",
-            "Starts, stops, or cancels recording the target window. The cursor is included by default. Captions fade out after 3 seconds. Recordings stop and save after 30 minutes by default.");
+            "Starts, stops, or cancels recording the target window.");
         recordCommand.Add(recordStartCommand);
         recordCommand.Add(recordStopCommand);
         recordCommand.Add(recordCancelCommand);

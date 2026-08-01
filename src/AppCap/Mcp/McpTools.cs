@@ -17,26 +17,26 @@ internal sealed class McpTools
         this.executor = executor;
     }
 
-    [McpServerTool(Name = "target_attach", OpenWorld = false), Description("Attaches a configured target and starts the worker.")]
+    [McpServerTool(Name = "target_attach", OpenWorld = false), Description("Attaches a configured target.")]
     public Task<string> TargetAttachAsync(
         [Description("Configured target name. Auto-selects a running target when omitted.")] string? target = null,
         [Description("Launches the target application when true.")] bool launch = true,
         CancellationToken cancellationToken = default) =>
         RunAsync(new TargetAttachCommand(ResolveTarget(target), launch), cancellationToken);
 
-    [McpServerTool(Name = "target_launch", OpenWorld = false), Description("Launches an attached target application if it is not running.")]
+    [McpServerTool(Name = "target_launch", OpenWorld = false), Description("Launches an attached target application.")]
     public Task<string> TargetLaunchAsync(
         [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new TargetLaunchCommand(ResolveTarget(target)), cancellationToken);
 
-    [McpServerTool(Name = "target_detach", OpenWorld = false), Description("Detaches a target, cancelling its recording and removing its input devices.")]
+    [McpServerTool(Name = "target_detach", OpenWorld = false), Description("Detaches a configured target.")]
     public Task<string> TargetDetachAsync(
         [Description("Configured target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
         RunAsync(new TargetDetachCommand(ResolveTarget(target)), cancellationToken);
 
-    [McpServerTool(Name = "target_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists all configured targets and their attachment and running state.")]
+    [McpServerTool(Name = "target_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists configured targets and their attachment and running state.")]
     public Task<string> TargetListAsync(CancellationToken cancellationToken = default) =>
         RunAsync(new TargetListCommand(), cancellationToken);
 
@@ -54,7 +54,7 @@ internal sealed class McpTools
         CancellationToken cancellationToken = default) =>
         RunAsync(new InputDeviceRemoveCommand(ResolveTarget(target), ParseDevice(device)), cancellationToken);
 
-    [McpServerTool(Name = "inputdevice_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists supported input devices and their attachment state for a configured target application.")]
+    [McpServerTool(Name = "inputdevice_list", ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Lists the target's supported input devices and attachment state.")]
     public Task<string> InputDeviceListAsync(
         [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         CancellationToken cancellationToken = default) =>
@@ -123,7 +123,7 @@ internal sealed class McpTools
         return RunAsync(new TypeCommand(ResolveTarget(target), textAndKeys, actions, ParseOptionalDevice(device)), cancellationToken);
     }
 
-    [McpServerTool(Name = "resize", Idempotent = true, OpenWorld = false), Description("Resizes the target window to the requested outer dimensions in pixels.")]
+    [McpServerTool(Name = "resize", Idempotent = true, OpenWorld = false), Description("Resizes the target window.")]
     public Task<string> ResizeAsync(
         [Description("Window width in pixels.")] int width,
         [Description("Window height in pixels.")] int height,
