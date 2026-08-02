@@ -181,6 +181,7 @@ internal sealed class McpTools
         [Description("Attached target name. Uses the only attached target when omitted.")] string? target = null,
         [Description("Recording time limit in minutes. Fractional minutes are supported.")] double timeLimitMinutes = 30,
         [Description("Excludes the cursor from the recording when true.")] bool excludeCursor = false,
+        [Description("Excludes audio from the target when true.")] bool noAudio = false,
         [Description("Optional crop rectangle in target-window pixels.")] CropRectangle? crop = null,
         CancellationToken cancellationToken = default)
     {
@@ -195,7 +196,8 @@ internal sealed class McpTools
                 ValidateExtension(outputPath, ".mp4", "recording"),
                 TimeSpan.FromMinutes(timeLimitMinutes),
                 excludeCursor,
-                crop),
+                crop,
+                noAudio),
             cancellationToken);
     }
 

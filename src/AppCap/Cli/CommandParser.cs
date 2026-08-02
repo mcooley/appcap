@@ -371,11 +371,16 @@ public static class CommandParser
             HelpName = "x,y,width,height",
         };
         recordCropOption.CustomParser = ParseRecordingCrop;
+        Option<bool> noAudioOption = new("--no-audio")
+        {
+            Description = "Excludes audio from the target.",
+        };
         Command recordStartCommand = new("start", "Starts recording the target window.");
         recordStartCommand.Add(recordOutputOption);
         recordStartCommand.Add(recordTimeLimitOption);
         recordStartCommand.Add(excludeCursorOption);
         recordStartCommand.Add(recordCropOption);
+        recordStartCommand.Add(noAudioOption);
         recordStartCommand.SetAction((parseResult, cancellationToken) =>
             executeCommandAsync(
                 new RecordStartCommand(
@@ -383,7 +388,8 @@ public static class CommandParser
                     parseResult.GetRequiredValue(recordOutputOption),
                     parseResult.GetValue(recordTimeLimitOption),
                     parseResult.GetValue(excludeCursorOption),
-                    parseResult.GetValue(recordCropOption)),
+                    parseResult.GetValue(recordCropOption),
+                    parseResult.GetValue(noAudioOption)),
                 cancellationToken));
 
         Command recordStopCommand = new("stop", "Stops recording the target window.");

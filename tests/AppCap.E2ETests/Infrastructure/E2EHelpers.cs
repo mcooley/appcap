@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.Text;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Media.Editing;
+using Windows.Media.MediaProperties;
+using Windows.Media.Transcoding;
 using Windows.Storage.FileProperties;
 using Windows.Storage;
 using Windows.Storage.Streams;
@@ -94,7 +97,19 @@ internal static class E2EHelpers
         MediaComposition composition = new();
         composition.Clips.Add(clip);
         VideoInfo info = await ReadVideoInfoAsync(path).ConfigureAwait(false);
-        using IRandomAccessStream stream = await composition.GetThumbnailAsync(position, info.Width, info.Height, VideoFramePrecision.NearestFrame).AsTask().ConfigureAwait(false);
+        IRandomAccessStream thumbnail;
+        try
+        {
+            thumbnail = await composition.GetThumbnailAsync(position, info.Width, info.Height, VideoFramePrecision.NearestFrame).AsTask().ConfigureAwait(false);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                $"Could not read video frame at {position}; clip duration is {clip.OriginalDuration}, composition duration is {composition.Duration}, and file video duration is {info.Duration}.",
+                exception);
+        }
+
+        using IRandomAccessStream stream = thumbnail;
         BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream).AsTask().ConfigureAwait(false);
         PixelDataProvider data = await decoder.GetPixelDataAsync(
             BitmapPixelFormat.Bgra8,
@@ -119,6 +134,39 @@ internal static class E2EHelpers
         MediaComposition composition = new();
         composition.Clips.Add(clip);
         return composition.Duration;
+    }
+
+    public static async Task<AudioInfo> ReadAudioInfoAsync(string path)
+    {
+        StorageFile source = await StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
+        MediaClip clip = await MediaClip.CreateFromFileAsync(source).AsTask().ConfigureAwait(false);
+        if (clip.EmbeddedAudioTracks.Count == 0)
+        {
+            return new AudioInfo(false, TimeSpan.Zero, 0, 0);
+        }
+
+        string decodeDirectory = Path.Combine(Path.GetTempPath(), "appcap-e2e-audio");
+        Directory.CreateDirectory(decodeDirectory);
+        string decodedPath = Path.Combine(decodeDirectory, Guid.NewGuid().ToString("N") + ".wav");
+        StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(decodeDirectory).AsTask().ConfigureAwait(false);
+        StorageFile destination = await folder.CreateFileAsync(Path.GetFileName(decodedPath), CreationCollisionOption.ReplaceExisting).AsTask().ConfigureAwait(false);
+        try
+        {
+            MediaTranscoder transcoder = new();
+            MediaEncodingProfile profile = MediaEncodingProfile.CreateWav(AudioEncodingQuality.High);
+            PrepareTranscodeResult prepared = await transcoder.PrepareFileTranscodeAsync(source, destination, profile).AsTask().ConfigureAwait(false);
+            if (!prepared.CanTranscode)
+            {
+                throw new InvalidOperationException($"Could not decode recording audio: {prepared.FailureReason}.");
+            }
+
+            await prepared.TranscodeAsync().AsTask().ConfigureAwait(false);
+            return AnalyzePcmWave(decodedPath);
+        }
+        finally
+        {
+            File.Delete(decodedPath);
+        }
     }
 
     public static async Task<ImagePixels> ReadPixelsAsync(string path)
@@ -236,4 +284,66 @@ internal static class E2EHelpers
         {
         }
     }
+
+    private static AudioInfo AnalyzePcmWave(string path)
+    {
+        using FileStream stream = File.OpenRead(path);
+        using BinaryReader reader = new(stream, Encoding.ASCII);
+        if (ReadFourCc(reader) != "RIFF" || reader.ReadUInt32() > stream.Length || ReadFourCc(reader) != "WAVE")
+        {
+            throw new InvalidDataException("Decoded audio is not a valid RIFF WAVE file.");
+        }
+
+        ushort formatTag = 0;
+        ushort bitsPerSample = 0;
+        uint averageBytesPerSecond = 0;
+        byte[]? audioData = null;
+        while (stream.Position + 8 <= stream.Length)
+        {
+            string chunkId = ReadFourCc(reader);
+            uint chunkSize = reader.ReadUInt32();
+            long nextChunk = checked(stream.Position + chunkSize + (chunkSize & 1));
+            if (nextChunk > stream.Length)
+            {
+                throw new InvalidDataException("Decoded audio contains an invalid WAVE chunk.");
+            }
+
+            if (chunkId == "fmt ")
+            {
+                formatTag = reader.ReadUInt16();
+                _ = reader.ReadUInt16();
+                _ = reader.ReadUInt32();
+                averageBytesPerSecond = reader.ReadUInt32();
+                _ = reader.ReadUInt16();
+                bitsPerSample = reader.ReadUInt16();
+            }
+            else if (chunkId == "data")
+            {
+                audioData = reader.ReadBytes(checked((int)chunkSize));
+            }
+
+            stream.Position = nextChunk;
+        }
+
+        if (formatTag != 1 || bitsPerSample != 16 || averageBytesPerSecond == 0 || audioData is null)
+        {
+            throw new InvalidDataException($"Expected decoded 16-bit PCM audio, found format {formatTag} with {bitsPerSample} bits per sample.");
+        }
+
+        double squaredSum = 0;
+        double peak = 0;
+        int sampleCount = audioData.Length / sizeof(short);
+        for (int index = 0; index < sampleCount; index++)
+        {
+            double sample = BitConverter.ToInt16(audioData, index * sizeof(short)) / 32768.0;
+            squaredSum += sample * sample;
+            peak = Math.Max(peak, Math.Abs(sample));
+        }
+
+        double rootMeanSquare = sampleCount == 0 ? 0 : Math.Sqrt(squaredSum / sampleCount);
+        TimeSpan duration = TimeSpan.FromSeconds((double)audioData.Length / averageBytesPerSecond);
+        return new AudioInfo(true, duration, rootMeanSquare, peak);
+    }
+
+    private static string ReadFourCc(BinaryReader reader) => Encoding.ASCII.GetString(reader.ReadBytes(4));
 }

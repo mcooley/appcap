@@ -4,7 +4,7 @@ public sealed record RecordingStatus(string Status, string? OutputPath = null, s
 
 public interface IRecordingController
 {
-    Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken);
+    Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, bool includeAudio, CropRectangle? crop, CancellationToken cancellationToken);
 
     Task AddCaptionAsync(TargetApplication target, string caption, CancellationToken cancellationToken);
 

@@ -32,7 +32,13 @@ public sealed record ResizeCommand(TargetApplication? Target, int Width, int Hei
 
 public sealed record ScreenshotCommand(TargetApplication? Target, string OutputPath, bool ExcludeCursor, string? Caption, CropRectangle? Crop = null) : AppCapCommand;
 
-public sealed record RecordStartCommand(TargetApplication? Target, string OutputPath, TimeSpan TimeLimit, bool ExcludeCursor, CropRectangle? Crop = null) : AppCapCommand;
+public sealed record RecordStartCommand(
+    TargetApplication? Target,
+    string OutputPath,
+    TimeSpan TimeLimit,
+    bool ExcludeCursor,
+    CropRectangle? Crop = null,
+    bool NoAudio = false) : AppCapCommand;
 
 public sealed record RecordCaptionCommand(TargetApplication? Target, string Caption) : AppCapCommand;
 

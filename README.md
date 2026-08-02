@@ -165,6 +165,7 @@ Starts or stops a recording session for the target.
 ```powershell
 appcap --target calculator record start --output recording.mp4
 appcap --target calculator record start --crop 160,0,320,240 --output recording.mp4
+appcap --target calculator record start --no-audio --output silent-recording.mp4
 appcap --target calculator record stop
 appcap --target calculator record status
 ```
@@ -176,7 +177,12 @@ the limit in minutes (fractional minutes are supported):
 appcap --target calculator record start --output recording.mp4 --time-limit 90
 ```
 
-Use `--exclude-cursor` with `record start` to omit the cursor from a recording. Use `--crop x,y,width,height` to save a smaller portion of the frame.
+Recordings include audio rendered by the target process and its child processes by
+default. Audio from unrelated applications and microphone input is not included. Use
+`--no-audio` to create a video-only MP4.
+
+Use `--exclude-cursor` with `record start` to omit the cursor from a recording. Use
+`--crop x,y,width,height` to save a smaller portion of the frame.
 
 Add a caption overlay to an active recording with `record caption`:
 

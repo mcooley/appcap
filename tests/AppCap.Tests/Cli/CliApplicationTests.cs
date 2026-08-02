@@ -523,6 +523,7 @@ public sealed class CliApplicationTests
         Assert.Equal("recording.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(30), command.TimeLimit);
         Assert.False(command.ExcludeCursor);
+        Assert.False(command.NoAudio);
     }
 
     [Fact]
@@ -540,6 +541,23 @@ public sealed class CliApplicationTests
         Assert.Equal(ExitCodes.Success, exitCode);
         RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
         Assert.True(command.ExcludeCursor);
+    }
+
+    [Fact]
+    public async Task RecordStartParsesNoAudio()
+    {
+        RecordingRunner runner = new();
+        using TestConsole console = new();
+
+        int exitCode = await CliApplication.RunAsync(
+            ["record", "start", "--output", "recording.mp4", "--no-audio"],
+            Catalog,
+            runner,
+            console);
+
+        Assert.Equal(ExitCodes.Success, exitCode);
+        RecordStartCommand command = Assert.IsType<RecordStartCommand>(runner.Command);
+        Assert.True(command.NoAudio);
     }
 
     [Fact]

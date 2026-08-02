@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using AppCap;
 using AppCap.Protocol.Target;
 using AppCap.Protocol.Worker;
+using global::Windows.Win32;
+using global::Windows.Win32.Foundation;
 
 namespace AppCap.Windows;
 
@@ -173,7 +175,26 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         }
 
         AttachedCaptureSession captureSession = await targetSession.GetCaptureSessionAsync(BuildWindow(request), cancellationToken).ConfigureAwait(false);
-        RecordingSession session = new(captureSession, request.OutputPath, TimeSpan.FromSeconds(request.TimeLimitSeconds), request.IncludeCursor, request.Crop, shutdown.Token);
+        int? processId = null;
+        if (request.IncludeAudio)
+        {
+            if (PInvoke.GetWindowThreadProcessId(new HWND((nint)request.WindowHandle), out uint targetProcessId) == 0 || targetProcessId == 0)
+            {
+                throw new AppCapException("Target process could not be resolved for audio capture.");
+            }
+
+            processId = checked((int)targetProcessId);
+        }
+
+        RecordingSession session = new(
+            captureSession,
+            request.OutputPath,
+            TimeSpan.FromSeconds(request.TimeLimitSeconds),
+            request.IncludeCursor,
+            request.IncludeAudio,
+            processId,
+            request.Crop,
+            shutdown.Token);
         if (!sessions.TryAdd(request.TargetName, session))
         {
             session.Dispose();

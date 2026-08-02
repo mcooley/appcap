@@ -79,6 +79,19 @@ public sealed class McpToolsTests
         Assert.Equal("capture.mp4", command.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(12.5), command.TimeLimit);
         Assert.True(command.ExcludeCursor);
+        Assert.False(command.NoAudio);
+    }
+
+    [Fact]
+    public async Task RecordStartMapsNoAudio()
+    {
+        TestRunner runner = new();
+        using McpCommandExecutor executor = new(runner);
+        McpTools tools = new(new TargetCatalog([Target]), executor);
+
+        await tools.RecordStartAsync("capture.mp4", noAudio: true);
+
+        Assert.True(Assert.IsType<RecordStartCommand>(runner.Command).NoAudio);
     }
 
     [Fact]

@@ -9,7 +9,7 @@ namespace AppCap.Windows;
 // processes on the same desktop) and passes the descriptor to the worker.
 public sealed class RecordingController : IRecordingController
 {
-    public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
+    public async Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, bool includeAudio, CropRectangle? crop, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -36,6 +36,7 @@ public sealed class RecordingController : IRecordingController
             OutputPath = fullOutputPath,
             TimeLimitSeconds = checked((int)timeLimit.TotalSeconds),
             IncludeCursor = includeCursor,
+            IncludeAudio = includeAudio,
             Crop = crop,
         };
 

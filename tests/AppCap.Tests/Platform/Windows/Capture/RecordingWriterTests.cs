@@ -21,7 +21,7 @@ public sealed class RecordingWriterTests
         Assert.Equal((320, 240), encoder.OutputSize);
         Assert.Equal(2, composer.Crops.Count);
         Assert.All(composer.Crops, crop => Assert.Equal(new CropRectangle(10, 20, 320, 240), crop));
-        Assert.Equal([TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(750)], encoder.Samples.Select(sample => sample.Timestamp));
+        Assert.Equal([TimeSpan.Zero, TimeSpan.FromMilliseconds(500)], encoder.Samples.Select(sample => sample.Timestamp));
     }
 
     [Fact]
@@ -102,23 +102,97 @@ public sealed class RecordingWriterTests
         Assert.Contains("did not produce an output file", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task AlignsAudioToFirstVideoFrameAndPadsToVideoEnd()
+    {
+        string path = NewOutputPath();
+        FakeRecordingEncoder encoder = new(writeOutput: true);
+        using RecordingWriter writer = new(path, crop: null, encoder, new FakeSurfaceComposer(), includeAudio: true);
+        TimeSpan origin = TimeSpan.FromSeconds(10);
+        writer.AddAudioPacket(new RecordingAudioPacket(
+            Enumerable.Repeat((byte)7, 882 * ProcessLoopbackAudioCapture.BytesPerFrame).ToArray(),
+            882,
+            origin - TimeSpan.FromMilliseconds(10),
+            Discontinuous: false,
+            TimestampError: false));
+        writer.AddFrame(new FakeFrame(640, 480, origin));
+        writer.AddFrame(new FakeFrame(640, 480, origin + TimeSpan.FromMilliseconds(20)));
+        writer.CompleteFrames();
+        writer.CompleteAudio();
+
+        await writer.StartAsync(640, 480, CancellationToken.None);
+        await writer.StopAsync(discard: false, CancellationToken.None);
+
+        Assert.Equal([TimeSpan.Zero, TimeSpan.FromMilliseconds(20)], encoder.Samples.Select(sample => sample.Timestamp));
+        Assert.Equal(2, encoder.AudioSamples.Count);
+        Assert.Equal(TimeSpan.Zero, encoder.AudioSamples[0].Timestamp);
+        Assert.Equal(441u, encoder.AudioSamples[0].FrameCount);
+        Assert.All(encoder.AudioSamples[0].Data, value => Assert.Equal(7, value));
+        Assert.Equal(TimeSpan.FromMilliseconds(10), encoder.AudioSamples[1].Timestamp);
+        Assert.Equal(441u, encoder.AudioSamples[1].FrameCount);
+        Assert.All(encoder.AudioSamples[1].Data, value => Assert.Equal(0, value));
+    }
+
+    [Fact]
+    public async Task ExtendsStaticVideoToAudioEnd()
+    {
+        string path = NewOutputPath();
+        FakeRecordingEncoder encoder = new(writeOutput: true);
+        using RecordingWriter writer = new(path, crop: null, encoder, new FakeSurfaceComposer(), includeAudio: true);
+        TimeSpan origin = TimeSpan.FromSeconds(10);
+        writer.AddFrame(new FakeFrame(640, 480, origin));
+        writer.AddAudioPacket(new RecordingAudioPacket(
+            new byte[882 * ProcessLoopbackAudioCapture.BytesPerFrame],
+            882,
+            origin,
+            Discontinuous: false,
+            TimestampError: false));
+        writer.CompleteFrames();
+        writer.CompleteAudio();
+
+        await writer.StartAsync(640, 480, CancellationToken.None);
+        await writer.StopAsync(discard: false, CancellationToken.None);
+
+        Assert.Equal([TimeSpan.Zero, TimeSpan.FromMilliseconds(20)], encoder.Samples.Select(sample => sample.Timestamp));
+        RecordingAudioSample audio = Assert.Single(encoder.AudioSamples);
+        Assert.Equal(TimeSpan.Zero, audio.Timestamp);
+        Assert.Equal(TimeSpan.FromMilliseconds(20), audio.Duration);
+    }
+
     private static string NewOutputPath() => Path.Combine(Path.GetTempPath(), "appcap-writer-tests", Guid.NewGuid().ToString("N"), "recording.mp4");
 
     private sealed class FakeRecordingEncoder(bool writeOutput) : IRecordingEncoder
     {
         public List<RecordedSample> Samples { get; } = [];
 
+        public List<RecordingAudioSample> AudioSamples { get; } = [];
+
         public (int Width, int Height) OutputSize { get; private set; }
 
-        public Task EncodeAsync(string outputPath, int width, int height, Func<RecordingSample?> getNextSample, CancellationToken cancellationToken) => Task.Run(() =>
+        public Task EncodeAsync(
+            string outputPath,
+            int width,
+            int height,
+            Func<RecordingSample?> getNextVideoSample,
+            Func<RecordingAudioSample?>? getNextAudioSample,
+            CancellationToken cancellationToken) => Task.Run(() =>
         {
             OutputSize = (width, height);
             RecordingSample? sample;
-            while ((sample = getNextSample()) is not null)
+            while ((sample = getNextVideoSample()) is not null)
             {
                 using (sample.Surface)
                 {
                     Samples.Add(new RecordedSample(sample.Timestamp, sample.CaptionOpacity, (sample.Surface.Width, sample.Surface.Height)));
+                }
+            }
+
+            if (getNextAudioSample is not null)
+            {
+                RecordingAudioSample? audioSample;
+                while ((audioSample = getNextAudioSample()) is not null)
+                {
+                    AudioSamples.Add(audioSample);
                 }
             }
 

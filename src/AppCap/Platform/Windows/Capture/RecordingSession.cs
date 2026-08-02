@@ -5,6 +5,7 @@ internal sealed class RecordingSession : IDisposable
 {
     private readonly AttachedCaptureSession captureSession;
     private readonly RecordingWriter writer;
+    private readonly ProcessLoopbackAudioCapture? audioCapture;
     private readonly CancellationToken cancellationToken;
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TaskCompletionSource finalizationCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -15,13 +16,25 @@ internal sealed class RecordingSession : IDisposable
     private bool disposed;
     private int completionReason;
 
-    public RecordingSession(AttachedCaptureSession captureSession, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
+    public RecordingSession(
+        AttachedCaptureSession captureSession,
+        string outputPath,
+        TimeSpan timeLimit,
+        bool includeCursor,
+        bool includeAudio,
+        int? processId,
+        CropRectangle? crop,
+        CancellationToken cancellationToken)
     {
         this.captureSession = captureSession;
         this.timeLimit = timeLimit;
         this.includeCursor = includeCursor;
         this.cancellationToken = cancellationToken;
-        writer = new RecordingWriter(outputPath, crop);
+        writer = new RecordingWriter(outputPath, crop, includeAudio);
+        if (includeAudio)
+        {
+            audioCapture = new ProcessLoopbackAudioCapture(processId ?? throw new ArgumentNullException(nameof(processId)));
+        }
     }
 
     public Task Completion => completion;
@@ -33,13 +46,40 @@ internal sealed class RecordingSession : IDisposable
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         captureSession.AttachWriter(writer, includeCursor);
+        (int width, int height) = captureSession.RefreshSize();
+        Task writerStart = writer.StartAsync(width, height, this.cancellationToken);
         try
         {
-            await writer.StartAsync(captureSession.Width, captureSession.Height, this.cancellationToken).ConfigureAwait(false);
+            if (audioCapture is not null)
+            {
+                await audioCapture.StartAsync(writer.AddAudioPacket, this.cancellationToken).ConfigureAwait(false);
+            }
+
+            await writerStart.ConfigureAwait(false);
         }
         catch
         {
             captureSession.DetachWriter(writer);
+            try
+            {
+                if (audioCapture is not null)
+                {
+                    await audioCapture.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception)
+            {
+            }
+
+            writer.CompleteAudio();
+            try
+            {
+                await writer.StopAsync(discard: true, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+            }
+
             throw;
         }
 
@@ -56,18 +96,10 @@ internal sealed class RecordingSession : IDisposable
         {
             Volatile.Write(ref completionReason, (int)reason);
             CancelTimeLimit();
-            captureSession.DetachWriter(writer);
+            await FinalizeAsync(discard, cancellationToken).ConfigureAwait(false);
         }
 
-        try
-        {
-            await writer.StopAsync(discard, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            finalizationCompleted.TrySetResult();
-        }
-
+        await finalizationCompleted.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
@@ -82,41 +114,91 @@ internal sealed class RecordingSession : IDisposable
         disposed = true;
         CancelTimeLimit();
         timeLimitCancellation.Dispose();
+        audioCapture?.Dispose();
         writer.Dispose();
     }
 
     private async Task CompleteAsync()
     {
-        Exception? failure = null;
+        List<Task> completionSources = [captureSession.Completion, writer.Completion];
+        if (audioCapture is not null)
+        {
+            completionSources.Add(audioCapture.Completion);
+        }
+
+        Task trigger = await Task.WhenAny(completionSources).ConfigureAwait(false);
+        Exception? triggerFailure = null;
         try
         {
-            await writer.Completion.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (CompletionReason == RecordingCompletionReason.Cancelled)
-        {
+            await trigger.ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            failure = exception;
+            triggerFailure = exception;
         }
 
         if (Interlocked.CompareExchange(ref stopRequested, 1, 0) == 0)
         {
-            Interlocked.CompareExchange(ref completionReason, (int)RecordingCompletionReason.AppClosed, (int)RecordingCompletionReason.Unknown);
-            try
-            {
-                await writer.StopAsync(discard: false, CancellationToken.None).ConfigureAwait(false);
-            }
-            finally
-            {
-                finalizationCompleted.TrySetResult();
-            }
+            RecordingCompletionReason reason = ReferenceEquals(trigger, captureSession.Completion) && triggerFailure is null
+                ? RecordingCompletionReason.AppClosed
+                : RecordingCompletionReason.Unknown;
+            Interlocked.CompareExchange(ref completionReason, (int)reason, (int)RecordingCompletionReason.Unknown);
+            CancelTimeLimit();
+            await FinalizeAsync(discard: triggerFailure is not null, CancellationToken.None).ConfigureAwait(false);
         }
 
         await finalizationCompleted.Task.ConfigureAwait(false);
-        if (failure is not null)
+        if (triggerFailure is not null)
         {
-            throw failure;
+            throw triggerFailure;
+        }
+
+        try
+        {
+            await writer.Completion.ConfigureAwait(false);
+            if (audioCapture is not null)
+            {
+                await audioCapture.Completion.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (CompletionReason == RecordingCompletionReason.Cancelled)
+        {
+        }
+    }
+
+    private async Task FinalizeAsync(bool discard, CancellationToken cancellationToken)
+    {
+        Exception? producerFailure = null;
+        captureSession.DetachWriter(writer);
+        try
+        {
+            if (audioCapture is not null)
+            {
+                await audioCapture.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (Exception exception)
+        {
+            producerFailure = exception;
+            discard = true;
+        }
+        finally
+        {
+            writer.CompleteAudio();
+        }
+
+        try
+        {
+            await writer.StopAsync(discard, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            finalizationCompleted.TrySetResult();
+        }
+
+        if (producerFailure is not null)
+        {
+            throw producerFailure;
         }
     }
 

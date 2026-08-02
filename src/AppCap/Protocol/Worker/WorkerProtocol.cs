@@ -88,6 +88,9 @@ internal sealed class RecordingStartRequest
     [JsonPropertyName("includeCursor")]
     public bool IncludeCursor { get; set; } = true;
 
+    [JsonPropertyName("includeAudio")]
+    public bool IncludeAudio { get; set; } = true;
+
     [JsonPropertyName("crop")]
     public CropRectangle? Crop { get; set; }
 

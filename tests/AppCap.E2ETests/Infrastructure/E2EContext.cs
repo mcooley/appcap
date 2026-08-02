@@ -112,6 +112,8 @@ internal sealed record ImageInfo(int Width, int Height, long Length);
 
 internal sealed record VideoInfo(int Width, int Height, TimeSpan Duration);
 
+internal sealed record AudioInfo(bool HasAudio, TimeSpan Duration, double RootMeanSquare, double Peak);
+
 internal sealed record PixelColor(byte Red, byte Green, byte Blue);
 
 internal sealed class ImagePixels

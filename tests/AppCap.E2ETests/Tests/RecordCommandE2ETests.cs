@@ -69,6 +69,64 @@ public sealed class RecordCommandE2ETests : E2ETestBase
     }
 
     [E2EFact]
+    public async Task DefaultRecordingIncludesSynchronizedTargetAudio()
+    {
+        string path = Context.NewOutputPath("recording-with-audio.mp4");
+        Context.RunUnscoped("target", "attach", Context.SecondaryTarget).AssertSuccess();
+        await Task.Delay(500);
+
+        Context.RunFor(Context.SecondaryTarget, "record", "start", "--output", path).AssertSuccess();
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Context.RunFor(Context.SecondaryTarget, "record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        VideoInfo video = await E2EHelpers.ReadVideoInfoAsync(path);
+        AudioInfo audio = await E2EHelpers.ReadAudioInfoAsync(path);
+        TimeSpan durationDifference = (video.Duration - audio.Duration).Duration();
+
+        Assert.True(audio.HasAudio, "Expected the default recording to contain an audio track.");
+        Assert.True(audio.RootMeanSquare > 0.0005, $"Expected target audio signal, found RMS {audio.RootMeanSquare:F6}.");
+        Assert.True(audio.Peak > 0.001, $"Expected target audio signal, found peak {audio.Peak:F6}.");
+        Assert.True(durationDifference <= TimeSpan.FromMilliseconds(50), $"Expected synchronized tracks, but video was {video.Duration} and audio was {audio.Duration}.");
+    }
+
+    [E2EFact]
+    public async Task NoAudioOmitsAudioTrack()
+    {
+        string path = Context.NewOutputPath("recording-without-audio.mp4");
+        Context.RunUnscoped("target", "attach", Context.SecondaryTarget).AssertSuccess();
+        await Task.Delay(500);
+
+        Context.RunFor(Context.SecondaryTarget, "record", "start", "--output", path, "--no-audio").AssertSuccess();
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        Context.RunFor(Context.SecondaryTarget, "record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        AudioInfo audio = await E2EHelpers.ReadAudioInfoAsync(path);
+
+        Assert.False(audio.HasAudio, "Expected --no-audio to omit the audio track.");
+    }
+
+    [E2EFact]
+    public async Task RecordingExcludesAudioFromUnrelatedProcess()
+    {
+        string path = Context.NewOutputPath("isolated-audio.mp4");
+        Context.RunUnscoped("target", "attach", Context.SecondaryTarget).AssertSuccess();
+        await Task.Delay(500);
+
+        Context.Run("record", "start", "--output", path).AssertSuccess();
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Context.Run("record", "stop").AssertSuccess();
+        await WaitForMp4FileAsync(path);
+
+        AudioInfo audio = await E2EHelpers.ReadAudioInfoAsync(path);
+
+        Assert.True(audio.HasAudio, "Expected the default recording to contain an audio track.");
+        Assert.True(audio.RootMeanSquare < 0.0001, $"Unrelated process audio leaked into the recording; RMS was {audio.RootMeanSquare:F6}.");
+        Assert.True(audio.Peak < 0.001, $"Unrelated process audio leaked into the recording; peak was {audio.Peak:F6}.");
+    }
+
+    [E2EFact]
     public async Task RecordCaptionsAppearThenFadeFromRecording()
     {
         const int captionX = 266;

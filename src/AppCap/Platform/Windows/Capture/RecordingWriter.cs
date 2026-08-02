@@ -21,7 +21,12 @@ internal sealed class RecordingWriter : IDisposable
     private readonly IRecordingEncoder encoder;
     private readonly IRecordingSurfaceComposer composer;
     private readonly BlockingCollection<IRecordingFrame> frames = new(new ConcurrentQueue<IRecordingFrame>());
+    private readonly BlockingCollection<RecordingAudioPacket>? audioPackets;
+    private readonly Queue<RecordingAudioSample> readyAudioSamples = new();
+    private readonly RecordingTimeline timeline = new(ProcessLoopbackAudioCapture.SamplesPerSecond, ProcessLoopbackAudioCapture.BytesPerFrame);
     private readonly TaskCompletionSource firstFrameArrived = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource timelineStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource videoSamplesCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly object captionGate = new();
     private Task encodeTask = Task.CompletedTask;
     private CropRectangle? effectiveCrop;
@@ -35,21 +40,31 @@ internal sealed class RecordingWriter : IDisposable
     private int captionVersion;
     private int renderedCaptionVersion = -1;
     private int captionTailSamples;
+    private TimeSpan videoOrigin;
+    private TimeSpan videoEndTime;
+    private long audioEndTimeTicks;
+    private bool timelineHasOrigin;
+    private bool finalVideoSampleWritten;
+    private bool audioPaddingWritten;
     private bool started;
     private bool disposed;
 
-    public RecordingWriter(string outputPath, CropRectangle? crop)
-        : this(outputPath, crop, new MediaRecordingEncoder(), new Direct3DRecordingSurfaceComposer())
+    public RecordingWriter(string outputPath, CropRectangle? crop, bool includeAudio = false)
+        : this(outputPath, crop, new MediaRecordingEncoder(), new Direct3DRecordingSurfaceComposer(), includeAudio)
     {
     }
 
-    internal RecordingWriter(string outputPath, CropRectangle? crop, IRecordingEncoder encoder, IRecordingSurfaceComposer composer)
+    internal RecordingWriter(string outputPath, CropRectangle? crop, IRecordingEncoder encoder, IRecordingSurfaceComposer composer, bool includeAudio = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         this.outputPath = Path.GetFullPath(outputPath);
         this.crop = crop;
         this.encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
         this.composer = composer ?? throw new ArgumentNullException(nameof(composer));
+        if (includeAudio)
+        {
+            audioPackets = new BlockingCollection<RecordingAudioPacket>(new ConcurrentQueue<RecordingAudioPacket>());
+        }
     }
 
     public Task Completion => encodeTask;
@@ -65,6 +80,29 @@ internal sealed class RecordingWriter : IDisposable
         catch (InvalidOperationException)
         {
             frame.Dispose();
+        }
+    }
+
+    public void AddAudioPacket(RecordingAudioPacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+        if (audioPackets is null)
+        {
+            throw new InvalidOperationException("Audio is not enabled for this recording.");
+        }
+
+        try
+        {
+            if (!packet.TimestampError)
+            {
+                long packetDurationTicks = checked((long)packet.FrameCount * TimeSpan.TicksPerSecond / ProcessLoopbackAudioCapture.SamplesPerSecond);
+                UpdateAudioEndTime(checked(packet.Timestamp.Ticks + packetDurationTicks));
+            }
+
+            audioPackets.Add(packet);
+        }
+        catch (InvalidOperationException)
+        {
         }
     }
 
@@ -90,7 +128,7 @@ internal sealed class RecordingWriter : IDisposable
         (int width, int height) = ConfigureOutputSize(sourceWidth, sourceHeight);
         outputWidth = width;
         outputHeight = height;
-        encodeTask = encoder.EncodeAsync(outputPath, width, height, GetNextSample, cancellationToken);
+        encodeTask = encoder.EncodeAsync(outputPath, width, height, GetNextSample, audioPackets is null ? null : GetNextAudioSample, cancellationToken);
 
         Task confirmed = await Task.WhenAny(firstFrameArrived.Task, encodeTask).ConfigureAwait(false);
         if (confirmed == encodeTask)
@@ -108,6 +146,7 @@ internal sealed class RecordingWriter : IDisposable
         }
 
         CompleteFrames();
+        CompleteAudio();
         try
         {
             await encodeTask.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -147,6 +186,25 @@ internal sealed class RecordingWriter : IDisposable
         }
     }
 
+    public void CompleteAudio()
+    {
+        if (audioPackets is null)
+        {
+            return;
+        }
+
+        try
+        {
+            audioPackets.CompleteAdding();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
     public void Dispose()
     {
         if (disposed)
@@ -156,6 +214,7 @@ internal sealed class RecordingWriter : IDisposable
 
         disposed = true;
         CompleteFrames();
+        CompleteAudio();
         caption?.Dispose();
         latestSurface?.Dispose();
         while (frames.TryTake(out IRecordingFrame? frame))
@@ -164,6 +223,7 @@ internal sealed class RecordingWriter : IDisposable
         }
 
         frames.Dispose();
+        audioPackets?.Dispose();
         encoder.Dispose();
     }
 
@@ -176,11 +236,20 @@ internal sealed class RecordingWriter : IDisposable
             {
                 using (frame)
                 {
+                    if (!timelineHasOrigin)
+                    {
+                        videoOrigin = frame.Timestamp;
+                        timeline.SetOrigin(videoOrigin);
+                        timelineHasOrigin = true;
+                        timelineStarted.TrySetResult();
+                    }
+
+                    TimeSpan timestamp = timeline.NormalizeVideoTimestamp(frame.Timestamp);
                     latestSurface?.Dispose();
                     latestSurface = ComposeFrame(frame.Surface);
-                    lastSampleTime = frame.Timestamp;
-                    ApplyPendingCaption(frame.Timestamp, latestSurface.Width, latestSurface.Height);
-                    float opacity = GetCaptionOpacity(frame.Timestamp);
+                    lastSampleTime = timestamp;
+                    ApplyPendingCaption(timestamp, latestSurface.Width, latestSurface.Height);
+                    float opacity = GetCaptionOpacity(timestamp);
                     if (caption is not null && opacity == 0)
                     {
                         caption.Dispose();
@@ -188,20 +257,22 @@ internal sealed class RecordingWriter : IDisposable
                         captionTailSamples = CaptionTailSampleCount;
                     }
 
-                    return CreateSample(frame.Timestamp, opacity);
+                    return CreateSample(timestamp, opacity);
                 }
             }
 
             if (latestSurface is null)
             {
+                timelineStarted.TrySetResult();
+                videoSamplesCompleted.TrySetResult();
                 return null;
             }
 
-            TimeSpan timestamp = lastSampleTime + CaptionSampleInterval;
-            ApplyPendingCaption(timestamp, latestSurface.Width, latestSurface.Height);
+            TimeSpan generatedTimestamp = lastSampleTime + CaptionSampleInterval;
+            ApplyPendingCaption(generatedTimestamp, latestSurface.Width, latestSurface.Height);
             if (caption is not null)
             {
-                float opacity = GetCaptionOpacity(timestamp);
+                float opacity = GetCaptionOpacity(generatedTimestamp);
                 if (opacity == 0)
                 {
                     caption.Dispose();
@@ -209,21 +280,85 @@ internal sealed class RecordingWriter : IDisposable
                     captionTailSamples = CaptionTailSampleCount;
                 }
 
-                lastSampleTime = timestamp;
-                return CreateSample(timestamp, opacity);
+                lastSampleTime = generatedTimestamp;
+                return CreateSample(generatedTimestamp, opacity);
             }
 
             if (captionTailSamples > 0)
             {
                 captionTailSamples--;
-                lastSampleTime = timestamp;
-                return CreateSample(timestamp, 0);
+                lastSampleTime = generatedTimestamp;
+                return CreateSample(generatedTimestamp, 0);
             }
 
             if (frames.IsCompleted)
             {
+                TimeSpan audioEndTime = TimeSpan.FromTicks(Volatile.Read(ref audioEndTimeTicks));
+                if (!finalVideoSampleWritten && audioEndTime > videoOrigin + lastSampleTime)
+                {
+                    finalVideoSampleWritten = true;
+                    lastSampleTime = timeline.NormalizeVideoTimestamp(audioEndTime);
+                    return CreateSample(lastSampleTime, 0);
+                }
+
+                videoEndTime = videoOrigin + lastSampleTime;
+                videoSamplesCompleted.TrySetResult();
                 return null;
             }
+        }
+    }
+
+    private RecordingAudioSample? GetNextAudioSample()
+    {
+        timelineStarted.Task.GetAwaiter().GetResult();
+        if (!timelineHasOrigin || audioPackets is null)
+        {
+            return null;
+        }
+
+        while (true)
+        {
+            if (readyAudioSamples.TryDequeue(out RecordingAudioSample? ready))
+            {
+                return ready;
+            }
+
+            RecordingAudioPacket? packet;
+            try
+            {
+                packet = audioPackets.Take();
+            }
+            catch (InvalidOperationException)
+            {
+                videoSamplesCompleted.Task.GetAwaiter().GetResult();
+                if (audioPaddingWritten)
+                {
+                    return null;
+                }
+
+                audioPaddingWritten = true;
+                return timeline.Complete(videoEndTime);
+            }
+
+            foreach (RecordingAudioSample sample in timeline.AddAudioPacket(packet))
+            {
+                readyAudioSamples.Enqueue(sample);
+            }
+        }
+    }
+
+    private void UpdateAudioEndTime(long endTimeTicks)
+    {
+        long current = Volatile.Read(ref audioEndTimeTicks);
+        while (endTimeTicks > current)
+        {
+            long observed = Interlocked.CompareExchange(ref audioEndTimeTicks, endTimeTicks, current);
+            if (observed == current)
+            {
+                return;
+            }
+
+            current = observed;
         }
     }
 
@@ -407,7 +542,13 @@ internal interface IRecordingSurfaceComposer
 
 internal interface IRecordingEncoder : IDisposable
 {
-    Task EncodeAsync(string outputPath, int width, int height, Func<RecordingSample?> getNextSample, CancellationToken cancellationToken);
+    Task EncodeAsync(
+        string outputPath,
+        int width,
+        int height,
+        Func<RecordingSample?> getNextVideoSample,
+        Func<RecordingAudioSample?>? getNextAudioSample,
+        CancellationToken cancellationToken);
 
     void Cancel();
 }
@@ -481,9 +622,16 @@ internal sealed class Direct3DRecordingCaption(int width, int height, string tex
 
 internal sealed class MediaRecordingEncoder : IRecordingEncoder
 {
+    private static readonly TimeSpan VideoSampleDuration = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 30);
     private readonly CancellationTokenSource cancellation = new();
 
-    public async Task EncodeAsync(string outputPath, int width, int height, Func<RecordingSample?> getNextSample, CancellationToken cancellationToken)
+    public async Task EncodeAsync(
+        string outputPath,
+        int width,
+        int height,
+        Func<RecordingSample?> getNextVideoSample,
+        Func<RecordingAudioSample?>? getNextAudioSample,
+        CancellationToken cancellationToken)
     {
         using CancellationTokenSource linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token, cancellationToken);
         string directory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
@@ -495,28 +643,71 @@ internal sealed class MediaRecordingEncoder : IRecordingEncoder
             FileOpenDisposition.CreateAlways).AsTask(linkedCancellation.Token).ConfigureAwait(false);
 
         VideoEncodingProperties videoProperties = VideoEncodingProperties.CreateUncompressed(MediaEncodingSubtypes.Bgra8, (uint)width, (uint)height);
-        VideoStreamDescriptor descriptor = new(videoProperties);
-        MediaStreamSource source = new(descriptor) { BufferTime = TimeSpan.Zero };
-        RecordingSample? firstSample = null;
-        source.Starting += (_, args) =>
-        {
-            firstSample = getNextSample();
-            args.Request.SetActualStartPosition(firstSample?.Timestamp ?? TimeSpan.Zero);
-        };
+        VideoStreamDescriptor videoDescriptor = new(videoProperties);
+        AudioStreamDescriptor? audioDescriptor = getNextAudioSample is null
+            ? null
+            : new AudioStreamDescriptor(AudioEncodingProperties.CreatePcm(
+                ProcessLoopbackAudioCapture.SamplesPerSecond,
+                ProcessLoopbackAudioCapture.ChannelCount,
+                ProcessLoopbackAudioCapture.BitsPerSample));
+        MediaStreamSource source = audioDescriptor is null
+            ? new MediaStreamSource(videoDescriptor)
+            : new MediaStreamSource(videoDescriptor, audioDescriptor);
+        source.BufferTime = TimeSpan.Zero;
+        Exception? sampleFailure = null;
+        object audioRequestGate = new();
+        Task audioRequests = Task.CompletedTask;
+
+        Task ProcessSampleRequestAsync(
+            Task previousRequest,
+            MediaStreamSourceSampleRequest request,
+            MediaStreamSourceSampleRequestDeferral deferral,
+            Func<MediaStreamSample?> getSample) => Task.Run(async () =>
+            {
+                await previousRequest.ConfigureAwait(false);
+                try
+                {
+                    request.Sample = getSample();
+                }
+                catch (Exception exception)
+                {
+                    Interlocked.CompareExchange(ref sampleFailure, exception, null);
+                    source.NotifyError(MediaStreamSourceErrorStatus.Other);
+                }
+                finally
+                {
+                    deferral.Complete();
+                }
+            }, CancellationToken.None);
+
+        source.Starting += (_, args) => args.Request.SetActualStartPosition(TimeSpan.Zero);
         source.SampleRequested += (_, args) =>
         {
-            RecordingSample? sample = firstSample ?? getNextSample();
-            firstSample = null;
-            if (sample is null)
+            MediaStreamSourceSampleRequest request = args.Request;
+            if (ReferenceEquals(request.StreamDescriptor, videoDescriptor))
             {
-                args.Request.Sample = null;
+                try
+                {
+                    request.Sample = CreateVideoSample(getNextVideoSample());
+                }
+                catch (Exception exception)
+                {
+                    Interlocked.CompareExchange(ref sampleFailure, exception, null);
+                    source.NotifyError(MediaStreamSourceErrorStatus.Other);
+                }
+
                 return;
             }
 
-            Direct3DRecordingSurface surface = sample.Surface as Direct3DRecordingSurface ?? throw new InvalidOperationException("Expected a Direct3D recording surface.");
-            MediaStreamSample mediaSample = MediaStreamSample.CreateFromDirect3D11Surface(surface.NativeSurface, sample.Timestamp);
-            mediaSample.Processed += (_, _) => sample.Surface.Dispose();
-            args.Request.Sample = mediaSample;
+            MediaStreamSourceSampleRequestDeferral deferral = request.GetDeferral();
+            lock (audioRequestGate)
+            {
+                audioRequests = ProcessSampleRequestAsync(
+                    audioRequests,
+                    request,
+                    deferral,
+                    () => CreateAudioSample(getNextAudioSample!));
+            }
         };
 
         MediaEncodingProfile profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD720p);
@@ -526,6 +717,12 @@ internal sealed class MediaRecordingEncoder : IRecordingEncoder
         profile.Video.FrameRate.Denominator = 1;
         profile.Video.PixelAspectRatio.Numerator = 1;
         profile.Video.PixelAspectRatio.Denominator = 1;
+        profile.Audio = audioDescriptor is null
+            ? null
+            : AudioEncodingProperties.CreateAac(
+                ProcessLoopbackAudioCapture.SamplesPerSecond,
+                ProcessLoopbackAudioCapture.ChannelCount,
+                128_000);
         MediaTranscoder transcoder = new() { HardwareAccelerationEnabled = true };
         PrepareTranscodeResult prepared = await transcoder.PrepareMediaStreamSourceTranscodeAsync(source, stream, profile).AsTask(linkedCancellation.Token).ConfigureAwait(false);
         if (!prepared.CanTranscode)
@@ -534,6 +731,39 @@ internal sealed class MediaRecordingEncoder : IRecordingEncoder
         }
 
         await prepared.TranscodeAsync().AsTask(linkedCancellation.Token).ConfigureAwait(false);
+        if (sampleFailure is not null)
+        {
+            throw sampleFailure;
+        }
+    }
+
+    private static MediaStreamSample? CreateVideoSample(RecordingSample? sample)
+    {
+        if (sample is null)
+        {
+            return null;
+        }
+
+        Direct3DRecordingSurface surface = sample.Surface as Direct3DRecordingSurface ?? throw new InvalidOperationException("Expected a Direct3D recording surface.");
+        MediaStreamSample mediaSample = MediaStreamSample.CreateFromDirect3D11Surface(surface.NativeSurface, sample.Timestamp);
+        mediaSample.Duration = VideoSampleDuration;
+        mediaSample.Processed += (_, _) => sample.Surface.Dispose();
+        return mediaSample;
+    }
+
+    private static MediaStreamSample? CreateAudioSample(Func<RecordingAudioSample?> getNextSample)
+    {
+        RecordingAudioSample? sample = getNextSample();
+        if (sample is null)
+        {
+            return null;
+        }
+
+        using DataWriter writer = new();
+        writer.WriteBytes(sample.Data);
+        MediaStreamSample mediaSample = MediaStreamSample.CreateFromBuffer(writer.DetachBuffer(), sample.Timestamp);
+        mediaSample.Duration = sample.Duration;
+        return mediaSample;
     }
 
     public void Cancel() => cancellation.Cancel();

@@ -146,11 +146,17 @@ caption and writes the output file.
   already-running worker confirms the recording is live.
 2. The **worker** creates a `RecordingSession` that subscribes a media writer to the
    target's already-running `AttachedCaptureSession`. The in-proc target hands GPU
-   surfaces directly to the writer without a copy.
+  surfaces directly to the writer without a copy. For a local Windows target, the
+  worker also starts WASAPI process-loopback capture for the target PID and its child
+  processes unless the request disables audio. Audio initialization completes before
+  the worker acknowledges that recording is live.
 3. A later **client** can stop, cancel, or query status. Stop, cancel, and timeout detach
   and finalize only the writer; graphics capture keeps running until target detach or app
-  closure. The latest recording outcome remains queryable until another recording starts
-  or the target is detached.
+  closure. Graphics frame times and WASAPI packet positions share the system QPC clock.
+  The writer uses the first video frame as time zero, trims or pads PCM at the recording
+  boundaries, and feeds video plus optional audio through one `MediaStreamSource` into
+  the MP4 transcoder. The latest recording outcome remains queryable until another
+  recording starts or the target is detached.
 
 ## Not yet built (TODO)
 

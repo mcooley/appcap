@@ -178,7 +178,7 @@ public sealed class CommandRunner : ICommandRunner
     {
         TargetApplication target = await ResolveCommandTargetAsync(command.Target, cancellationToken).ConfigureAwait(false);
         TargetWindow window = await targetResolver.ResolveRunningAsync(target, cancellationToken).ConfigureAwait(false);
-        await recordingController.StartAsync(window, command.OutputPath, command.TimeLimit, !command.ExcludeCursor, command.Crop, cancellationToken).ConfigureAwait(false);
+        await recordingController.StartAsync(window, command.OutputPath, command.TimeLimit, !command.ExcludeCursor, !command.NoAudio, command.Crop, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task RecordStopAsync(RecordStopCommand command, CancellationToken cancellationToken)

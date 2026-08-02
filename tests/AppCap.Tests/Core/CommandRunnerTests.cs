@@ -121,13 +121,14 @@ public sealed class CommandRunnerTests
         TestServices services = new();
         CommandRunner runner = services.CreateRunner();
 
-        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45), ExcludeCursor: false, Crop: new CropRectangle(5, 6, 320, 240)), CancellationToken.None);
+        await runner.RunAsync(new RecordStartCommand(Target, "recording.mp4", TimeSpan.FromMinutes(45), ExcludeCursor: false, Crop: new CropRectangle(5, 6, 320, 240), NoAudio: true), CancellationToken.None);
 
         Assert.Equal(Target, services.TargetResolver.RequestedTarget);
         Assert.Equal(services.Window, services.RecordingController.StartWindow);
         Assert.Equal("recording.mp4", services.RecordingController.OutputPath);
         Assert.Equal(TimeSpan.FromMinutes(45), services.RecordingController.TimeLimit);
         Assert.True(services.RecordingController.IncludeCursor);
+        Assert.False(services.RecordingController.IncludeAudio);
         Assert.Equal(new CropRectangle(5, 6, 320, 240), services.RecordingController.Crop);
     }
 
@@ -356,6 +357,8 @@ public sealed class CommandRunnerTests
 
         public bool? IncludeCursor { get; private set; }
 
+        public bool? IncludeAudio { get; private set; }
+
         public CropRectangle? Crop { get; private set; }
 
         public TargetApplication? StopTarget { get; private set; }
@@ -366,12 +369,13 @@ public sealed class CommandRunnerTests
 
         public string? Caption { get; private set; }
 
-        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, CropRectangle? crop, CancellationToken cancellationToken)
+        public Task StartAsync(TargetWindow window, string outputPath, TimeSpan timeLimit, bool includeCursor, bool includeAudio, CropRectangle? crop, CancellationToken cancellationToken)
         {
             StartWindow = window;
             OutputPath = outputPath;
             TimeLimit = timeLimit;
             IncludeCursor = includeCursor;
+            IncludeAudio = includeAudio;
             Crop = crop;
             return Task.CompletedTask;
         }

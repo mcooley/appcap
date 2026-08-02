@@ -2,11 +2,14 @@ using System.Runtime.InteropServices;
 using System.Drawing;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Windows.Media.Core;
+using Windows.Media.Playback;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.UI.HiDpi;
 using Windows.Win32.UI.WindowsAndMessaging;
+using WinRT;
 
 return WindowApplication.Run();
 
@@ -15,7 +18,8 @@ internal static unsafe class WindowApplication
     private const int InitialWidth = 640;
     private const int InitialHeight = 480;
     private const string ClassName = "AppCapE2ETestAppWindow";
-    private static readonly string Title = $"AppCap E2E Test App ({GetCurrentApplicationId()})";
+    private static readonly string ApplicationId = GetCurrentApplicationId();
+    private static readonly string Title = $"AppCap E2E Test App ({ApplicationId})";
 
     private static readonly delegate* unmanaged[Stdcall]<HWND, uint, WPARAM, LPARAM, LRESULT> WindowProcedure = &WndProc;
     private static readonly RECT ClickRect = new() { left = 80, top = 80, right = 220, bottom = 180 };
@@ -25,12 +29,15 @@ internal static unsafe class WindowApplication
     private static bool clicked;
     private static bool hovered;
     private static readonly StringBuilder TypedText = new();
+    private static MediaPlayer? noisePlayer;
     private static bool gameInputLoaded;
 
     public static int Run()
     {
         _ = PInvoke.SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        ComWrappersSupport.InitializeComWrappers();
         gameInputLoaded = GameInputProbe.TryCreate();
+        StartSecondaryAudio();
 
         HINSTANCE instance = (HINSTANCE)PInvoke.GetModuleHandle(default(PCWSTR));
         fixed (char* className = ClassName)
@@ -78,8 +85,25 @@ internal static unsafe class WindowApplication
                 _ = PInvoke.DispatchMessage(message);
             }
 
+            noisePlayer?.Dispose();
             return (int)message.wParam.Value;
         }
+    }
+
+    private static void StartSecondaryAudio()
+    {
+        if (!string.Equals(ApplicationId, "Secondary", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        noisePlayer = new MediaPlayer
+        {
+            IsLoopingEnabled = true,
+            Volume = 0.08,
+            Source = MediaSource.CreateFromUri(new Uri("ms-appx:///Assets/soft-white-noise.wav")),
+        };
+        noisePlayer.Play();
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]

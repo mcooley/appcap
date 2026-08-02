@@ -34,6 +34,19 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
 
     public nint WindowHandle => window.Handle;
 
+    public (int Width, int Height) RefreshSize()
+    {
+        GraphicsCaptureItem item = GraphicsCaptureItemFactory.CreateForWindow(window.Handle);
+        if (item.Size.Width <= 0 || item.Size.Height <= 0)
+        {
+            throw new AppCapException("Target window could not be captured.");
+        }
+
+        Width = item.Size.Width;
+        Height = item.Size.Height;
+        return (Width, Height);
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         if (!GraphicsCaptureSession.IsSupported())
