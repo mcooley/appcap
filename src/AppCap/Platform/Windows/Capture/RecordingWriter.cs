@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AppCap.Diagnostics;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX.Direct3D11;
 using global::Windows.Media.Core;
@@ -6,6 +7,7 @@ using global::Windows.Media.MediaProperties;
 using global::Windows.Media.Transcoding;
 using global::Windows.Storage;
 using global::Windows.Storage.Streams;
+using Microsoft.Extensions.Logging;
 
 namespace AppCap.Windows;
 
@@ -20,6 +22,8 @@ internal sealed class RecordingWriter : IDisposable
     private readonly CropRectangle? crop;
     private readonly IRecordingEncoder encoder;
     private readonly IRecordingSurfaceComposer composer;
+    private readonly ILogger? logger;
+    private readonly bool includeAudio;
     private readonly BlockingCollection<IRecordingFrame> frames = new(new ConcurrentQueue<IRecordingFrame>());
     private readonly BlockingCollection<RecordingAudioPacket>? audioPackets;
     private readonly Queue<RecordingAudioSample> readyAudioSamples = new();
@@ -49,18 +53,20 @@ internal sealed class RecordingWriter : IDisposable
     private bool started;
     private bool disposed;
 
-    public RecordingWriter(string outputPath, CropRectangle? crop, bool includeAudio = false)
-        : this(outputPath, crop, new MediaRecordingEncoder(), new Direct3DRecordingSurfaceComposer(), includeAudio)
+    public RecordingWriter(string outputPath, CropRectangle? crop, bool includeAudio = false, ILogger? logger = null)
+        : this(outputPath, crop, new MediaRecordingEncoder(), new Direct3DRecordingSurfaceComposer(), includeAudio, logger)
     {
     }
 
-    internal RecordingWriter(string outputPath, CropRectangle? crop, IRecordingEncoder encoder, IRecordingSurfaceComposer composer, bool includeAudio = false)
+    internal RecordingWriter(string outputPath, CropRectangle? crop, IRecordingEncoder encoder, IRecordingSurfaceComposer composer, bool includeAudio = false, ILogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
         this.outputPath = Path.GetFullPath(outputPath);
         this.crop = crop;
         this.encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
         this.composer = composer ?? throw new ArgumentNullException(nameof(composer));
+        this.logger = logger;
+        this.includeAudio = includeAudio;
         if (includeAudio)
         {
             audioPackets = new BlockingCollection<RecordingAudioPacket>(new ConcurrentQueue<RecordingAudioPacket>());
@@ -128,6 +134,10 @@ internal sealed class RecordingWriter : IDisposable
         (int width, int height) = ConfigureOutputSize(sourceWidth, sourceHeight);
         outputWidth = width;
         outputHeight = height;
+        if (logger is not null)
+        {
+            RecordingLog.EncoderStarted(logger, outputPath, sourceWidth, sourceHeight, outputWidth, outputHeight, this.includeAudio);
+        }
         encodeTask = encoder.EncodeAsync(outputPath, width, height, GetNextSample, audioPackets is null ? null : GetNextAudioSample, cancellationToken);
 
         Task confirmed = await Task.WhenAny(firstFrameArrived.Task, encodeTask).ConfigureAwait(false);
@@ -169,6 +179,11 @@ internal sealed class RecordingWriter : IDisposable
         else
         {
             EnsureOutputFileExists();
+            if (logger?.IsEnabled(LogLevel.Information) == true)
+            {
+                long outputLength = new FileInfo(outputPath).Length;
+                RecordingLog.OutputFinalized(logger, outputPath, outputLength);
+            }
         }
     }
 

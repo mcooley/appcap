@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using AppCap;
+using AppCap.Diagnostics;
 using AppCap.Protocol.Target;
 using AppCap.Protocol.Worker;
 using global::Windows.Win32;
 using global::Windows.Win32.Foundation;
+using Microsoft.Extensions.Logging;
 
 namespace AppCap.Windows;
 
@@ -25,27 +27,33 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
     private readonly IInputInjector inputInjector;
     private readonly IKeyboardInputInjector keyboardInputInjector;
     private readonly CancellationTokenSource shutdown;
+    private readonly ILogger? logger;
     private long lastActivityTicks = Environment.TickCount64;
     private int shutdownAfterResponse;
     private bool disposed;
 
-    private WorkerHost(CancellationToken cancellationToken)
+    private WorkerHost(ILogger? logger, CancellationToken cancellationToken)
     {
-        targetResolver = new TargetResolver(new WindowFinder(), new TargetLauncher());
+        targetResolver = new TargetResolver(new WindowFinder(), new TargetLauncher(), logger);
         windowController = new WindowController();
         inputInjector = new SyntheticPointerInputInjector();
         keyboardInputInjector = new KeyboardInputInjector();
         shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        this.logger = logger;
     }
 
     public static bool IsWorkerInvocation(IReadOnlyList<string> args) => args.Count > 0 && args[0] == WorkerCommand;
 
-    public static async Task<int> RunAsync(IReadOnlyList<string> args, CancellationToken cancellationToken)
+    public static async Task<int> RunAsync(IReadOnlyList<string> args, ILogger? logger, string? logPath, CancellationToken cancellationToken)
     {
         _ = args;
         try
         {
-            using WorkerHost host = new(cancellationToken);
+            using WorkerHost host = new(logger, cancellationToken);
+            if (logger is not null)
+            {
+                WorkerLog.Started(logger, Environment.ProcessId, logPath ?? string.Empty);
+            }
             return await host.RunAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -54,6 +62,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         }
         catch (Exception exception)
         {
+            if (logger is not null)
+            {
+                WorkerLog.TerminatedUnexpectedly(logger, exception);
+            }
             Console.Error.WriteLine(exception.Message);
             return ExitCodes.OperationalError;
         }
@@ -65,10 +77,19 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         bool owned = await RecordingIpc.RunServerAsync(this, shutdown.Token).ConfigureAwait(false);
         if (!owned)
         {
+            if (logger is not null)
+            {
+                WorkerLog.RedundantWorkerExited(logger);
+            }
             // Another worker already owns the pipe; this redundant instance exits quietly.
             await shutdown.CancelAsync().ConfigureAwait(false);
             await ObserveAsync(idle).ConfigureAwait(false);
             return ExitCodes.Success;
+        }
+
+        if (logger is not null)
+        {
+            WorkerLog.PipeOwned(logger);
         }
 
         await ObserveAsync(idle).ConfigureAwait(false);
@@ -100,6 +121,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         try
         {
             await session.StartAsync(cancellationToken).ConfigureAwait(false);
+            if (logger is not null)
+            {
+                WorkerLog.TargetAttached(logger, target.TargetName, target.ApplicationId);
+            }
         }
         catch
         {
@@ -136,6 +161,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             recordingStatuses.TryRemove(targetName, out _);
             targetSession.Dispose();
             MarkActivity();
+            if (logger is not null)
+            {
+                WorkerLog.TargetDetached(logger, targetName);
+            }
         }
 
         if (targetSessions.IsEmpty)
@@ -194,7 +223,8 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             request.IncludeAudio,
             processId,
             request.Crop,
-            shutdown.Token);
+            shutdown.Token,
+            logger);
         if (!sessions.TryAdd(request.TargetName, session))
         {
             session.Dispose();
@@ -212,9 +242,24 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
         {
             using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, shutdown.Token);
             await session.StartAsync(linked.Token).ConfigureAwait(false);
+            if (logger is not null)
+            {
+                WorkerLog.RecordingStarted(
+                    logger,
+                    request.TargetName,
+                    request.WindowHandle,
+                    request.OutputPath,
+                    request.IncludeAudio,
+                    request.IncludeCursor,
+                    request.TimeLimitSeconds);
+            }
         }
         catch (Exception exception)
         {
+            if (logger is not null)
+            {
+                WorkerLog.RecordingFailed(logger, request.TargetName, request.OutputPath, exception);
+            }
             sessions.TryRemove(new KeyValuePair<string, RecordingSession>(request.TargetName, session));
             session.Dispose();
             recordingStatuses[request.TargetName] = new RecordingStatusResult
@@ -248,6 +293,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
                 Status = discard ? "cancelled" : "stopped",
                 OutputPath = discard ? null : recordingStatuses.GetValueOrDefault(targetName)?.OutputPath,
             };
+            if (logger is not null)
+            {
+                WorkerLog.RecordingCompleted(logger, targetName, discard ? "cancelled" : "stopped", discard, recordingStatuses[targetName].OutputPath);
+            }
         }
         finally
         {
@@ -411,6 +460,16 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
                 : new RecordingStatusResult { Status = "failed", OutputPath = current.OutputPath, Error = failure.Message };
         }
 
+        if (logger is not null)
+        {
+            WorkerLog.RecordingCompleted(
+                logger,
+                targetName,
+                failure is null ? session.CompletionReason.ToString() : "failed",
+                failure is not null,
+                recordingStatuses.GetValueOrDefault(targetName)?.OutputPath);
+        }
+
         sessions.TryRemove(new KeyValuePair<string, RecordingSession>(targetName, session));
         session.Dispose();
         MarkActivity();
@@ -444,6 +503,10 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
                 long idleFor = Environment.TickCount64 - Volatile.Read(ref lastActivityTicks);
                 if (idleFor >= (long)IdleTimeout.TotalMilliseconds)
                 {
+                    if (logger is not null)
+                    {
+                        WorkerLog.IdleShutdown(logger);
+                    }
                     await shutdown.CancelAsync().ConfigureAwait(false);
                     return;
                 }
@@ -464,8 +527,12 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             {
                 await entry.Value.StopAsync(discard: false, CancellationToken.None).ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                if (logger is not null)
+                {
+                    WorkerLog.ShutdownFinalizationFailed(logger, entry.Key, exception);
+                }
             }
         }
 
@@ -486,7 +553,8 @@ internal sealed class WorkerHost : IWorkerHost, IDisposable
             targetResolver,
             windowController,
             inputInjector,
-            keyboardInputInjector);
+            keyboardInputInjector,
+            logger);
 
     private WorkerTargetSession GetAttachedTargetSession(string targetName) =>
         targetSessions.TryGetValue(targetName, out WorkerTargetSession? session)

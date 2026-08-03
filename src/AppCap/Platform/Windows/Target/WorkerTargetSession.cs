@@ -1,5 +1,7 @@
 using AppCap.Protocol;
 using AppCap.Protocol.Target;
+using AppCap.Diagnostics;
+using Microsoft.Extensions.Logging;
 
 namespace AppCap.Windows;
 
@@ -14,6 +16,7 @@ internal sealed class WorkerTargetSession : IDisposable
     private readonly SemaphoreSlim captureGate = new(1, 1);
     private readonly CancellationTokenSource lifetimeCancellation = new();
     private readonly InputDeviceAttachmentRegistry attachments;
+    private readonly ILogger? logger;
     private AttachedCaptureSession? captureSession;
     private Task captureMonitor = Task.CompletedTask;
     private bool disposed;
@@ -23,13 +26,15 @@ internal sealed class WorkerTargetSession : IDisposable
         ITargetResolver targetResolver,
         IWindowController windowController,
         IInputInjector inputInjector,
-        IKeyboardInputInjector keyboardInputInjector)
+        IKeyboardInputInjector keyboardInputInjector,
+        ILogger? logger = null)
     {
         this.application = application;
         this.targetResolver = targetResolver;
         this.windowController = windowController;
         this.inputInjector = inputInjector;
         this.keyboardInputInjector = keyboardInputInjector;
+        this.logger = logger;
         attachments = new InputDeviceAttachmentRegistry(application.Name, WindowsTargetHost.SupportedInputDeviceTypes);
         foreach (InputDeviceType deviceType in WindowsTargetHost.SupportedInputDeviceTypes)
         {
@@ -118,8 +123,12 @@ internal sealed class WorkerTargetSession : IDisposable
                         _ = await EnsureCaptureSessionAsync(window, cancellationToken).ConfigureAwait(false);
                     }
                 }
-                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
                 {
+                    if (logger is not null)
+                    {
+                        TargetLog.CaptureMonitorFailed(logger, application.Name, exception);
+                    }
                 }
 
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken).ConfigureAwait(false);
@@ -155,7 +164,7 @@ internal sealed class WorkerTargetSession : IDisposable
             }
 
             captureSession?.Dispose();
-            AttachedCaptureSession replacement = new(window, lifetimeCancellation.Token);
+            AttachedCaptureSession replacement = new(window, lifetimeCancellation.Token, logger);
             try
             {
                 await replacement.StartAsync(cancellationToken).ConfigureAwait(false);

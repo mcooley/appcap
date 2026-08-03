@@ -1,4 +1,5 @@
 using AppCap;
+using AppCap.Diagnostics;
 using AppCap.Windows;
 using Windows.Win32;
 using Windows.Win32.UI.HiDpi;
@@ -9,7 +10,8 @@ ComWrappersSupport.InitializeComWrappers();
 
 if (WorkerHost.IsWorkerInvocation(args))
 {
-	return await WorkerHost.RunAsync(args, CancellationToken.None).ConfigureAwait(false);
+	using WorkerLogSession? logSession = WorkerLogSession.TryCreate(Console.Error);
+	return await WorkerHost.RunAsync(args, logSession?.CreateLogger<WorkerHost>(), logSession?.LogPath, CancellationToken.None).ConfigureAwait(false);
 }
 
 SystemConsole console = new();

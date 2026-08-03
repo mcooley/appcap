@@ -1,9 +1,11 @@
 using AppCap.Protocol.Target;
+using AppCap.Diagnostics;
 using global::Windows.Graphics.Capture;
 using global::Windows.Graphics.DirectX;
 using global::Windows.Graphics.DirectX.Direct3D11;
 using global::Windows.Win32;
 using global::Windows.Win32.Foundation;
+using Microsoft.Extensions.Logging;
 
 namespace AppCap.Windows;
 
@@ -13,15 +15,18 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
     private readonly RecordingCaptureTarget captureTarget;
     private readonly CancellationTokenSource captureCancellation;
     private readonly object gate = new();
+    private readonly ILogger? logger;
     private GraphicsCaptureSession? graphicsSession;
     private RecordingWriter? writer;
     private Task captureTask = Task.CompletedTask;
     private bool includeCursor = true;
     private bool disposed;
+    private int firstFrameLogged;
 
-    public AttachedCaptureSession(TargetWindow window, CancellationToken cancellationToken)
+    public AttachedCaptureSession(TargetWindow window, CancellationToken cancellationToken, ILogger? logger = null)
     {
         this.window = window;
+        this.logger = logger;
         captureTarget = new RecordingCaptureTarget(window);
         captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
     }
@@ -62,6 +67,10 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
 
         Width = item.Size.Width;
         Height = item.Size.Height;
+        if (logger is not null)
+        {
+            CaptureLog.Started(logger, window.Application.Name, window.Handle, Width, Height);
+        }
         captureTask = CaptureLoopAsync(item, captureCancellation.Token);
         await Task.Yield();
         if (captureTask.IsCompleted)
@@ -168,6 +177,15 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
         catch (OperationCanceledException) when (captureCancellation.IsCancellationRequested)
         {
         }
+        catch (Exception exception)
+        {
+            if (logger is not null)
+            {
+                CaptureLog.Failed(logger, window.Application.Name, exception);
+            }
+
+            throw;
+        }
         finally
         {
             RecordingWriter? activeWriter;
@@ -179,6 +197,10 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
             }
 
             activeWriter?.CompleteFrames();
+            if (!PInvoke.IsWindow(new HWND(window.Handle)) && logger is not null)
+            {
+                CaptureLog.TargetWindowClosed(logger, window.Application.Name);
+            }
         }
     }
 
@@ -209,6 +231,10 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
                 captureHeight = frame.ContentSize.Height;
                 Width = captureWidth;
                 Height = captureHeight;
+                if (logger is not null)
+                {
+                    CaptureLog.DimensionsChanged(logger, window.Application.Name, captureWidth, captureHeight);
+                }
                 frame.Dispose();
                 if (captureWidth > 0 && captureHeight > 0)
                 {
@@ -220,6 +246,11 @@ internal sealed class AttachedCaptureSession : ITarget, IDisposable
                 }
 
                 return;
+            }
+
+            if (Interlocked.Exchange(ref firstFrameLogged, 1) == 0 && logger is not null)
+            {
+                CaptureLog.FirstFrame(logger, window.Application.Name, frame.ContentSize.Width, frame.ContentSize.Height);
             }
 
             captureTarget.OfferFrame(frame);

@@ -1,5 +1,8 @@
 namespace AppCap.Windows;
 
+using AppCap.Diagnostics;
+using Microsoft.Extensions.Logging;
+
 // Owns recording output while an attached target's graphics capture continues independently.
 internal sealed class RecordingSession : IDisposable
 {
@@ -10,6 +13,7 @@ internal sealed class RecordingSession : IDisposable
     private readonly CancellationTokenSource timeLimitCancellation = new();
     private readonly TaskCompletionSource finalizationCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TimeSpan timeLimit;
+    private readonly ILogger? logger;
     private readonly bool includeCursor;
     private Task completion = Task.CompletedTask;
     private int stopRequested;
@@ -24,13 +28,15 @@ internal sealed class RecordingSession : IDisposable
         bool includeAudio,
         int? processId,
         CropRectangle? crop,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILogger? logger = null)
     {
         this.captureSession = captureSession;
         this.timeLimit = timeLimit;
         this.includeCursor = includeCursor;
         this.cancellationToken = cancellationToken;
-        writer = new RecordingWriter(outputPath, crop, includeAudio);
+        this.logger = logger;
+        writer = new RecordingWriter(outputPath, crop, includeAudio, logger);
         if (includeAudio)
         {
             audioCapture = new ProcessLoopbackAudioCapture(processId ?? throw new ArgumentNullException(nameof(processId)));
